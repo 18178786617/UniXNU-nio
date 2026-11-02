@@ -31,7 +31,7 @@ on:
         required: true
         default: "nio_defconfig"
       runner:
-        description: Runner image (macos-15-intel = macOS 15 x86_64, the one known to work)
+        description: Runner image (macos-15-intel = macOS 15 x86_64; macos-26 = arm64)
         required: true
         default: "macos-15-intel"
       xcode:
@@ -98,8 +98,11 @@ jobs:
           echo "host: $(uname -m) $(sw_vers -productVersion)"
           echo "installed on this image:"
           ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none)"
-          # The Intel image stops at the Xcode 16 line (Xcode 26 is arm64 only),
-          # so "auto" means 16.x here. Any other image keeps its newest Xcode.
+          # "auto" takes the newest Xcode installed on the image. The Intel
+          # image carries both the 16 line and the 26 line -- Xcode 26.3 with
+          # SDK 26.2 was what a real run selected -- so this is not pinned to an
+          # old toolchain; whatever it picks, the step below trims the warning
+          # options that particular clang does not know.
           if [ "$XCODE_INPUT" = "auto" ] || [ -z "$XCODE_INPUT" ]; then
             app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
           else
@@ -152,7 +155,7 @@ jobs:
           probe="$RUNNER_TEMP/flagprobe.cpp"
           printf 'int main() { return 0; }\n' > "$probe"
           dropped=""
-          for flag in $(grep -rhoE -- '-Wno-[a-z0-9-]+' scripts | sort -u); do
+          for flag in $(grep -rhoE -- '-Wno-[A-Za-z0-9_+.-]+' scripts | sort -u); do
             if xcrun clang++ -Werror "$flag" -c "$probe" -o "$RUNNER_TEMP/flagprobe.o" >/dev/null 2>&1; then
               continue
             fi
