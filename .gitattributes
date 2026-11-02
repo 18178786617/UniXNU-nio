@@ -1,0 +1,8 @@
+# Keep patches LF-only: CRLF breaks git apply on macOS runners.
+*.patch text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.series text eol=lf
