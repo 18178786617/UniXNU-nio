@@ -1,0 +1,164 @@
+# UniXNU-nio — MOTO Edge S (XT2125-4) / kona / SM8250-AC
+#
+# Target OS is pinned and does not move: iPadOS 17.7.11 / build 21H461,
+# Darwin 23.6.0, source kernel xnu-10063.141.1. That is the exact profile umi
+# qualified (Hello/Setup, touch, UFS, persistent Data), so the OS-side patch
+# series and the prelink/donor contract are inherited instead of re-derived.
+#
+# schema_version 2 means the kernel is built by the shared pipeline:
+#   arch profile -> SoC profile -> OS profile -> this file
+# which is the only form that applies a patch series and is reproducible on a
+# clean clone (see .github/workflows/kernel.yml).
+schema_version = 2
+
+[board]
+name = "nio"
+soc = "SM8250"
+# UniXNU-sm8250-common: GIC/timer/topology patches, pinned in feeds.toml.
+soc_source = "sm8250"
+os_profile = "ipados-17.7.11-21H461"
+description = "MOTO Edge S (XT2125-4) / SM8250-AC UniXNU bring-up"
+kit = "nio"
+
+[components]
+# First-light set only. This produces a kernel that can enter, take its timer
+# and start secondary cores; storage, display and GPU are added once the boot
+# reaches the console. DarwinBoot/GopFramebuffer are firmware/embedded and are
+# not compiled here.
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink"]
+
+[kernel]
+defconfig = "nio_defconfig"
+# Same fragment order as alioth (SM8250, same OS profile). The device defconfig
+# is applied last, so every nio override below wins.
+config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ipados.config"]
+# arch (56) + soc (2) + the two prelink patches from XnuPrelink.
+#
+# The OS profile's own series adds zzz-boot-progress.patch between them, and
+# that patch edits the sheng_pmgr_run() block inside bsd_init.c: it applies only
+# after sheng's platform-power patch, which is a sheng-hardware patch this board
+# does not carry. Measured here: it fails at hunk @@ -773 with "patch does not
+# apply" once the 58 arch+soc patches are in, and the two prelink patches apply
+# cleanly without it. So the device series is spelled out instead of inheriting
+# os:patches/xnu/series. With CONFIG_XNU_BOOT_PROGRESS=n the omitted patch only
+# guarded diagnostic calls that are compiled out anyway.
+patch_series = [
+  "arch:patches/xnu/series",
+  "soc:patches/xnu/series",
+  "device:patches/xnu-prelink/series",
+]
+# The arch profile's default archives cover the components selected above.
+# No [kernel] archives override on purpose: any override must name every
+# kernel-stage component recipe or the pipeline refuses the build.
+
+# Donor contract inherited verbatim from umi: the initializer address belongs to
+# kernelcache f18b4df8..., never to a nio address. Keep the SHA, or re-derive.
+[kernel.prelink]
+tool = "kits/XnuPrelink/emit_prelink.py"
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+slide = "-0x1000000"
+early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+roots = ["com.apple.driver.AppleMobileFileIntegrity", "com.apple.security.sandbox"]
+
+[ipsw]
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 0x8011
+board_id = 12
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
+
+[ipsw.sha256]
+"kernelcache.release.ipad7" = "13b97fa2c5ce97f04408dcc28c41fb6b0d60b9440065197879acf44b2572bf7b"
+"DeviceTree.j120ap.im4p" = "3f612f64819fbf6a8aacc03fabeda08ba897c4bf5385df995c59815c0c80c8f0"
+"044-76040-038.dmg.trustcache" = "4563bdbf6ed8f72237d45dbba3ccde432634338f95c10d79d5d4631678a97c7c"
+"044-76034-038.dmg.trustcache" = "9742f3d566369e6c48f63b3dc0740b06c243d13c6650e25bbf44616e13d6d097"
+"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
+"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+
+# userdata lives on LUN 4 (sde). 224.3 GiB raw; the tested-disk size is a
+# separate decision and is deliberately not set here.
+[userdata]
+lun = "sde"
+first_lba = 0x308060
+last_lba = 0x3b1d7fa
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+# Firmware is our own nioPkg on Mu-Silicium (build/build-nio.sh), not the
+# Xiaomi platform umi uses. UniXNU's firmware-staging stage does not apply.
+[firmware]
+config = "nio"
+dsc = "nioPkg/nio.dsc"
+fd = "Build/nioPkg/NOOPT_CLANGDWARF/FV/SILICIUM_UEFI.fd"
+packages = [
+  "{uefi}", "{tree}/package", "{edk2}",
+  "{uefi}/Common/Mu", "{uefi}/Common/Mu_OEM_Sample",
+  "{uefi}/Silicon/Qualcomm", "{uefi}/Silicon/Silicium",
+]
+
+[firmware.defines]
+ENABLE_SECUREBOOT = "0"
+DEVICE_MODEL = "0"
+MEMORY_PROTECTION = "TRUE"
+SHIP_MODE = "FALSE"
+BUILDID_STRING = "nio-xnu-17.7.11"
+
+# nio's own boot.img is header v3 (no kernel_offset/tags_offset); ABL decides
+# where the payload lands, so the packer only needs the page size.
+[bootimg.image]
+header_version = 3
+pagesize = 4096
+base = 0
+
+# Official packaging contract (https://unixnu.com/zh/porting/packaging):
+# scripts/package.sh is copied verbatim from the UniXNU templates/ directory and
+# reads only the values below. Locally E:\nio-unixnu-port\device\UniXNU is a
+# directory junction to ..\..\refs\UniXNU (commit 04573c51... per
+# source-lock.json); on GitHub the release workflow checks UniXNU out beside
+# this repository, so the same relative path holds in both layouts.
+[package]
+unixnu = "../UniXNU"
+
+[package.defconfig]
+"ipados-17.7.11-21H461" = "nio_defconfig"
+
+[payload]
+volume = "NIOXNU"
+size_mib = 64
+loader = "firmware"
+title = "Edge S - XNU bring-up"
+# TODO: must equal the measured bank total, not 8 GiB. 0x200000000 is only the
+# soldered capacity; umi's 12 GiB phone reports 0x2f9900000 after carveouts.
+dram_size = "0x200000000"
+panic_screen = false
+timeout = -1
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
+
+[payload.adt]
+tool = "scripts/make-nio-adt.py"
+chip_id = "0x164"
+unique_chip_id = "required"
+cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
+psci_method = "smc"
+# Provisional: the inherited ADT contract refuses anything under 256 MiB, and
+# umi qualified exactly 256 MiB. nio has 8 GiB with a 256 MiB "Kernel" carveout
+# at 0xA0000000 in uefiplat.cfg, so this is the floor to try first, not a
+# measured success.
+owned_memory_size = "0x10000000"
+packed_data_ramdisk = false
+ipad_identity = false
+
+[nio_notes]
+# 1. A/B slots, active _a: boot_a on sdd, dtbo_a/vendor_boot_a too.
+# 2. 6 LUNs; userdata is LUN 4. A LUN selector is a prerequisite for Data.
+# 3. ramoops at 0xaf000000 (0xc0000) - our UEFI console window.
+# 4. framebuffer at 0x9c000000, 1080x2520, pitch 4320.
+# 5. touch is Novatek NT36672C over SPI (GPIO50 reset / GPIO24 irq), not ST FTS.
+# 6. keys: Vol+ on gpio-keys, Vol-/Power on PMIC PON.

@@ -1,0 +1,10 @@
+# 本地产物与个人配置，不入库
+.workbuddy/
+out/
+build/
+*.log
+.DS_Store
+Thumbs.db
+
+# gh CLI 本地状态
+.gh-package*

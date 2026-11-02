@@ -1,0 +1,309 @@
+name: Build nio kernel
+
+# Builds kernel.macho from Apple's XNU source on a macOS 15 Intel (x86_64)
+# runner and publishes it as an artifact. This repository is the device
+# repository; the UniXNU build system is checked out beside it.
+#
+# The host architecture does not decide the product architecture: clang
+# cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
+# arm64. macos-15-intel is picked because the request is the macOS 15 Intel
+# image and because it carries more RAM than the arm64 standard runner
+# (14 GB vs 7 GB) for the same 4 vCPU. Its Xcode line is older than the one
+# UniXNU develops against -- upstream pins macos-26 precisely because macOS 15's
+# clang rejects the warning options the build passes with -Werror -- so the
+# "Match the warning flags to this clang" step drops whatever this Xcode does
+# not know before anything is compiled.
+#
+# It is the nio counterpart of UniXNU's own "macOS build" workflow with one
+# deliberate difference: that workflow publishes text logs only. Here the kernel
+# is the deliverable the phone needs, so the artifact carries kernel.macho and
+# its prelink record. Run this from a private repository if that matters.
+
+on:
+  workflow_dispatch:
+    inputs:
+      unixnu_ref:
+        description: UniXNU commit to build with
+        required: true
+        default: "04573c510c5fd4892ca6948739389141cc9e05f5"
+      defconfig:
+        description: Defconfig name from configs/
+        required: true
+        default: "nio_defconfig"
+      runner:
+        description: Runner image (macos-15-intel = macOS 15 x86_64; macos-26 = arm64)
+        required: true
+        default: "macos-15-intel"
+      xcode:
+        description: Xcode version, or "auto" for the newest installed on the image
+        required: true
+        default: "auto"
+      ipsw_url:
+        description: IPSW URL (empty uses board.toml)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kernel:
+    # macos-15-intel is the x86_64 image: macOS 15, 4 vCPU, 14 GB. It is the
+    # image the earlier builds were made on and the only Intel macOS label
+    # GitHub still ships (until August 2027). macos-latest moves between images
+    # and flips architecture; do not use it.
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    timeout-minutes: 360
+    env:
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+      UNIXNU_IPSW: ${{ inputs.ipsw_url }}
+      DEFCONFIG: ${{ inputs.defconfig }}
+
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: UniXNU/UniXNU
+          ref: ${{ inputs.unixnu_ref }}
+          path: .
+          persist-credentials: false
+
+      - name: Check out the device repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: device
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Select Xcode
+        env:
+          XCODE_INPUT: ${{ inputs.xcode }}
+        run: |
+          echo "host: $(uname -m) $(sw_vers -productVersion)"
+          echo "installed on this image:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none)"
+          # "auto" takes the newest Xcode installed on the image. The Intel
+          # image carries both the 16 line and the 26 line -- Xcode 26.3 with
+          # SDK 26.2 was what a real run selected -- so this is not pinned to an
+          # old toolchain; whatever it picks, the step below trims the warning
+          # options that particular clang does not know.
+          if [ "$XCODE_INPUT" = "auto" ] || [ -z "$XCODE_INPUT" ]; then
+            app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          else
+            app="/Applications/Xcode_${XCODE_INPUT}.app"
+            [ -d "$app" ] || app="/Applications/Xcode${XCODE_INPUT}.app"
+          fi
+          if [ -z "$app" ] || [ ! -d "$app" ]; then
+            echo "::error::no usable Xcode; installed: $(printf '%s ' /Applications/Xcode*.app)"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
+          echo "XCODE_APP=$app" >> "$GITHUB_ENV"
+          echo "selected: $app"
+
+      - name: Check the inputs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f device/board.toml ] || fail "the device repository has no board.toml"
+          [ -f "device/configs/$DEFCONFIG" ] || fail "device/configs/$DEFCONFIG not found"
+          [ -d "$DEVELOPER_DIR" ] || fail "Xcode not found at $DEVELOPER_DIR; installed: $(printf '%s ' /Applications/Xcode_*.app)"
+          grep -q '^schema_version = 2' device/board.toml || fail "board.toml must be schema_version 2"
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install host tools
+        run: |
+          # cmake and ninja come with the image. Homebrew LLVM stays keg-only:
+          # the archive builders find it themselves, the rest uses Xcode clang.
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+          for tool in git make clang cmake ninja unifdef ld.lld mformat mcopy; do
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - name: Match the warning flags to this clang
+        run: |
+          # The component builders pass a long -Wno-* list next to -Werror, so one option
+          # this clang does not know is a hard error:
+          #   error: unknown warning option '-Wno-unnecessary-virtual-specifier'
+          #   [-Werror,-Wunknown-warning-option]
+          # Upstream pins macos-26 because of this; on any image whose Xcode is older the
+          # list has to be trimmed. Ask clang which options it knows rather than guessing.
+          #
+          # scripts/unixnu/ is deliberately left alone. The framework hands its flags to
+          # clang through CCC_OVERRIDE_OPTIONS and the XNU build runs with BUILD_WERROR=0,
+          # so an unknown option there is a plain warning; rewriting a Python string in
+          # that directory is how an earlier version of this step turned a warning into a
+          # SyntaxError in the middle of the checkout.
+          xcrun clang++ --version | head -1
+          probe="$RUNNER_TEMP/flagprobe.cpp"
+          printf 'int main() { return 0; }\n' > "$probe"
+          build_scripts=$(find scripts -path scripts/unixnu -prune -o -type f \( -name '*.py' -o -name '*.sh' \) -print)
+          candidates=$(grep -hoE -- '-Wno-[A-Za-z0-9_+.-]+' $build_scripts | sort -u || true)
+          dropped=""
+          for flag in $candidates; do
+            if xcrun clang++ -Werror "$flag" -c "$probe" -o "$RUNNER_TEMP/flagprobe.o" >/dev/null 2>&1; then
+              continue
+            fi
+            dropped="$dropped $flag"
+          done
+          if [ -z "$dropped" ]; then
+            echo "every -Wno-* option in the build scripts is accepted by this clang"
+            exit 0
+          fi
+          echo "unknown to this clang:$dropped"
+          python3 - $dropped <<'PY'
+          import pathlib, re, subprocess, sys
+
+          flags = sys.argv[1:]
+          pattern = '|'.join(re.escape(flag) for flag in flags)
+
+          # Three shapes only, and every one of them keeps quotes paired: a quote may
+          # only go away together with the flag it wraps.
+          #   ['-Wall', '-Wno-x', '-Wextra']    the whole list element
+          #   CFLAGS="-O2 -Wno-x"              the bare token inside a string
+          #   '# +-Wno-x +-Wno-y'              the '+flag' form CCC_OVERRIDE uses
+          element = re.compile(r"(['\"])(?:%s)\1[ \t]*,?[ \t]*" % pattern)
+          addition = re.compile(r"\+[ \t]*(?:%s)(?=[\s'\"]|$)" % pattern)
+          token = re.compile(r"(?<=[\s'\"])(?:%s)(?=[\s'\"]|$)" % pattern)
+
+          def _shell_ok(path):
+              try:
+                  return subprocess.run(['bash', '-n', str(path)], capture_output=True).returncode == 0
+              except OSError:
+                  return True
+
+
+          changed = []
+          for path in sorted(pathlib.Path('scripts').rglob('*')):
+              if path.suffix not in ('.py', '.sh') or not path.is_file():
+                  continue
+              if 'unixnu' in path.parts:
+                  continue
+              text = path.read_text()
+              new = token.sub('', addition.sub('', element.sub('', text)))
+              if new != text:
+                  path.write_text(new)
+                  changed.append(path)
+                  print(f'trimmed {path}')
+
+          # A trimmed file that no longer parses would be worse than the error this step
+          # sets out to fix, so each one is checked and put back if the edit broke it.
+          for path in changed:
+              if path.suffix == '.py':
+                  try:
+                      compile(path.read_text(), str(path), 'exec')
+                      continue
+                  except SyntaxError as exc:
+                      print(f'{path}: {exc}')
+              elif _shell_ok(path):
+                  continue
+              subprocess.run(['git', 'checkout', '--', str(path)], check=False)
+              print(f'::warning::reverted {path}, the edit broke its syntax')
+          PY
+          echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
+
+      - name: Resolve the configuration
+        run: |
+          ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
+          # `unixnu status` is not run here on purpose. It resolves the patch
+          # series, `component:XnuPrelink/...` included, and that kit is a git
+          # submodule of the UniXNU checkout. actions/checkout leaves submodule
+          # directories empty, and they are only filled by `unixnu build` ->
+          # update_submodules(). Asking for status first fails with
+          # "patch missing: .../kits/XnuPrelink/patches/...". The build reports
+          # the same series (one "kernel: patch" line per patch) and the status
+          # table is collected afterwards, in "Show the result".
+          config=$(ls -1 out/*/*/*/.config 2>/dev/null | head -1)
+          switches=$(grep -c '^CONFIG_' "$config" || true)
+          echo "merged config: $config ($switches switches)"
+
+      - name: Build the kernel
+        env:
+          # prepare-xnu-source.py lists Apple sources through the GitHub API;
+          # anonymous calls from hosted runners hit the shared rate limit.
+          # This step also fetches the pinned sources (no separate fetch step).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel
+
+      - name: Show the result
+        if: always()
+        run: |
+          # The kit submodules exist by now, so the status table (patch order
+          # included) is meaningful; its failure must not hide the build result.
+          ./unixnu status > "$RUNNER_TEMP/status.txt" 2>&1 || true
+          find out -path '*/kernel/*' -maxdepth 6 -type f 2>/dev/null | sort || true
+          find out -name 'kernel.macho' -exec ls -la {} \; 2>/dev/null || true
+          du -sh out 2>/dev/null || true
+
+      - name: Upload the kernel
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel
+          path: |
+            out/*/*/*/kernel/kernel.macho
+            out/*/*/*/kernel/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the build logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel-logs
+          path: |
+            out/*/*/*/logs/*.log
+            ${{ runner.temp }}/status.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "## nio kernel: $RESULT"
+            echo
+            echo "- defconfig: \`$DEFCONFIG\`"
+            echo "- UniXNU: \`${{ inputs.unixnu_ref }}\`"
+            echo "- host: \`$(uname -m)\` on macOS \`$(sw_vers -productVersion)\`"
+            echo "- Xcode: \`${XCODE_APP:-unknown}\`"
+            if [ -n "${DROPPED_FLAGS:-}" ]; then
+              echo "- warning flags this Xcode did not know: \`$DROPPED_FLAGS\`"
+            fi
+            echo
+            if [ "$RESULT" = success ]; then
+              echo "Download **nio-kernel**, unzip, and put \`kernel.macho\` and \`kernel.macho.json\` into the local \`out/\` directory next to \`nio.adt\`."
+            else
+              echo "Download **nio-kernel-logs** and read \`kernel.log\`, \`kernel-bootstrap.log\` and \`archive-*.log\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove proprietary inputs
+        if: always()
+        run: |
+          rm -rf out/ipsw out/feeds 2>/dev/null || true
+          rm -rf out/*/*/*/tree/.cache/firmware 2>/dev/null || true

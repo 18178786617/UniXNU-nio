@@ -1,0 +1,8 @@
+# The two XnuPrelink patches that make a prelinked kernel usable: the security
+# initializer address and the sparse-index layout. They are listed as a separate
+# series because the OS profile's own series interleaves zzz-boot-progress.patch,
+# which needs sheng's platform-power patch first (see board.toml [kernel]).
+#
+# Paths use the component: prefix, resolved against the fetched XnuPrelink kit.
+component:XnuPrelink/patches/xnu-10063.141.1-security-init.patch
+component:XnuPrelink/patches/xnu-10063.141.1-sparse-index.patch

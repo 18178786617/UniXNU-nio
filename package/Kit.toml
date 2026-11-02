@@ -1,0 +1,13 @@
+# Minimal EFI baseline metadata; the phone drivers are linked by the bring-up
+# tools. Kit autoload stays off for the diagnostic volume.
+schema = 1
+
+[kit]
+name = "nio"
+version = "0.1.0"
+description = "MOTO Edge S (kona) minimal EFI baseline metadata"
+
+[match]
+arch = "AARCH64"
+# From nio's own vendor_boot DTB root node, not copied from umi.
+fdt_compatible = ["qcom,kona"]

@@ -1,0 +1,9 @@
+{
+  "UniXNU": "04573c510c5fd4892ca6948739389141cc9e05f5",
+  "UniXNU-sm8250-common": "a6e7e36caab58f5b9a5625dbdb8da2bf290fa5cc",
+  "ArmCpu": "a9c4585dbb1b75b8594dd0ae54962cc59969d98f",
+  "xnu": "d8b80295118ef25ac3a784134bcf95cd8e88109f",
+  "uefi-umi": "48bc41218c480519bfd299c22205f44e418df9d0",
+  "Mu_Basecore": "cfb93724a06ff86ff5ba971413368a7809ee42a5",
+  "UniXNU-sheng": "a599a1a8a92093b5077543e071b72130769eb325"
+}
