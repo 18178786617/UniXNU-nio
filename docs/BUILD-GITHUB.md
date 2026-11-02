@@ -1,7 +1,8 @@
 # 在 GitHub 上编 nio 的内核
 
-这份仓库只做一件事：让 GitHub 的 macOS arm64 机器把 `xnu-10063.141.1` 编成
-`kernel.macho`，给你下载回来。固件（`nioPkg`）仍然在本地编，不在这里。
+这份仓库只做一件事：让 GitHub 的 macOS 15 Intel（x86_64）机器把 `xnu-10063.141.1`
+编成 `kernel.macho`，给你下载回来。固件（`nioPkg`）仍然在本地编，不在这里。
+宿主是 x86_64 不影响产物：clang 交叉编译，出来的一样是 arm64 的内核。
 
 ## 1. 你需要准备的
 
@@ -47,8 +48,8 @@ git push -u origin main
 |---|---|---|
 | `unixnu_ref` | `04573c510c5fd4892ca6948739389141cc9e05f5` | 固定的 UniXNU 版本，别改成 `main` |
 | `defconfig` | `nio_defconfig` | `configs/` 里的名字 |
-| `runner` | `macos-15` | 机主确认 macOS 15 上跑通过；`macos-26` 需要换 Xcode 26 线 |
-| `xcode` | `auto` | `auto` = 自动挑镜像里最新的 `/Applications/Xcode*.app`；填版本号则按 `Xcode_<版本>.app` 精确匹配 |
+| `runner` | `macos-15-intel` | 机主确认 macOS 15 **Intel（x86_64）** 上跑通过。这是 GitHub 现在唯一的 Intel macOS 标签（4 vCPU / 14 GB，公开仓库免费，2027 年 8 月下线）；`macos-15` 是 arm64，两者不能混 |
+| `xcode` | `auto` | `auto` = 自动挑镜像里最新的 `/Applications/Xcode*.app`（Intel 镜像最高到 Xcode 16 线，Xcode 26 只有 arm64）；填版本号则按 `Xcode_<版本>.app` 精确匹配 |
 | `ipsw_url` | 空 | 空 = 用 `board.toml` 里 Apple 的 17.7.11 IPSW |
 
 3. 点 **Run workflow**，等 40–90 分钟（第一次要下 XNU 源码和 17.7.11 的 kernelcache）。

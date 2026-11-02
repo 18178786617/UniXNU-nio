@@ -1,8 +1,14 @@
 name: Build nio kernel
 
-# Builds kernel.macho from Apple's XNU source on a macOS arm64 runner and
-# publishes it as an artifact. This repository is the device repository; the
-# UniXNU build system is checked out beside it.
+# Builds kernel.macho from Apple's XNU source on a macOS 15 Intel (x86_64)
+# runner and publishes it as an artifact. This repository is the device
+# repository; the UniXNU build system is checked out beside it.
+#
+# The host architecture does not decide the product architecture: clang
+# cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
+# arm64. macos-15-intel is picked because that is the image the earlier builds
+# were made on, and because the Intel image carries more RAM than the arm64
+# standard runner (14 GB vs 7 GB) for the same 4 vCPU.
 #
 # It is the nio counterpart of UniXNU's own "macOS build" workflow with one
 # deliberate difference: that workflow publishes text logs only. Here the kernel
@@ -21,9 +27,9 @@ on:
         required: true
         default: "nio_defconfig"
       runner:
-        description: Runner image (macos-15 is the one known to work here)
+        description: Runner image (macos-15-intel = macOS 15 x86_64, the one known to work)
         required: true
-        default: "macos-15"
+        default: "macos-15-intel"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: true
@@ -51,9 +57,11 @@ defaults:
 
 jobs:
   kernel:
-    # macos-15 is arm64 on the hosted fleet and is the image the earlier
-    # builds were made on. macos-latest moves between images; do not use it.
-    runs-on: ${{ inputs.runner || 'macos-15' }}
+    # macos-15-intel is the x86_64 image: macOS 15, 4 vCPU, 14 GB. It is the
+    # image the earlier builds were made on and the only Intel macOS label
+    # GitHub still ships (until August 2027). macos-latest moves between images
+    # and flips architecture; do not use it.
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
@@ -83,18 +91,23 @@ jobs:
         env:
           XCODE_INPUT: ${{ inputs.xcode }}
         run: |
+          echo "host: $(uname -m) $(sw_vers -productVersion)"
           echo "installed on this image:"
           ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none)"
+          # The Intel image stops at the Xcode 16 line (Xcode 26 is arm64 only),
+          # so "auto" means 16.x here. Any other image keeps its newest Xcode.
           if [ "$XCODE_INPUT" = "auto" ] || [ -z "$XCODE_INPUT" ]; then
             app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
           else
             app="/Applications/Xcode_${XCODE_INPUT}.app"
+            [ -d "$app" ] || app="/Applications/Xcode${XCODE_INPUT}.app"
           fi
           if [ -z "$app" ] || [ ! -d "$app" ]; then
             echo "::error::no usable Xcode; installed: $(printf '%s ' /Applications/Xcode*.app)"
             exit 1
           fi
           echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
+          echo "XCODE_APP=$app" >> "$GITHUB_ENV"
           echo "selected: $app"
 
       - name: Check the inputs
@@ -174,7 +187,8 @@ jobs:
             echo
             echo "- defconfig: \`$DEFCONFIG\`"
             echo "- UniXNU: \`${{ inputs.unixnu_ref }}\`"
-            echo "- Xcode: \`${DEVELOPER_DIR:-unknown}\`"
+            echo "- host: \`$(uname -m)\` on macOS \`$(sw_vers -productVersion)\`"
+            echo "- Xcode: \`${XCODE_APP:-unknown}\`"
             echo
             if [ "$RESULT" = success ]; then
               echo "Download **nio-kernel**, unzip, and put \`kernel.macho\` and \`kernel.macho.json\` into the local \`out/\` directory next to \`nio.adt\`."
