@@ -144,44 +144,83 @@ jobs:
 
       - name: Match the warning flags to this clang
         run: |
-          # The build passes a long list of -Wno-* options next to -Werror, and
-          # the archive builders (scripts/build-arm-driver.py and friends) make
-          # any unknown option fatal. This image's Xcode is older than that list
-          # -- upstream pins macos-26 for exactly this reason -- and the first
-          # casualty was -Wno-unnecessary-virtual-specifier, with more possibly
-          # behind it. Rather than guess, ask this clang which options it knows
-          # and delete the rest from the build scripts.
+          # The component builders pass a long -Wno-* list next to -Werror, so one option
+          # this clang does not know is a hard error:
+          #   error: unknown warning option '-Wno-unnecessary-virtual-specifier'
+          #   [-Werror,-Wunknown-warning-option]
+          # Upstream pins macos-26 because of this; on any image whose Xcode is older the
+          # list has to be trimmed. Ask clang which options it knows rather than guessing.
+          #
+          # scripts/unixnu/ is deliberately left alone. The framework hands its flags to
+          # clang through CCC_OVERRIDE_OPTIONS and the XNU build runs with BUILD_WERROR=0,
+          # so an unknown option there is a plain warning; rewriting a Python string in
+          # that directory is how an earlier version of this step turned a warning into a
+          # SyntaxError in the middle of the checkout.
           xcrun clang++ --version | head -1
           probe="$RUNNER_TEMP/flagprobe.cpp"
           printf 'int main() { return 0; }\n' > "$probe"
+          build_scripts=$(find scripts -path scripts/unixnu -prune -o -type f \( -name '*.py' -o -name '*.sh' \) -print)
+          candidates=$(grep -hoE -- '-Wno-[A-Za-z0-9_+.-]+' $build_scripts | sort -u || true)
           dropped=""
-          for flag in $(grep -rhoE -- '-Wno-[A-Za-z0-9_+.-]+' scripts | sort -u); do
+          for flag in $candidates; do
             if xcrun clang++ -Werror "$flag" -c "$probe" -o "$RUNNER_TEMP/flagprobe.o" >/dev/null 2>&1; then
               continue
             fi
             dropped="$dropped $flag"
           done
           if [ -z "$dropped" ]; then
-            echo "every -Wno-* option in scripts/ is accepted by this clang"
+            echo "every -Wno-* option in the build scripts is accepted by this clang"
             exit 0
           fi
           echo "unknown to this clang:$dropped"
-          # python rather than sed: the flags go through argv, so no quoting of
-          # the pattern inside the shell, and an optional quote and comma are
-          # removed with the flag so the python lists stay valid.
           python3 - $dropped <<'PY'
-          import pathlib, re, sys
+          import pathlib, re, subprocess, sys
 
+          flags = sys.argv[1:]
+          pattern = '|'.join(re.escape(flag) for flag in flags)
+
+          # Three shapes only, and every one of them keeps quotes paired: a quote may
+          # only go away together with the flag it wraps.
+          #   ['-Wall', '-Wno-x', '-Wextra']    the whole list element
+          #   CFLAGS="-O2 -Wno-x"              the bare token inside a string
+          #   '# +-Wno-x +-Wno-y'              the '+flag' form CCC_OVERRIDE uses
+          element = re.compile(r"(['\"])(?:%s)\1[ \t]*,?[ \t]*" % pattern)
+          addition = re.compile(r"\+[ \t]*(?:%s)(?=[\s'\"]|$)" % pattern)
+          token = re.compile(r"(?<=[\s'\"])(?:%s)(?=[\s'\"]|$)" % pattern)
+
+          def _shell_ok(path):
+              try:
+                  return subprocess.run(['bash', '-n', str(path)], capture_output=True).returncode == 0
+              except OSError:
+                  return True
+
+
+          changed = []
           for path in sorted(pathlib.Path('scripts').rglob('*')):
               if path.suffix not in ('.py', '.sh') or not path.is_file():
                   continue
+              if 'unixnu' in path.parts:
+                  continue
               text = path.read_text()
-              new = text
-              for flag in sys.argv[1:]:
-                  new = re.sub(r"['\"]?" + re.escape(flag) + r"['\"]?\s*,?\s*", '', new)
+              new = token.sub('', addition.sub('', element.sub('', text)))
               if new != text:
                   path.write_text(new)
-                  print(f'removed from {path}')
+                  changed.append(path)
+                  print(f'trimmed {path}')
+
+          # A trimmed file that no longer parses would be worse than the error this step
+          # sets out to fix, so each one is checked and put back if the edit broke it.
+          for path in changed:
+              if path.suffix == '.py':
+                  try:
+                      compile(path.read_text(), str(path), 'exec')
+                      continue
+                  except SyntaxError as exc:
+                      print(f'{path}: {exc}')
+              elif _shell_ok(path):
+                  continue
+              subprocess.run(['git', 'checkout', '--', str(path)], check=False)
+              print(f'::warning::reverted {path}, the edit broke its syntax')
           PY
           echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
 

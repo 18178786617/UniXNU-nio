@@ -85,13 +85,23 @@ git push -u origin main
 
 ### 为什么会有「warning option 不认识」这种事
 
-UniXNU 的编译脚本把一长串 `-Wno-*` 直接跟 `-Werror` 摆在一起，其中
+UniXNU 的组件编译脚本把一长串 `-Wno-*` 直接跟 `-Werror` 摆在一起，其中
 `-Wno-unnecessary-virtual-specifier` 这类选项只有很新的 clang 才认识。上游自己
 也是因为这个才把 CI 钉死在 `macos-26`（他们的 `macos.yml` 里写着：macOS 15 的
-Xcode 会拒绝这些选项）。我们要用 macOS 15 Intel，就只能自己在构建前把这串选项
-按当前 clang 校准一遍 —— 这就是 **Match the warning flags to this clang** 这一步
-做的事，它会打印 `clang: Apple clang version ...` 和
-`unknown to this clang: -Wno-...`，被删掉的选项也会写进运行摘要。
+Xcode 会拒绝这些选项）。所以在更旧的镜像上，构建前要先按当前 clang 把这串选项
+校准一遍 —— 这就是 **Match the warning flags to this clang** 这一步：它打印
+`Apple clang version ...`，把不认识的选项从 `scripts/build-*.py`、`scripts/*.sh`
+里删掉，删掉的清单写进运行摘要。每改一个文件都会做语法自检（`.py` 用 `compile()`、
+`.sh` 用 `bash -n`），改坏了自动 `git checkout` 还原并打一条 warning，绝不会把
+源码改到编不过。
+
+`scripts/unixnu/` 不在它的管辖范围：框架把编译选项经 `CCC_OVERRIDE_OPTIONS` 传给
+clang，而 XNU 本体编译不带 `-Werror`，那里出现不认识的选项只是一行 warning，不会
+中断构建；反过来用正则去改那里的 Python 字符串，很容易把字符串的收尾引号一起吃掉
+（曾经就这样把 `kernel.py` 改成了 SyntaxError）。
+
+在 `macos-26` 上这一步什么都不改，会直接打
+`every -Wno-* option in the build scripts is accepted by this clang`。
 
 
 ## 6. 这个仓库里什么是真的、什么是没启用的
