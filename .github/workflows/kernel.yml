@@ -138,7 +138,17 @@ jobs:
       - name: Resolve the configuration
         run: |
           ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
-          ./unixnu status | tee "$RUNNER_TEMP/status.txt"
+          # `unixnu status` is not run here on purpose. It resolves the patch
+          # series, `component:XnuPrelink/...` included, and that kit is a git
+          # submodule of the UniXNU checkout. actions/checkout leaves submodule
+          # directories empty, and they are only filled by `unixnu build` ->
+          # update_submodules(). Asking for status first fails with
+          # "patch missing: .../kits/XnuPrelink/patches/...". The build reports
+          # the same series (one "kernel: patch" line per patch) and the status
+          # table is collected afterwards, in "Show the result".
+          config=$(ls -1 out/*/*/*/.config 2>/dev/null | head -1)
+          switches=$(grep -c '^CONFIG_' "$config" || true)
+          echo "merged config: $config ($switches switches)"
 
       - name: Build the kernel
         env:
@@ -151,6 +161,9 @@ jobs:
       - name: Show the result
         if: always()
         run: |
+          # The kit submodules exist by now, so the status table (patch order
+          # included) is meaningful; its failure must not hide the build result.
+          ./unixnu status > "$RUNNER_TEMP/status.txt" 2>&1 || true
           find out -path '*/kernel/*' -maxdepth 6 -type f 2>/dev/null | sort || true
           find out -name 'kernel.macho' -exec ls -la {} \; 2>/dev/null || true
           du -sh out 2>/dev/null || true
