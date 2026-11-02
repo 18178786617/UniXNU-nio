@@ -1,0 +1,26 @@
+version = 1
+
+# Menu the payload volume ships for UniXNU. It sits at \EFI\UniXNU\unixnu.toml
+# because that is the only path the loader reads.
+
+[boot]
+timeout = 60
+default = "tools"
+
+[ui]
+title = "Edge S - UniXNU 17.7.11"
+
+[[entry]]
+id = "tools"
+title = "UniXNU tools (menu test)"
+type = "action"
+action = "tools"
+
+[[entry]]
+id = "xnu"
+title = "iPadOS 17.7.11 kernel"
+type = "xnu"
+# Supplied by the packer once a kernel.macho exists; until then this entry is
+# the placeholder that proves the menu and the file path are wired.
+path = "Payloads/kernel.macho"
+args = "-v keepsyms=1 kt_fixed_zones=120"

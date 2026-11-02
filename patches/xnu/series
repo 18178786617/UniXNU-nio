@@ -1,0 +1,14 @@
+# Board patch paths, one per line in application order, relative to this file.
+#
+# Empty for the first-light kernel on purpose. The 18 patches under device/ were
+# cut against umi's bring-up stack (sheng-platform-power before native-smp,
+# boot-progress before the pmgr/root traces) and the shared pipeline applies
+# arch -> soc -> os -> device instead. Applying them in that other order fails,
+# and they carry calls into sheng_pmgr_run()/boot_progress_stage() that this
+# configuration does not compile (CONFIG_XNU_SHENG_PMGR=n,
+# CONFIG_XNU_BOOT_PROGRESS=n).
+#
+# They stay in the repository as evidence, not as build input. Add them here one
+# at a time, after the kernel reaches the console, in the order the trace needs.
+#
+# The enabled series is arch (56) + soc (2) + os (3) = 61 patches.

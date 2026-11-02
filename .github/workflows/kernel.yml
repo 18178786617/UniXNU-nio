@@ -1,0 +1,169 @@
+name: Build nio kernel
+
+# Builds kernel.macho from Apple's XNU source on a macOS arm64 runner and
+# publishes it as an artifact. This repository is the device repository; the
+# UniXNU build system is checked out beside it.
+#
+# It is the nio counterpart of UniXNU's own "macOS build" workflow with one
+# deliberate difference: that workflow publishes text logs only. Here the kernel
+# is the deliverable the phone needs, so the artifact carries kernel.macho and
+# its prelink record. Run this from a private repository if that matters.
+
+on:
+  workflow_dispatch:
+    inputs:
+      unixnu_ref:
+        description: UniXNU commit to build with
+        required: true
+        default: "04573c510c5fd4892ca6948739389141cc9e05f5"
+      defconfig:
+        description: Defconfig name from configs/
+        required: true
+        default: "nio_defconfig"
+      xcode:
+        description: Xcode version on macos-26 (/Applications/Xcode_<version>.app)
+        required: true
+        default: "26.6"
+      ipsw_url:
+        description: IPSW URL (empty uses board.toml)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kernel:
+    # macos-26 is arm64 and carries the Xcode 26 line this build is developed
+    # with. macos-latest moved between images before; do not use it.
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+      UNIXNU_IPSW: ${{ inputs.ipsw_url }}
+      DEFCONFIG: ${{ inputs.defconfig }}
+
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: UniXNU/UniXNU
+          ref: ${{ inputs.unixnu_ref }}
+          path: .
+          persist-credentials: false
+
+      - name: Check out the device repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: device
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Check the inputs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f device/board.toml ] || fail "the device repository has no board.toml"
+          [ -f "device/configs/$DEFCONFIG" ] || fail "device/configs/$DEFCONFIG not found"
+          [ -d "$DEVELOPER_DIR" ] || fail "Xcode not found at $DEVELOPER_DIR; installed: $(printf '%s ' /Applications/Xcode_*.app)"
+          grep -q '^schema_version = 2' device/board.toml || fail "board.toml must be schema_version 2"
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install host tools
+        run: |
+          # cmake and ninja come with the image. Homebrew LLVM stays keg-only:
+          # the archive builders find it themselves, the rest uses Xcode clang.
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+          for tool in git make clang cmake ninja unifdef ld.lld mformat mcopy; do
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - name: Resolve the configuration
+        run: |
+          ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
+          ./unixnu status | tee "$RUNNER_TEMP/status.txt"
+
+      - name: Build the kernel
+        env:
+          # prepare-xnu-source.py lists Apple sources through the GitHub API;
+          # anonymous calls from hosted runners hit the shared rate limit.
+          # This step also fetches the pinned sources (no separate fetch step).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel
+
+      - name: Show the result
+        if: always()
+        run: |
+          find out -path '*/kernel/*' -maxdepth 6 -type f 2>/dev/null | sort || true
+          find out -name 'kernel.macho' -exec ls -la {} \; 2>/dev/null || true
+          du -sh out 2>/dev/null || true
+
+      - name: Upload the kernel
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel
+          path: |
+            out/*/*/*/kernel/kernel.macho
+            out/*/*/*/kernel/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the build logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel-logs
+          path: |
+            out/*/*/*/logs/*.log
+            ${{ runner.temp }}/status.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "## nio kernel: $RESULT"
+            echo
+            echo "- defconfig: \`$DEFCONFIG\`"
+            echo "- UniXNU: \`${{ inputs.unixnu_ref }}\`"
+            echo "- Xcode: \`${{ inputs.xcode }}\`"
+            echo
+            if [ "$RESULT" = success ]; then
+              echo "Download **nio-kernel**, unzip, and put \`kernel.macho\` and \`kernel.macho.json\` into the local \`out/\` directory next to \`nio.adt\`."
+            else
+              echo "Download **nio-kernel-logs** and read \`kernel.log\`, \`kernel-bootstrap.log\` and \`archive-*.log\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove proprietary inputs
+        if: always()
+        run: |
+          rm -rf out/ipsw out/feeds 2>/dev/null || true
+          rm -rf out/*/*/*/tree/.cache/firmware 2>/dev/null || true

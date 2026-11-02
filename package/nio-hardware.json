@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "device": "nio",
+  "soc": "SM8250",
+  "model": "Qualcomm Technologies, Inc. kona v2.1",
+  "compatible": [
+    "qcom,kona"
+  ],
+  "product_name": "moto edge s",
+  "platform_chip_id": 356,
+
+  "_memory_banks_note": [
+    "Empty on purpose. umi's three banks were read off its own ABL-patched DTB;",
+    "nio has 8 GiB and a different carveout layout, so copying them would lie.",
+    "Fill this list from the payload's '>= 64 MiB Conventional run' dump",
+    "(the block that prints '<phys>  <MiB>  Conventional' for up to 14 runs),",
+    "keeping only the runs XNU may own, in ascending base order.",
+    "The generator refuses to run while this list is empty."
+  ],
+  "memory_banks": [],
+  "dram_total_expected": "0x200000000",
+
+  "cpus": [
+    { "affinity": 0, "compatible": ["qcom,kryo"] },
+    { "affinity": 256, "compatible": ["qcom,kryo"] },
+    { "affinity": 512, "compatible": ["qcom,kryo"] },
+    { "affinity": 768, "compatible": ["qcom,kryo"] },
+    { "affinity": 1024, "compatible": ["qcom,kryo"] },
+    { "affinity": 1280, "compatible": ["qcom,kryo"] },
+    { "affinity": 1536, "compatible": ["qcom,kryo"] },
+    { "affinity": 1792, "compatible": ["qcom,kryo"] }
+  ],
+
+  "psci": { "compatible": "arm,psci-1.0", "method": "smc" },
+
+  "timer": {
+    "frequency_hz": 19200000,
+    "virtual_timer_intid": 27,
+    "note": "CNTFRQ 19.2 MHz confirmed by the payload's own 100 Hz reload (192000 ticks); the payload currently drives the physical timer on PPI 30, XNU takes the virtual one."
+  },
+
+  "gic": {
+    "compatible": "arm,gic-v3",
+    "distributor": { "base": 396361728, "size": 65536 },
+    "redistributor": { "base": 396754944, "size": 1048576 },
+    "redistributor_stride": 131072
+  },
+
+  "framebuffer": {
+    "base": 2617245696,
+    "width": 1080,
+    "height": 2520,
+    "row_bytes": 4320,
+    "bits_per_pixel": 32,
+    "source": "uefiplat.cfg 'Display Reserved' 0x9C000000+0x2400000 plus dumpsys display 1080x2520; handed over in boot_args, not initialised by this ADT"
+  },
+
+  "storage": {
+    "ufs_controller": { "base": 30982144, "size": 262144, "dts_node": "/soc/ufshc@1d84000" },
+    "lun_count": 6,
+    "userdata_lun": 4,
+    "note": "A/B device: boot_a on sdd, userdata on sde (LUN 4). umi's single-LUN UFS path needs a LUN selector before it can read nio's userdata."
+  },
+
+  "sources": {
+    "vendor_boot_sha256": "4076b8d345095c3a3d480febcc5f2b39e667eee5f23107e02dc5f42afc81945a",
+    "dtbo_sha256": "1f5abe1e45f031b6d38d3bb08dc3d33deb21f773ac4158ed192206771ee7d546",
+    "boot_sha256": "703faa73bb98d393c506f1d82407d938f3e9c3672ab5ea62d8a63fb07269b4bf",
+    "running_dtb_sha256": null,
+    "evidence_snapshot": "2026-10-31 nio dump (fastboot oem partition / oem hw / getevent, LineageOS extracted DTs)",
+    "uefi_fd_sha256": null
+  }
+}

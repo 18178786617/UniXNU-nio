@@ -1,0 +1,23 @@
+diff --git a/DarwinBootPkg/Driver/DarwinBoot.c b/DarwinBootPkg/Driver/DarwinBoot.c
+index 3b6cafc..fa93854 100644
+--- a/DarwinBootPkg/Driver/DarwinBoot.c
++++ b/DarwinBootPkg/Driver/DarwinBoot.c
+@@ -866,7 +866,17 @@ DarwinBootEntry (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
+   Status = gBS->InstallMultipleProtocolInterfaces (&ImageHandle, &gUniXNULoaderProtocolGuid, &mLoader, NULL);
+   if (!EFI_ERROR (Status)) {
+     Loaded->Unload = Unload;
+-    Print (L"DARWINBOOT: loader v2 installed EL%u\n", (UINT32)(DarwinCurrentEl () >> 2));
++    //
++    // nio: this driver is dispatched from the FV, and on this handset ConOut is
++    // not guaranteed to exist yet. Print () asserts (BaseDebugLibSerialPort
++    // turns that into a dead loop) when gST->ConOut is NULL, which cost us a
++    // whole boot cycle on the AcpiPlatform driver before. Stay quiet instead.
++    //
++    if (gST->ConOut != NULL) {
++      Print (L"DARWINBOOT: loader v2 installed EL%u\n", (UINT32)(DarwinCurrentEl () >> 2));
++    } else {
++      DEBUG ((DEBUG_ERROR, "DARWINBOOT: loader v2 installed (no console yet)\n"));
++    }
+   }
+   return Status;
+ }
