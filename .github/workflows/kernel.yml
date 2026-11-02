@@ -6,9 +6,13 @@ name: Build nio kernel
 #
 # The host architecture does not decide the product architecture: clang
 # cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
-# arm64. macos-15-intel is picked because that is the image the earlier builds
-# were made on, and because the Intel image carries more RAM than the arm64
-# standard runner (14 GB vs 7 GB) for the same 4 vCPU.
+# arm64. macos-15-intel is picked because the request is the macOS 15 Intel
+# image and because it carries more RAM than the arm64 standard runner
+# (14 GB vs 7 GB) for the same 4 vCPU. Its Xcode line is older than the one
+# UniXNU develops against -- upstream pins macos-26 precisely because macOS 15's
+# clang rejects the warning options the build passes with -Werror -- so the
+# "Match the warning flags to this clang" step drops whatever this Xcode does
+# not know before anything is compiled.
 #
 # It is the nio counterpart of UniXNU's own "macOS build" workflow with one
 # deliberate difference: that workflow publishes text logs only. Here the kernel
@@ -135,6 +139,49 @@ jobs:
             printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
+      - name: Match the warning flags to this clang
+        run: |
+          # The build passes a long list of -Wno-* options next to -Werror, and
+          # the archive builders (scripts/build-arm-driver.py and friends) make
+          # any unknown option fatal. This image's Xcode is older than that list
+          # -- upstream pins macos-26 for exactly this reason -- and the first
+          # casualty was -Wno-unnecessary-virtual-specifier, with more possibly
+          # behind it. Rather than guess, ask this clang which options it knows
+          # and delete the rest from the build scripts.
+          xcrun clang++ --version | head -1
+          probe="$RUNNER_TEMP/flagprobe.cpp"
+          printf 'int main() { return 0; }\n' > "$probe"
+          dropped=""
+          for flag in $(grep -rhoE -- '-Wno-[a-z0-9-]+' scripts | sort -u); do
+            if xcrun clang++ -Werror "$flag" -c "$probe" -o "$RUNNER_TEMP/flagprobe.o" >/dev/null 2>&1; then
+              continue
+            fi
+            dropped="$dropped $flag"
+          done
+          if [ -z "$dropped" ]; then
+            echo "every -Wno-* option in scripts/ is accepted by this clang"
+            exit 0
+          fi
+          echo "unknown to this clang:$dropped"
+          # python rather than sed: the flags go through argv, so no quoting of
+          # the pattern inside the shell, and an optional quote and comma are
+          # removed with the flag so the python lists stay valid.
+          python3 - $dropped <<'PY'
+          import pathlib, re, sys
+
+          for path in sorted(pathlib.Path('scripts').rglob('*')):
+              if path.suffix not in ('.py', '.sh') or not path.is_file():
+                  continue
+              text = path.read_text()
+              new = text
+              for flag in sys.argv[1:]:
+                  new = re.sub(r"['\"]?" + re.escape(flag) + r"['\"]?\s*,?\s*", '', new)
+              if new != text:
+                  path.write_text(new)
+                  print(f'removed from {path}')
+          PY
+          echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
+
       - name: Resolve the configuration
         run: |
           ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
@@ -202,6 +249,9 @@ jobs:
             echo "- UniXNU: \`${{ inputs.unixnu_ref }}\`"
             echo "- host: \`$(uname -m)\` on macOS \`$(sw_vers -productVersion)\`"
             echo "- Xcode: \`${XCODE_APP:-unknown}\`"
+            if [ -n "${DROPPED_FLAGS:-}" ]; then
+              echo "- warning flags this Xcode did not know: \`$DROPPED_FLAGS\`"
+            fi
             echo
             if [ "$RESULT" = success ]; then
               echo "Download **nio-kernel**, unzip, and put \`kernel.macho\` and \`kernel.macho.json\` into the local \`out/\` directory next to \`nio.adt\`."

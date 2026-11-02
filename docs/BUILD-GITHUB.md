@@ -49,7 +49,7 @@ git push -u origin main
 | `unixnu_ref` | `04573c510c5fd4892ca6948739389141cc9e05f5` | 固定的 UniXNU 版本，别改成 `main` |
 | `defconfig` | `nio_defconfig` | `configs/` 里的名字 |
 | `runner` | `macos-15-intel` | 机主确认 macOS 15 **Intel（x86_64）** 上跑通过。这是 GitHub 现在唯一的 Intel macOS 标签（4 vCPU / 14 GB，公开仓库免费，2027 年 8 月下线）；`macos-15` 是 arm64，两者不能混 |
-| `xcode` | `auto` | `auto` = 自动挑镜像里最新的 `/Applications/Xcode*.app`（Intel 镜像最高到 Xcode 16 线，Xcode 26 只有 arm64）；填版本号则按 `Xcode_<版本>.app` 精确匹配 |
+| `xcode` | `auto` | `auto` = 取镜像里最新的 `/Applications/Xcode*.app`。`macos-15-intel` 上同时装了 Xcode 16.x 和 26.x 两套（本次运行选中的是 26.3，SDK 26.2）；填版本号则按 `Xcode_<版本>.app` 精确匹配 |
 | `ipsw_url` | 空 | 空 = 用 `board.toml` 里 Apple 的 17.7.11 IPSW |
 
 3. 点 **Run workflow**，等 40–90 分钟（第一次要下 XNU 源码和 17.7.11 的 kernelcache）。
@@ -78,8 +78,21 @@ git push -u origin main
 | 日志 | 含义 | 处理 |
 |---|---|---|
 | `Xcode not found` / `Xcode not found at` | runner 镜像换了 Xcode 版本 | 一般不会再有：`xcode=auto` 会自动挑最新的；报错行仍会列出实际安装的版本 |
+| `error: unknown warning option '-Wno-...' [-Werror,-Wunknown-warning-option]` | 镜像自带的 clang 比 UniXNU 写那串 `-Wno-*` 时用的旧 | **已自动处理**：构建前的 **Match the warning flags to this clang** 会拿当前 clang 逐个试这些选项，不认识的当场从 `scripts/` 里删掉。真还看到这条，说明那一步自己失败了，把它的日志发我 |
+| `Undefined symbols: ... _corecrypto_kext_start` | 第一次「bootstrap pass」的正常结果（此时 corecrypto 还没编） | 不用管，后面会重新链接 |
 | `XNU patch ...: patch does not apply` | 补丁顺序/基线不符 | 把补丁名发我，我调 `patches/` |
 | `error: ...` 在 `build/.../foo.c` | 编译错误 | 贴那条 `error:` 前后 20 行 |
+
+### 为什么会有「warning option 不认识」这种事
+
+UniXNU 的编译脚本把一长串 `-Wno-*` 直接跟 `-Werror` 摆在一起，其中
+`-Wno-unnecessary-virtual-specifier` 这类选项只有很新的 clang 才认识。上游自己
+也是因为这个才把 CI 钉死在 `macos-26`（他们的 `macos.yml` 里写着：macOS 15 的
+Xcode 会拒绝这些选项）。我们要用 macOS 15 Intel，就只能自己在构建前把这串选项
+按当前 clang 校准一遍 —— 这就是 **Match the warning flags to this clang** 这一步
+做的事，它会打印 `clang: Apple clang version ...` 和
+`unknown to this clang: -Wno-...`，被删掉的选项也会写进运行摘要。
+
 
 ## 6. 这个仓库里什么是真的、什么是没启用的
 
