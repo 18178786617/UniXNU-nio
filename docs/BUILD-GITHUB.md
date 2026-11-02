@@ -47,7 +47,8 @@ git push -u origin main
 |---|---|---|
 | `unixnu_ref` | `04573c510c5fd4892ca6948739389141cc9e05f5` | 固定的 UniXNU 版本，别改成 `main` |
 | `defconfig` | `nio_defconfig` | `configs/` 里的名字 |
-| `xcode` | `26.6` | 如果镜像里没有这个版本，报错行会列出实际安装的 `Xcode_*.app`，照它改 |
+| `runner` | `macos-15` | 机主确认 macOS 15 上跑通过；`macos-26` 需要换 Xcode 26 线 |
+| `xcode` | `auto` | `auto` = 自动挑镜像里最新的 `/Applications/Xcode*.app`；填版本号则按 `Xcode_<版本>.app` 精确匹配 |
 | `ipsw_url` | 空 | 空 = 用 `board.toml` 里 Apple 的 17.7.11 IPSW |
 
 3. 点 **Run workflow**，等 40–90 分钟（第一次要下 XNU 源码和 17.7.11 的 kernelcache）。
@@ -75,7 +76,7 @@ git push -u origin main
 
 | 日志 | 含义 | 处理 |
 |---|---|---|
-| `xcode-select: error` / `Xcode not found` | runner 镜像换了 Xcode 版本 | 按报错里列出的版本改 `xcode` |
+| `Xcode not found` / `Xcode not found at` | runner 镜像换了 Xcode 版本 | 一般不会再有：`xcode=auto` 会自动挑最新的；报错行仍会列出实际安装的版本 |
 | `XNU patch ...: patch does not apply` | 补丁顺序/基线不符 | 把补丁名发我，我调 `patches/` |
 | `error: ...` 在 `build/.../foo.c` | 编译错误 | 贴那条 `error:` 前后 20 行 |
 
