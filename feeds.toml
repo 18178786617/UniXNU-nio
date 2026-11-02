@@ -1,0 +1,62 @@
+# Shared SM8250 / kona layer: GICv3 and timer description, the two SoC XNU
+# patches (native-smp-secondary, native-smp-type-clusters) and the SoC config
+# fragment. Same pin alioth qualified on 17.7.11.
+[[source]]
+name = "sm8250"
+kind = "soc"
+git = "https://github.com/FFT-infra/UniXNU-sm8250-common"
+commit = "a6e7e36caab58f5b9a5625dbdb8da2bf290fa5cc"
+
+# ArmCpu fork with the SM8250 bring-up alioth measured: the SPI-IPI base is
+# derived from GICD_TYPER instead of the fixed 1008 (kona's DT uses SPIs up to
+# 863) and the timer INTID is overridable. The base component keeps the fixed
+# value and would route IPIs into the wrong INTIDs on this SoC.
+[[source]]
+name = "ArmCpu"
+kind = "driver"
+git = "https://github.com/xVanTuring/ArmCpu"
+commit = "a9c4585dbb1b75b8594dd0ae54962cc59969d98f"
+
+# Source-only Darwin 23 baseline, independent of the selected IPSW's binary XNU.
+[[source]]
+name = "xnu"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/xnu.git"
+ref = "xnu-10063.141.1"
+commit = "d8b80295118ef25ac3a784134bcf95cd8e88109f"
+darwin = "23.6.0"
+version = "10063.141.1"
+driverkit_tag = "xnu-10063.121.3"
+trustcache_tag = "xnu-8796.101.5"
+
+# The upstream source-provider recipe uses this pinned public snapshot.
+# Its provenance is third-party, not an authenticated Apple release archive.
+[[source]]
+name = "corecrypto-2023"
+kind = "refer"
+git = "https://github.com/ONLYA/corecrypto-2023.git"
+commit = "11fba65b12d8830630e248dfa8344caf8b065f26"
+
+[[source]]
+name = "libpthread"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/libpthread.git"
+ref = "libpthread-519.120.4"
+commit = "c0e60fb5ecfc54cf379c261d3f9572cc22ded891"
+
+# Fetch omitted public headers over Git to avoid anonymous GitHub API limits.
+[[source]]
+name = "xnu-driverkit"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/xnu.git"
+ref = "xnu-10063.121.3"
+commit = "2c2f96dc2b9a4408a43d3150ae9c105355ca3daa"
+path = "iokit/DriverKit"
+
+[[source]]
+name = "xnu-trustcache"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/xnu.git"
+ref = "xnu-8796.101.5"
+commit = "aca3beaa3dfbd42498b42c5e5ce20a938e6554e5"
+path = "EXTERNAL_HEADERS/TrustCache"
