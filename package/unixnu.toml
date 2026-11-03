@@ -23,4 +23,9 @@ type = "xnu"
 # Supplied by the packer once a kernel.macho exists; until then this entry is
 # the placeholder that proves the menu and the file path are wired.
 path = "Payloads/kernel.macho"
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1"
+# initrd: the N4KROOT rootfs image. DarwinBoot copies it into memory and fills
+# the ADT /chosen/memory-map RAMDisk placeholder with {base,size}; the kernel's
+# memdev then exposes it as md0 and mockfs_mountroot reads the N4KROOT header
+# off it. rd=md0 makes IOFindBSDRoot pick that memory device as the root.
+initrd = "Payloads/rootfs.img"
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 rd=md0"

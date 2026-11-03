@@ -39,11 +39,13 @@ CONFIG_XNU_NATIVE_AES=n
 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
 CONFIG_XNU_NATIVE_RAM_BLOCK=n
 
-# The OS profile turns these on for the full Hello image. This kernel has no
-# root volume, no trust cache and no userspace, so they would only add archives
-# and runtime probes with nothing to attach to.
+# The OS profile turns these on for the full Hello image. R54 reached
+# "Failed to mount root device @IOKitBSDInit.cpp:984": the kernel now needs a
+# root. mockfs (bsd/miscfs/mockfs, in-tree source) mounts an N4KROOT image off
+# the RAMDisk memory device as the root filesystem, which is how fuxi and
+# gta4l reach userland on their boards.
 CONFIG_XNU_TRUST_CACHE_RUNTIME=n
-CONFIG_XNU_SOURCE_MOCKFS=n
+CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
 CONFIG_XNU_VERIFIED_ROOT_PROBE=n
 CONFIG_XNU_OWNER_ROOT_AUDIT=n
