@@ -36,10 +36,15 @@
  * fork itself was fine; the fixture was wrong.  R64 detects the child by
  * the x1 == 1 marker instead.
  *
+ * R64 read 4001: stage2 had tested `getpid() == 1`, but the execve target is
+ * the forked child (pid 2), so the kernel was right and the fixture was wrong.
+ * R65 gives every failure its own range, so a number can no longer mean two
+ * different things:
+ *
  *   exit 2089 = 42|255|0x100|0x200|0x400 -> fork + exec + stage2 + wait OK
  *   exit 1000+n / 2000+n   -> fork / wait4 failed with errno n
- *   exit 4000+n            -> child exited n (n = errno of execve, or 1)
- *   exit 5000+n            -> child exited an unexpected code n
+ *   exit 4000+n            -> stage2 ran, check n failed (1..6, see stage2.c)
+ *   exit 5128+n            -> execve failed with errno n
  *   exit 2500+n            -> child died from signal n
  *
  * Constraints imposed by the Mach-O we hand the kernel:
@@ -174,8 +179,9 @@ void _start(void)
 		argv[1] = 0;
 		envp[0] = 0;
 		got = sys6(SYS_execve, (i64)argv[0], (i64)argv, (i64)envp, 0, 0, 0);
-		/* execve only returns on failure, with -errno */
-		sys6(SYS_exit, -got, 0, 0, 0, 0, 0);
+		/* execve only returns on failure, with -errno. R65 adds 128 so an
+		 * errno can never look like one of stage2's small check codes. */
+		sys6(SYS_exit, 128 - got, 0, 0, 0, 0, 0);
 	}
 
 	st = 0;
@@ -191,12 +197,12 @@ void _start(void)
 		/* 42 | 255 | 0x100 | 0x200 | 0x400 */
 		sys6(SYS_exit, 2089, 0, 0, 0, 0, 0);
 	}
-	if (code <= 106) {
-		/* errno from the child's execve */
-		sys6(SYS_exit, 4000 + code, 0, 0, 0, 0, 0);
+	if (code >= 128) {
+		/* child reached its exit only because execve failed: 128 + errno */
+		sys6(SYS_exit, 5000 + code, 0, 0, 0, 0, 0);
 	}
-	/* any other child exit code: keep it separate from the errno range */
-	sys6(SYS_exit, 5000 + code, 0, 0, 0, 0, 0);
+	/* small code = which of stage2's checks failed */
+	sys6(SYS_exit, 4000 + code, 0, 0, 0, 0, 0);
 
 	for (;;) {
 		__asm__ volatile ("wfe");
