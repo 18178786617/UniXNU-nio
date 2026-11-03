@@ -27,9 +27,19 @@
  * (stage2.c), the parent wait4()s it. That is the whole process-creation
  * path a real launchd needs, and it re-tests the exec pipeline from EL0
  * instead of from bsd_init.
+ * R63 read 4218, which decoded exactly to the fork return convention:
+ * this kernel hands the child (x0 = pid, x1 = 1) from thread_set_child()
+ * (osfmk/arm64/status.c:2041) and libSystem's fork stub is what turns that
+ * into "return 0 in the child". Raw syscalls get no such help, so the child
+ * saw a non-zero pid, ran the parent path, wait4()'d itself, got ECHILD and
+ * exited 2010 -- and 2010 & 0xff is 218, so the parent reported 4218.
+ * fork itself was fine; the fixture was wrong.  R64 detects the child by
+ * the x1 == 1 marker instead.
+ *
  *   exit 2089 = 42|255|0x100|0x200|0x400 -> fork + exec + stage2 + wait OK
  *   exit 1000+n / 2000+n   -> fork / wait4 failed with errno n
  *   exit 4000+n            -> child exited n (n = errno of execve, or 1)
+ *   exit 5000+n            -> child exited an unexpected code n
  *   exit 2500+n            -> child died from signal n
  *
  * Constraints imposed by the Mach-O we hand the kernel:
@@ -75,6 +85,24 @@ static i64 sys6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 	return cf ? -x0 : x0;
 }
 
+/* fork() on arm64 XNU returns the child (x0 = pid, x1 = 1) and libSystem's
+ * fork stub is what folds that into "0 in the child". We have no libSystem,
+ * so capture x1 ourselves: 1 means this process is the child. */
+static i64 sys_fork(i64 *is_child)
+{
+	register i64 x0 __asm__("x0") = 0;
+	register i64 x1 __asm__("x1") = 0;
+	register i64 x16 __asm__("x16") = SYS_fork;
+	i64 cf;
+
+	__asm__ volatile ("svc #0x80\n\tcset %w2, cs"
+	                  : "+r"(x0), "+r"(x1), "=&r"(cf)
+	                  : "r"(x16)
+	                  : "memory", "cc");
+	*is_child = x1;
+	return cf ? -x0 : x0;
+}
+
 /* _start must be the first thing in the image: the Mach-O entry point is
  * __TEXT+0x1d0 and it is baked into LC_UNIXTHREAD. */
 __attribute__((section(".text.start"), noreturn))
@@ -85,7 +113,7 @@ void _start(void)
 	 * depend on FP/SIMD being live for the first EL0 process. */
 	volatile char b[32];
 	unsigned mask = 0, code;
-	i64 fd, child, got;
+	i64 fd, child, got, is_child;
 	long st;
 
 	if (sys6(SYS_getpid, 0, 0, 0, 0, 0, 0) == 1) {
@@ -131,11 +159,14 @@ void _start(void)
 	}
 
 	/* ---- R63: fork + execve + wait4 ---- */
-	child = sys6(SYS_fork, 0, 0, 0, 0, 0, 0);
+	child = sys_fork(&is_child);
 	if (child < 0) {
 		sys6(SYS_exit, 1000 - child, 0, 0, 0, 0, 0);
 	}
-	if (child == 0) {
+	/* belt and braces: x1 == 1 is the libSystem child marker, and a child
+	 * also sees its own pid in x0, so getpid() == child only there. If the
+	 * kernel ever leaves x1 set in the parent, the pid check still decides. */
+	if (is_child == 1 && sys6(SYS_getpid, 0, 0, 0, 0, 0, 0) == child) {
 		char *argv[2];
 		char *envp[1];
 
@@ -160,7 +191,12 @@ void _start(void)
 		/* 42 | 255 | 0x100 | 0x200 | 0x400 */
 		sys6(SYS_exit, 2089, 0, 0, 0, 0, 0);
 	}
-	sys6(SYS_exit, 4000 + code, 0, 0, 0, 0, 0);
+	if (code <= 106) {
+		/* errno from the child's execve */
+		sys6(SYS_exit, 4000 + code, 0, 0, 0, 0, 0);
+	}
+	/* any other child exit code: keep it separate from the errno range */
+	sys6(SYS_exit, 5000 + code, 0, 0, 0, 0, 0);
 
 	for (;;) {
 		__asm__ volatile ("wfe");
