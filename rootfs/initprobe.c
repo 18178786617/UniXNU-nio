@@ -17,10 +17,20 @@
  *   bit 4  0x010  open("/") >= 0               (vfs lookup on mockfs root)
  *   bit 5  0x020  open("/sbin/launchd") >= 0   (our own image is a file)
  *   bit 6  0x040  read() == 4 && MH_MAGIC_64   (file I/O returns real bytes)
- *   bit 7  0x080  /probe.bin reads "NIO-PROBE" (second file, full path walk)
+ *   bit 7  0x080  /probe.bin reads MH_MAGIC_64 (second file, path walk)
  *
  * So 297 means every layer a userspace needs is alive; a missing bit names
- * the layer that is not, without another round of guessing.
+ * the layer that is not, without another round of guessing.  R62 read exactly
+ * 297, so all eight layers are up.
+ *
+ * R63 continues past the mask: fork(), the child execve()s /probe.bin
+ * (stage2.c), the parent wait4()s it. That is the whole process-creation
+ * path a real launchd needs, and it re-tests the exec pipeline from EL0
+ * instead of from bsd_init.
+ *   exit 2089 = 42|255|0x100|0x200|0x400 -> fork + exec + stage2 + wait OK
+ *   exit 1000+n / 2000+n   -> fork / wait4 failed with errno n
+ *   exit 4000+n            -> child exited n (n = errno of execve, or 1)
+ *   exit 2500+n            -> child died from signal n
  *
  * Constraints imposed by the Mach-O we hand the kernel:
  *   - __TEXT is R+X only, no writable segment, so NO globals: every buffer
@@ -40,6 +50,9 @@ typedef long i64;
 #define SYS_getuid       24
 #define SYS_gettimeofday 116
 #define SYS_mmap         197
+#define SYS_fork         2
+#define SYS_wait4        7
+#define SYS_execve       59
 
 #define PROT_READ_WRITE  3
 #define MAP_PRIVATE_ANON 0x1002   /* MAP_PRIVATE | MAP_ANON */
@@ -71,9 +84,9 @@ void _start(void)
 	 * into an unaligned `ldur d0` SIMD load, and this fixture should not
 	 * depend on FP/SIMD being live for the first EL0 process. */
 	volatile char b[32];
-	unsigned mask = 0;
-	i64 fd;
-	int i, ok;
+	unsigned mask = 0, code;
+	i64 fd, child, got;
+	long st;
 
 	if (sys6(SYS_getpid, 0, 0, 0, 0, 0, 0) == 1) {
 		mask |= 0x01;
@@ -107,20 +120,47 @@ void _start(void)
 	}
 
 	fd = sys6(SYS_open, (i64)"/probe.bin", 0, 0, 0, 0, 0);
-	if (fd >= 0 && sys6(SYS_read, fd, (i64)b, 9, 0, 0, 0) == 9) {
-		const char *want = "NIO-PROBE";
-		ok = 1;
-		for (i = 0; i < 9; i++) {
-			if (b[i] != want[i]) {
-				ok = 0;
-			}
-		}
-		if (ok) {
+	if (fd >= 0 && sys6(SYS_read, fd, (i64)b, 4, 0, 0, 0) == 4) {
+		unsigned m = (unsigned char)b[0] |
+		             ((unsigned char)b[1] << 8) |
+		             ((unsigned char)b[2] << 16) |
+		             ((unsigned)b[3] << 24);
+		if (m == 0xfeedfacfU) {
 			mask |= 0x80;
 		}
 	}
 
-	sys6(SYS_exit, 42 + (i64)mask, 0, 0, 0, 0, 0);
+	/* ---- R63: fork + execve + wait4 ---- */
+	child = sys6(SYS_fork, 0, 0, 0, 0, 0, 0);
+	if (child < 0) {
+		sys6(SYS_exit, 1000 - child, 0, 0, 0, 0, 0);
+	}
+	if (child == 0) {
+		char *argv[2];
+		char *envp[1];
+
+		argv[0] = (char *)"/probe.bin";
+		argv[1] = 0;
+		envp[0] = 0;
+		got = sys6(SYS_execve, (i64)argv[0], (i64)argv, (i64)envp, 0, 0, 0);
+		/* execve only returns on failure, with -errno */
+		sys6(SYS_exit, -got, 0, 0, 0, 0, 0);
+	}
+
+	st = 0;
+	got = sys6(SYS_wait4, child, (i64)&st, 0, 0, 0, 0);
+	if (got != child) {
+		sys6(SYS_exit, 2000 - got, 0, 0, 0, 0, 0);
+	}
+	if (((unsigned)st & 0x7f) != 0) {
+		sys6(SYS_exit, 2500 + ((unsigned)st & 0x7f), 0, 0, 0, 0, 0);
+	}
+	code = ((unsigned)st >> 8) & 0xff;
+	if (code == 0) {
+		/* 42 | 255 | 0x100 | 0x200 | 0x400 */
+		sys6(SYS_exit, 2089, 0, 0, 0, 0, 0);
+	}
+	sys6(SYS_exit, 4000 + code, 0, 0, 0, 0, 0);
 
 	for (;;) {
 		__asm__ volatile ("wfe");
