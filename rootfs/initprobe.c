@@ -20,11 +20,10 @@
  * as fd 3, so a process in EL0 can paint pixels instead of only text.
  *
  * R73 answered R72's panic: the panel is 1080x2520 and vc_info was right all
- * along -- R72's last stage ran off the bottom of the frame on its own. R73
- * drew in four stages inside a guessed 2400-row ceiling, which is why the
- * frame stops short of the bottom edge. R74 drops that ceiling (the kernel
- * clips every rectangle to h-2 itself) and times one full-panel fill, which
- * is the number that decides whether a UI is possible before there is a GPU.
+ * along -- R72's last stage ran off the bottom of the frame on its own. R74
+ * dropped the fixture's 2400-row ceiling, drew the whole panel and timed one
+ * fill: 206 ms, 51 MB/s. R75 times twenty fills in a row, because a UI lives
+ * on the repeat rate, not on a single shot.
  *
  * Constraints imposed by the Mach-O wrapper:
  *   - __TEXT is R+X only, no writable segment, so NO writable globals: every
@@ -76,7 +75,7 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	int n = 0;
 	u32 sw, sh, i, y0, bh, bw;
 	i64 fd, child, got, is_child, pid, uid, self_port, dim;
-	i64 ms = 0, mbs = 0;
+	i64 ms = 0, mbs = 0, flips = 0;
 	long st;
 
 	nio_puts("nio: launchd fixture, write(1) -> console\n");
@@ -204,15 +203,13 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 		mbs = ms > 0 ? (px * 4) / ms / 1024 : 0;
 	}
 
-	/* Stage 1: one small rectangle. R73 used this as the canary -- if the frame
-	 * buffer base or its mapping were wrong it died here. The full fill above
-	 * has taken that job over, so this is now just a fixed landmark. */
+	/* Stage 1: one small rectangle, then straight on. The one-second pose it
+	 * used to strike for the camera is gone: R74-R75's interesting output is
+	 * the timing block at the end, and the camera has eleven seconds of
+	 * parking text to read instead. */
 	fb_push(cmds, &n, 0x0080FF80u, 0, 0, 200, 200);
 	fb_flush(cmds, &n);
-	nio_puts("nio: stage1 200x200 ok\n");
-	for (volatile i64 spin = 0; spin < 300000000; spin++) {
-		__asm__ volatile ("yield");
-	}
+	nio_puts("nio: stage1 ok\n");
 
 	/* Stage 2: the gradient. */
 	for (i = 0; i < 48; i++) {
@@ -248,6 +245,28 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	fb_push(cmds, &n, 0x00FFFFFFu, sw - 4, 0, 4, sh);
 	fb_flush(cmds, &n);
 
+	/* ---- repeat rate: the number a UI actually lives on ------------------
+	 * One fill is a data point; a UI redraws twenty times a second. Twenty
+	 * alternating full-screen fills timed as one block give ms per frame
+	 * with no timer inside the loop, and the two colours make the flicker
+	 * visible on camera so the count cannot silently stop early. */
+	{
+		i64 t0[2], t1[2];
+		u32 k;
+
+		t0[0] = 0; t0[1] = 0; t1[0] = 0; t1[1] = 0;
+		for (k = 0; k < 20; k++) {
+			if (k == 0) {
+				sys6(SYS_gettimeofday, (i64)t0, 0, 0, 0, 0, 0);
+			}
+			fb_push(cmds, &n, (k & 1) ? 0x00103060u : 0x00101028u,
+			        0, 0, sw, sh);
+			fb_flush(cmds, &n);
+		}
+		sys6(SYS_gettimeofday, (i64)t1, 0, 0, 0, 0, 0);
+		flips = (t1[0] - t0[0]) * 1000 + (t1[1] - t0[1]) / 1000;
+	}
+
 	nio_puts("nio: stage4 frame ok, screen is ours\n");
 	/* Every line printed before this one has been painted over, so the timing
 	 * has to be reported last or it is lost. */
@@ -256,7 +275,12 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	nio_puts(" ms, ");
 	nio_dec(mbs);
 	nio_puts(" MB/s\n");
-	nio_puts("nio: R74 full-height fill ok, parking\n");
+	nio_puts("nio: 20fill ");
+	nio_dec(flips);
+	nio_puts(" ms, ");
+	nio_dec(flips * 1000 / 20);
+	nio_puts(" us/frame\n");
+	nio_puts("nio: R75 full-height fill ok, parking\n");
 
 park:
 	for (;;) {
