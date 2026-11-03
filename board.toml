@@ -144,6 +144,16 @@ panic_screen = false
 timeout = -1
 kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
 
+["adt"."defaults"."u32"]
+# No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
+# wait for an ApplePMGRNub (R48 measured: "AMFI: No PMGR?" panic at
+# ConfigurationSettings.cpp:235 from early_security_init). vmm-present backs
+# kern.hv_vmm_present; evb10.md documents that watchdogd traps with SIGTRAP
+# three times and panics without it, and that sleep-disabled belongs in the
+# same table (sheng carries both).
+"sleep-disabled" = 1
+"vmm-present" = 1
+
 [payload.adt]
 # Official ADT generator contract (scripts/make-adt.py -> unixnu/devicetree.py):
 # the platform identity only comes from --unique-chip-id on the command line
