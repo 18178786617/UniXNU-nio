@@ -14,6 +14,7 @@
 #define NIO_UIO_H
 
 typedef unsigned long u64;
+typedef unsigned int u32;
 typedef long i64;
 
 #define SYS_exit         1
@@ -28,8 +29,26 @@ typedef long i64;
 #define SYS_gettimeofday 116
 #define SYS_mmap         197
 
+/* fd 3 is the screen, served by the same sysent[4] hook that draws fd 1/2:
+ * the buffer is a list of six-word rectangles {op, colour, x, y, w, h}, and
+ * write(3, 0, 0) answers with the panel size packed as width<<32 | height. */
+#define NIO_FB_RECT      1
+
 #define NIO_PROT_RW      3
 #define NIO_MAP_ANON     0x1002   /* MAP_PRIVATE | MAP_ANON */
+
+/* Mach traps ride the same SVC as BSD calls: the number goes in x16 as a
+ * negative value, and mach_syscall() (osfmk/arm64/bsd_arm64.c:193) negates it
+ * back before indexing mach_trap_table. No carry flag: the result is a
+ * kern_return_t. 28 is task_self_trap, the cheapest proof the table is live. */
+static inline i64 nio_mach0(i64 trap)
+{
+	register i64 x0 __asm__("x0") = 0;
+	register i64 x16 __asm__("x16") = -trap;
+
+	__asm__ volatile ("svc #0x80" : "+r"(x0) : "r"(x16) : "memory");
+	return x0;
+}
 
 /* arm64 XNU BSD syscall ABI: number in x16, arguments in x0..x5, `svc #0x80`,
  * result in x0 with the carry flag set on error (x0 = errno). */
@@ -135,6 +154,28 @@ static __attribute__((noinline)) void nio_kh(const char *k, u64 v)
 	nio_puts(k);
 	nio_hex(v);
 	nio_puts("\n");
+}
+
+static __attribute__((noinline)) i64 nio_fb_size(void)
+{
+	return sys6(SYS_write, 3, 0, 0, 0, 0, 0);
+}
+
+static __attribute__((noinline)) i64 nio_fb_send(const u32 *cmds, unsigned bytes)
+{
+	return sys6(SYS_write, 3, (i64)cmds, (i64)bytes, 0, 0, 0);
+}
+
+/* One command into a caller-owned array: the fixture keeps its command buffer
+ * on the stack because the image has no writable segment. */
+static inline void nio_fb_rect(u32 *c, u32 colour, u32 x, u32 y, u32 w, u32 h)
+{
+	c[0] = NIO_FB_RECT;
+	c[1] = colour;
+	c[2] = x;
+	c[3] = y;
+	c[4] = w;
+	c[5] = h;
 }
 
 #endif

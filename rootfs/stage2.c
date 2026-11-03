@@ -32,14 +32,27 @@ static int streq(const char *a, const char *b)
 	return *a == *b;
 }
 
-__attribute__((section(".text.start"), noreturn))
+/*
+ * R70 lesson: reading sp inside a C function body reads the prologue's own
+ * frame, not what the kernel set up. Capture it in a naked entry point that
+ * hands the register straight to the body before any frame exists.
+ */
+void stage2_main(u64 entry_sp) __attribute__((noreturn));
+
+__attribute__((section(".text.start"), naked, noreturn))
 void _start(void)
+{
+	__asm__ volatile ("mov x0, sp\n\t"
+	                  "b stage2_main\n\t");
+}
+
+__attribute__((used, noreturn)) void stage2_main(u64 entry_sp)
 {
 	i64 sp, argc, pid, fd, base;
 	char **argv;
 	char **envp;
 
-	__asm__ volatile ("mov %0, sp" : "=r"(sp));
+	sp = (i64)entry_sp;
 
 	pid = sys6(SYS_getpid, 0, 0, 0, 0, 0, 0);
 	if (pid <= 1) {
@@ -48,18 +61,40 @@ void _start(void)
 	}
 	nio_kv("child: stage2 pid=", pid);
 
-	argc = *(i64 *)sp;
+	/* argc is an int32 in a pointer-sized slot: kern_exec.c:5789 uses
+	 * copyoutptr(), which writes 4 bytes, so the upper half of the slot is
+	 * stale stack. Reading it as 64 bits would compare garbage against 1. */
+	argc = *(int *)sp;
 	argv = (char **)(sp + 8);
 	envp = argv + argc + 1;
+
+	/* One line carries what took four rounds to explain: the sp the kernel
+	 * set, the argc it wrote there, and this image's own copy of the string
+	 * address (if argv[0] matches it, the kernel copied the string, not the
+	 * parent's pointer). The 16-slot dump that proved the layout in R71 is
+	 * gone -- the layout is no longer in question. */
+	nio_puts("child: pid=");
+	nio_dec(pid);
+	nio_puts(" argc=");
+	nio_dec(argc);
+	nio_puts(" esp=0x");
+	nio_hex((u64)sp);
+	nio_puts("\n");
+	nio_kh("child: ours=0x", (u64)"/probe.bin");
 
 	if (argc != 1) {
 		nio_kv("child: FAIL argc=", argc);
 		sys6(SYS_exit, 2, 0, 0, 0, 0, 0);
 	}
 	if (!streq(argv[0], "/probe.bin")) {
-		nio_puts("child: FAIL argv0=");
-		nio_puts(argv[0]);
-		nio_puts("\n");
+		nio_kh("child: FAIL argv0 ptr=0x", (u64)argv[0]);
+		nio_puts("child: FAIL argv0 text=[");
+		if ((u64)argv[0] > 0x1000 && (u64)argv[0] < 0x10000000000ULL) {
+			nio_puts(argv[0]);
+		} else {
+			nio_puts("<outside user map>");
+		}
+		nio_puts("]\n");
 		sys6(SYS_exit, 3, 0, 0, 0, 0, 0);
 	}
 	nio_puts("child: argv0=/probe.bin argc=1\n");
