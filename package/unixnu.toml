@@ -4,8 +4,8 @@ version = 1
 # because that is the only path the loader reads.
 
 [boot]
-timeout = 60
-default = "tools"
+timeout = 10
+default = "xnu"
 
 [ui]
 title = "Edge S - UniXNU 17.7.11"

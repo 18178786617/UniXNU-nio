@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Motorola Edge S (nio, XT2125-4), Qualcomm SM8250.
+//
+// Memory banks, reserved regions and enabled peripherals come from the
+// phone's own device tree (sm8250-nio.dts in the Motorola kernel) and from
+// the nioPkg firmware's MemoryMapLib. The shared kona hardware description
+// (cpus, psci, GIC, UFS) comes from the SoC repository's sm8250.dtsi, the
+// same file the alioth board includes.
+
+/dts-v1/;
+/include/ "sm8250.dtsi"
+
+/ {
+    model = "Motorola Edge S (XT2125-4)";
+    compatible = "motorola,nio", "qcom,sm8250";
+
+    memory@80000000 {
+        device_type = "memory";
+        // The 8 GiB model: one bank from 0x80000000 (kona), matching the
+        // XBL uefiplat.cfg layout nioPkg's MemoryMapLib was built from.
+        reg = <0 0x80000000 0x2 0x00000000>;
+    };
+
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        // The phone's own cont_splash_region. nioPkg reserves
+        // 0x9C000000 + 0x2400000 as "Display Reserved" and boots the panel
+        // from there (framebuffer 1080x2520 pitch 4320), so the stock ABL
+        // keeps the panel powered through the handoff.
+        splash_region: splash_region@9c000000 {
+            reg = <0 0x9c000000 0 0x2400000>;
+            label = "cont_splash_region";
+        };
+    };
+};
+
+// Enable the CPUs the board runs. kona: four Cortex-A55 (cpu0-3) and four
+// Cortex-A77 (cpu4-7), MPIDR core number in Affinity1 (reg 0x000-0x700).
+&cpu0 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu1 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu2 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu3 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu4 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu5 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu6 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu7 { status = "okay"; unixnu,cluster-type = "P"; };
+
+// Storage stays disabled until the board selects a UFS component, the same
+// staging alioth used. The GIC exports to the ADT either way (unixnu,adt-name
+// = "intc" is unconditional in sm8250.dtsi); UFS nodes are status="disabled"
+// in the SoC file, so nothing else reaches /arm-io yet.

@@ -142,18 +142,26 @@ timeout = -1
 kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
 
 [payload.adt]
-tool = "scripts/make-nio-adt.py"
+# Official ADT generator contract (scripts/make-adt.py -> unixnu/devicetree.py):
+# the platform identity only comes from --unique-chip-id on the command line
+# ("required" makes both the local and cloud builds refuse to run without it).
 chip_id = "0x164"
 unique_chip_id = "required"
-cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
-psci_method = "smc"
-# Provisional: the inherited ADT contract refuses anything under 256 MiB, and
-# umi qualified exactly 256 MiB. nio has 8 GiB with a 256 MiB "Kernel" carveout
-# at 0xA0000000 in uefiplat.cfg, so this is the floor to try first, not a
-# measured success.
-owned_memory_size = "0x10000000"
+# DarwinBoot copies the kernel into this contiguous window and writes
+# /chosen/darwinboot-memory-size. alioth (same SoC, qualified on hardware)
+# uses 4 GiB; the earlier 256 MiB provisional value starved the early VM.
+owned_memory_size = "0x100000000"
 packed_data_ramdisk = false
-ipad_identity = false
+
+# Hardware device tree: compiled by the pipeline (real dtc on the cloud
+# runner, tools/dtc-mini.py locally) and merged into the ADT by
+# devicetree.generate() — cpus with cluster types, psci and the GIC exported
+# as /arm-io/intc via unixnu,adt-name. This is what the hand-scaled ADT was
+# missing: without /arm-io the kernel dies right after its first console
+# line (SecurityLock::LockType) where interrupts and timers get read.
+[device_tree]
+source = "device:dts/nio.dts"
+include_dirs = ["soc:dts"]
 
 [nio_notes]
 # 1. A/B slots, active _a: boot_a on sdd, dtbo_a/vendor_boot_a too.

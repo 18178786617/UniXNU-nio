@@ -9,24 +9,23 @@
   "product_name": "moto edge s",
   "platform_chip_id": 356,
   "_memory_banks_note": [
-    "PROVISIONAL: derived from nioPkg Library/MemoryMapLib (extracted XBL",
-    "uefiplat.cfg f322164b...), >=64 MiB Conventional runs XNU may own, in",
-    "ascending base order. Not yet a payload-measured dump; refine after the",
-    "first firmware boot prints its own memory map."
+    "R43: kona platform DRAM layout, aligned with the alioth device record",
+    "(docs/.vitepress/device-records/alioth.toml line 135): one bank from",
+    "0x80000000. alioth uses 0x200000000 (8 GiB, soldered); nio is declared at",
+    "0x180000000 (6 GiB) because the Edge S ships in 6 GiB and 8 GiB variants",
+    "and under-declaring is safe on both. The earlier provisional banks",
+    "(0xC0000000+512MiB, 0x100000000+4GiB, from XBL Conventional runs) excluded",
+    "the kernel's own load address 0x9A8xxxxx, which froze XNU in early VM init",
+    "right after its first console line."
   ],
   "memory_banks": [
     {
-      "base": 3221225472,
-      "size": 536870912,
-      "source": "nioPkg MemoryMapLib 'Darwin RAM' (XBL uefiplat.cfg, Conventional)"
-    },
-    {
-      "base": 4294967296,
-      "size": 4294967296,
-      "source": "nioPkg MemoryMapLib 'Darwin High RAM' (XBL uefiplat.cfg, Conventional)"
+      "base": 2147483648,
+      "size": 6442450944,
+      "source": "kona platform DRAM: one bank at 0x80000000 (alioth record; Edge S 6 GiB safe declaration)"
     }
   ],
-  "dram_total_expected": "0x200000000",
+  "dram_total_expected": "0x180000000",
   "cpus": [
     {
       "affinity": 0,
