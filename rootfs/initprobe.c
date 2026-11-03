@@ -153,9 +153,12 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 
 	/* ---- the screen, as a file -----------------------------------------
 	 * write(3, 0, 0) returns width<<32 | height, so userspace learns the panel
-	 * size instead of assuming one. Then a list of rectangles: a vertical
-	 * gradient over the whole panel, eight colour bars, and a frame. */
+	 * size instead of assuming one. R72 faulted 638 rows below the panel with
+	 * this same call, so both the raw word and the split numbers go on screen
+	 * before anything is drawn, and the drawing stays inside a height that is
+	 * known to be mapped. */
 	dim = nio_fb_size();
+	nio_kh("nio: dim=0x", (u64)dim);
 	sw = (u32)((u64)dim >> 32);
 	sh = (u32)((u64)dim & 0xffffffffu);
 	nio_puts("nio: fb ");
@@ -163,11 +166,34 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	nio_puts("x");
 	nio_dec((i64)sh);
 	nio_puts("\n");
-	if (sw < 64 || sh < 64) {
+	if (sw < 64 || sw > 8192 || sh < 64) {
 		nio_kv("nio: fb unusable ", dim);
 		goto park;
 	}
+	/* R72's panic wrote 2.75 MB past the buffer, i.e. 638 rows of 4320. Only
+	 * draw inside a height that the panel is known to have until the geometry
+	 * is confirmed; 2400 is under every 1080-wide panel this port has seen and
+	 * leaves the top of the frame visible even if sh lies. */
+	if (sh > 2400) {
+		nio_kv("nio: sh large, drawing 2400 of ", (i64)sh);
+		sh = 2400;
+	}
+	/* Give the camera time to record the numbers before pixels cover them. */
+	for (volatile i64 spin = 0; spin < 300000000; spin++) {
+		__asm__ volatile ("yield");
+	}
 
+	/* Stage 1: one small rectangle. If the frame buffer base or its mapping is
+	 * wrong, this dies before anything else has been drawn, which is a much
+	 * cheaper answer than a screenful of half-finished bands. */
+	fb_push(cmds, &n, 0x0080FF80u, 0, 0, 200, 200);
+	fb_flush(cmds, &n);
+	nio_puts("nio: stage1 200x200 ok\n");
+	for (volatile i64 spin = 0; spin < 300000000; spin++) {
+		__asm__ volatile ("yield");
+	}
+
+	/* Stage 2: the gradient. */
 	for (i = 0; i < 48; i++) {
 		u32 r = 4 + (i * 8) / 48;
 		u32 g = 8 + (i * 24) / 48;
@@ -176,7 +202,10 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 		fb_push(cmds, &n, (r << 16) | (g << 8) | bl,
 		        0, (u32)((u64)i * sh / 48), sw, sh / 48 + 1);
 	}
+	fb_flush(cmds, &n);
+	nio_puts("nio: stage2 gradient ok\n");
 
+	/* Stage 3: colour bars. */
 	y0 = sh * 20 / 100;
 	bh = sh * 28 / 100;
 	bw = sw / 8;
@@ -188,15 +217,18 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 
 		fb_push(cmds, &n, bars[i], i * bw, y0, bw, bh);
 	}
+	fb_flush(cmds, &n);
+	nio_puts("nio: stage3 bars ok\n");
 
+	/* Stage 4: the frame. R72 died here, on the full-height side bars. */
 	fb_push(cmds, &n, 0x00FFFFFFu, 0, 0, sw, 4);            /* frame */
 	fb_push(cmds, &n, 0x00FFFFFFu, 0, sh - 6, sw, 6);
 	fb_push(cmds, &n, 0x00FFFFFFu, 0, 0, 4, sh);
 	fb_push(cmds, &n, 0x00FFFFFFu, sw - 4, 0, 4, sh);
 	fb_flush(cmds, &n);
 
-	nio_puts("nio: drew 60 rects, screen is ours\n");
-	nio_puts("nio: R72 exec+mach+fb ok, parking\n");
+	nio_puts("nio: stage4 frame ok, screen is ours\n");
+	nio_puts("nio: R73 exec+mach+fb ok, parking\n");
 
 park:
 	for (;;) {
