@@ -6,3 +6,5 @@
 *.json text eol=lf
 *.py text eol=lf
 *.series text eol=lf
+*.dts text eol=lf
+*.dtsi text eol=lf
