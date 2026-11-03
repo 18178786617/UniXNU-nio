@@ -19,6 +19,13 @@
  * mach_trap_table is reachable by number, not just BSD syscalls) and the screen
  * as fd 3, so a process in EL0 can paint pixels instead of only text.
  *
+ * R73 answered R72's panic: the panel is 1080x2520 and vc_info was right all
+ * along -- R72's last stage ran off the bottom of the frame on its own. R73
+ * drew in four stages inside a guessed 2400-row ceiling, which is why the
+ * frame stops short of the bottom edge. R74 drops that ceiling (the kernel
+ * clips every rectangle to h-2 itself) and times one full-panel fill, which
+ * is the number that decides whether a UI is possible before there is a GPU.
+ *
  * Constraints imposed by the Mach-O wrapper:
  *   - __TEXT is R+X only, no writable segment, so NO writable globals: every
  *     buffer lives on the stack (the kernel sets sp via thread_setuserstack()).
@@ -69,6 +76,7 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	int n = 0;
 	u32 sw, sh, i, y0, bh, bw;
 	i64 fd, child, got, is_child, pid, uid, self_port, dim;
+	i64 ms = 0, mbs = 0;
 	long st;
 
 	nio_puts("nio: launchd fixture, write(1) -> console\n");
@@ -153,10 +161,10 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 
 	/* ---- the screen, as a file -----------------------------------------
 	 * write(3, 0, 0) returns width<<32 | height, so userspace learns the panel
-	 * size instead of assuming one. R72 faulted 638 rows below the panel with
-	 * this same call, so both the raw word and the split numbers go on screen
-	 * before anything is drawn, and the drawing stays inside a height that is
-	 * known to be mapped. */
+	 * size instead of assuming one. R72 faulted below the panel with this same
+	 * call, R73 proved the numbers were never wrong: 1080x2520, rowbytes 4320.
+	 * Both the raw word and the split numbers go on screen before anything is
+	 * drawn, because later stages paint over them. */
 	dim = nio_fb_size();
 	nio_kh("nio: dim=0x", (u64)dim);
 	sw = (u32)((u64)dim >> 32);
@@ -170,22 +178,35 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 		nio_kv("nio: fb unusable ", dim);
 		goto park;
 	}
-	/* R72's panic wrote 2.75 MB past the buffer, i.e. 638 rows of 4320. Only
-	 * draw inside a height that the panel is known to have until the geometry
-	 * is confirmed; 2400 is under every 1080-wide panel this port has seen and
-	 * leaves the top of the frame visible even if sh lies. */
-	if (sh > 2400) {
-		nio_kv("nio: sh large, drawing 2400 of ", (i64)sh);
-		sh = 2400;
-	}
 	/* Give the camera time to record the numbers before pixels cover them. */
 	for (volatile i64 spin = 0; spin < 300000000; spin++) {
 		__asm__ volatile ("yield");
 	}
 
-	/* Stage 1: one small rectangle. If the frame buffer base or its mapping is
-	 * wrong, this dies before anything else has been drawn, which is a much
-	 * cheaper answer than a screenful of half-finished bands. */
+	/* ---- how fast does this kernel paint? -------------------------------
+	 * R73 stopped at 2400 rows because R72 had faulted and the geometry was
+	 * still unproven. It is proven now, so this fills the whole panel: fb_exec
+	 * clips every rectangle to h-2 on its own (the console keeps both cursors
+	 * in the last row), so a wrong sh can no longer run off the mapping.
+	 * The timing matters more than the pixels -- 10.9 MB per frame with no
+	 * GPU says whether anything like a UI fits in a frame budget. */
+	{
+		i64 t0[2], t1[2];
+		i64 px;
+
+		t0[0] = 0; t0[1] = 0; t1[0] = 0; t1[1] = 0;
+		sys6(SYS_gettimeofday, (i64)t0, 0, 0, 0, 0, 0);
+		fb_push(cmds, &n, 0x00103060u, 0, 0, sw, sh);
+		fb_flush(cmds, &n);
+		sys6(SYS_gettimeofday, (i64)t1, 0, 0, 0, 0, 0);
+		ms = (t1[0] - t0[0]) * 1000 + (t1[1] - t0[1]) / 1000;
+		px = (i64)sw * (i64)sh;
+		mbs = ms > 0 ? (px * 4) / ms / 1024 : 0;
+	}
+
+	/* Stage 1: one small rectangle. R73 used this as the canary -- if the frame
+	 * buffer base or its mapping were wrong it died here. The full fill above
+	 * has taken that job over, so this is now just a fixed landmark. */
 	fb_push(cmds, &n, 0x0080FF80u, 0, 0, 200, 200);
 	fb_flush(cmds, &n);
 	nio_puts("nio: stage1 200x200 ok\n");
@@ -228,7 +249,14 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	fb_flush(cmds, &n);
 
 	nio_puts("nio: stage4 frame ok, screen is ours\n");
-	nio_puts("nio: R73 exec+mach+fb ok, parking\n");
+	/* Every line printed before this one has been painted over, so the timing
+	 * has to be reported last or it is lost. */
+	nio_puts("nio: fullfill ");
+	nio_dec(ms);
+	nio_puts(" ms, ");
+	nio_dec(mbs);
+	nio_puts(" MB/s\n");
+	nio_puts("nio: R74 full-height fill ok, parking\n");
 
 park:
 	for (;;) {
