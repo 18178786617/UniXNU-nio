@@ -23,4 +23,4 @@ type = "xnu"
 # Supplied by the packer once a kernel.macho exists; until then this entry is
 # the placeholder that proves the menu and the file path are wired.
 path = "Payloads/kernel.macho"
-args = "-v keepsyms=1 kt_fixed_zones=120"
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1"
