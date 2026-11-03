@@ -17,7 +17,15 @@ CONFIG_XNU_SOURCE_PTHREAD=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
-CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
+# "prelinked", matching every os profile and alioth: the source provider stays
+# linked for symbols, but prng_random.o is compiled with -UXNU_SOURCE_CORECRYPTO14
+# so the STARTUP bootstrap that hand-drives corecrypto_kext_start is not built.
+# With =source the bootstrap ran corecrypto_kext_start after the PRNG was already
+# initialized and register_and_init_prng hit assert(!prng_ready) (prng_random.c:267,
+# measured on hardware 2026-11-03). In this mode the original corecrypto kext starts
+# through real OSKext startup, exactly once, and its own FIPS POST validates its
+# untouched __text.
+CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 
 # No QEMU platform and no unqualified sheng hardware/root-volume paths.
 CONFIG_XNU_ARMVIRT_PLATFORM=n

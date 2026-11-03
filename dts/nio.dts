@@ -16,9 +16,12 @@
 
     memory@80000000 {
         device_type = "memory";
-        // The 8 GiB model: one bank from 0x80000000 (kona), matching the
-        // XBL uefiplat.cfg layout nioPkg's MemoryMapLib was built from.
-        reg = <0 0x80000000 0x2 0x00000000>;
+        // 6 GiB from 0x80000000 (kona layout): the deliberate under-commit
+        // while the measured bank total is unknown. Safe on both the 6 GB
+        // and 8 GB Edge S variants; R43 qualified this size up to the
+        // kernel's first console line. devicetree.py refuses a
+        // payload.dram_size that differs from this node.
+        reg = <0 0x80000000 1 0x80000000>;
     };
 
     reserved-memory {

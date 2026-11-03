@@ -134,9 +134,12 @@ volume = "NIOXNU"
 size_mib = 64
 loader = "firmware"
 title = "Edge S - XNU bring-up"
-# TODO: must equal the measured bank total, not 8 GiB. 0x200000000 is only the
-# soldered capacity; umi's 12 GiB phone reports 0x2f9900000 after carveouts.
-dram_size = "0x200000000"
+# TODO: must equal the measured bank total, not the soldered capacity; umi's
+# 12 GiB phone reports 0x2f9900000 after carveouts. nio has no measurement
+# yet, so 6 GiB (0x180000000) is the deliberate under-commit: it is safe on
+# both the 6 GB and 8 GB Edge S variants, and R43 qualified it up to the
+# kernel's first console line. Raise only with a measured bank total.
+dram_size = "0x180000000"
 panic_screen = false
 timeout = -1
 kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
@@ -147,10 +150,14 @@ kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
 # ("required" makes both the local and cloud builds refuse to run without it).
 chip_id = "0x164"
 unique_chip_id = "required"
-# DarwinBoot copies the kernel into this contiguous window and writes
-# /chosen/darwinboot-memory-size. alioth (same SoC, qualified on hardware)
-# uses 4 GiB; the earlier 256 MiB provisional value starved the early VM.
-owned_memory_size = "0x100000000"
+# R45 measured failure: with 4 GiB the on-device boot returned Out of
+# Resources before the kernel ran. AllocateWindow (DarwinBoot.c) scans the
+# UEFI memory map for ONE contiguous EfiConventionalMemory run of this size;
+# nio's native XBL firmware fragments DRAM with bootloader reservations, so
+# no 4 GiB run exists (alioth qualifies 4 GiB only on the hand-tuned UniXNU
+# firmware with 36 clean descriptors). 256 MiB is the WINDOW_SIZE fallback
+# that R42/R43 proved loadable on this exact firmware.
+owned_memory_size = "0x10000000"
 packed_data_ramdisk = false
 
 # Hardware device tree: compiled by the pipeline (real dtc on the cloud
