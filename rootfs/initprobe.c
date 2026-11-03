@@ -75,7 +75,7 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	int n = 0;
 	u32 sw, sh, i, y0, bh, bw;
 	i64 fd, child, got, is_child, pid, uid, self_port, dim;
-	i64 ms = 0, mbs = 0, flips = 0;
+	i64 ms = 0, mbs = 0;
 	long st;
 
 	nio_puts("nio: launchd fixture, write(1) -> console\n");
@@ -203,71 +203,18 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 		mbs = ms > 0 ? (px * 4) / ms / 1024 : 0;
 	}
 
-	/* Stage 1: one small rectangle, then straight on. The one-second pose it
-	 * used to strike for the camera is gone: R74-R75's interesting output is
-	 * the timing block at the end, and the camera has eleven seconds of
-	 * parking text to read instead. */
-	fb_push(cmds, &n, 0x0080FF80u, 0, 0, 200, 200);
+	/* The gradient, the colour bars and the frame were R73-R75's evidence
+	 * that the panel is ours; R76 and R77 are about the touch chip, and
+	 * their budget is spent on the probe. One dark fill keeps the screen
+	 * alive without the code. */
+	fb_push(cmds, &n, 0x00103060u, 0, 0, sw, sh);
 	fb_flush(cmds, &n);
-	nio_puts("nio: stage1 ok\n");
+	nio_puts("nio: screen ok\n");
 
-	/* Stage 2: the gradient. */
-	for (i = 0; i < 48; i++) {
-		u32 r = 4 + (i * 8) / 48;
-		u32 g = 8 + (i * 24) / 48;
-		u32 bl = 64 - (i * 52) / 48;
+	/* ---- repeat rate was R75's question, answered: 4122 ms / 20 fills =
+	 * 206.1 ms per frame, identical to the single shot. The loop is gone;
+	 * its budget funds the touch probe below. */
 
-		fb_push(cmds, &n, (r << 16) | (g << 8) | bl,
-		        0, (u32)((u64)i * sh / 48), sw, sh / 48 + 1);
-	}
-	fb_flush(cmds, &n);
-	nio_puts("nio: stage2 gradient ok\n");
-
-	/* Stage 3: colour bars. */
-	y0 = sh * 20 / 100;
-	bh = sh * 28 / 100;
-	bw = sw / 8;
-	for (i = 0; i < 8; i++) {
-		static const u32 bars[8] = {
-			0x00FFFFFFu, 0x00FFFF00u, 0x0000FFFFu, 0x0000FF00u,
-			0x00FF00FFu, 0x00FF0000u, 0x000000FFu, 0x00000000u
-		};
-
-		fb_push(cmds, &n, bars[i], i * bw, y0, bw, bh);
-	}
-	fb_flush(cmds, &n);
-	nio_puts("nio: stage3 bars ok\n");
-
-	/* Stage 4: the frame. R72 died here, on the full-height side bars. */
-	fb_push(cmds, &n, 0x00FFFFFFu, 0, 0, sw, 4);            /* frame */
-	fb_push(cmds, &n, 0x00FFFFFFu, 0, sh - 6, sw, 6);
-	fb_push(cmds, &n, 0x00FFFFFFu, 0, 0, 4, sh);
-	fb_push(cmds, &n, 0x00FFFFFFu, sw - 4, 0, 4, sh);
-	fb_flush(cmds, &n);
-
-	/* ---- repeat rate: the number a UI actually lives on ------------------
-	 * One fill is a data point; a UI redraws twenty times a second. Twenty
-	 * alternating full-screen fills timed as one block give ms per frame
-	 * with no timer inside the loop, and the two colours make the flicker
-	 * visible on camera so the count cannot silently stop early. */
-	{
-		i64 t0[2], t1[2];
-		u32 k;
-
-		t0[0] = 0; t0[1] = 0; t1[0] = 0; t1[1] = 0;
-		for (k = 0; k < 20; k++) {
-			if (k == 0) {
-				sys6(SYS_gettimeofday, (i64)t0, 0, 0, 0, 0, 0);
-			}
-			fb_push(cmds, &n, (k & 1) ? 0x00103060u : 0x00101028u,
-			        0, 0, sw, sh);
-			fb_flush(cmds, &n);
-		}
-		sys6(SYS_gettimeofday, (i64)t1, 0, 0, 0, 0, 0);
-		flips = (t1[0] - t0[0]) * 1000 + (t1[1] - t0[1]) / 1000;
-	}
-
-	nio_puts("nio: stage4 frame ok, screen is ours\n");
 	/* Every line printed before this one has been painted over, so the timing
 	 * has to be reported last or it is lost. */
 	nio_puts("nio: fullfill ");
@@ -275,12 +222,59 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	nio_puts(" ms, ");
 	nio_dec(mbs);
 	nio_puts(" MB/s\n");
-	nio_puts("nio: 20fill ");
-	nio_dec(flips);
-	nio_puts(" ms, ");
-	nio_dec(flips * 1000 / 20);
-	nio_puts(" us/frame\n");
-	nio_puts("nio: R75 full-height fill ok, parking\n");
+	/* ---- first device contact: read(4) = the Novatek touch bridge -----
+	 * The kernel blob now drives the chip by bit-banging SPI over four
+	 * GPIOs -- the same transport payload proved reads the true trim id
+	 * from, where the GENI engine path (R76) mis-framed its short reads.
+	 * The kernel copies back {magic "NVT2", trim[6], trim again[6], miso
+	 * idle, irq, err(2), stage}; the trim id lives at 0x3F004 and the
+	 * NT36672C signature is {0x0C, ??, ??, 0x72, 0x66, 0x03} -- bytes 1
+	 * and 2 are don't-care, so the check masks them out.
+	 *
+	 * Printed after the draws, but BEFORE anything can hang: if the GPIO
+	 * writes never take effect the last line on screen has to say that is
+	 * where we are. */
+	{
+		unsigned char rec[32];
+		i64 got = sys6(SYS_read, 4, (i64)rec, 32, 0, 0, 0);
+
+		nio_puts("nio: touch rd=");
+		nio_dec(got);
+		/* Gate on the magic, not on the byte count. The kernel returns a
+		 * 64-bit ssize_t, so the count is only meaningful if the copyout
+		 * happened; rec[0..3] is set by the kernel itself and is a far
+		 * sounder witness that the bridge answered. */
+		if (rec[0] == 'N' && rec[1] == 'V' && rec[2] == 'T' && rec[3] == '2') {
+			u32 k;
+			int match;
+
+			nio_puts(" id=");
+			for (k = 4; k < 10; k++) {
+				nio_hex((u64)rec[k]);
+				nio_puts(" ");
+			}
+			/* The vendor check itself, so the screen says MATCH rather
+			 * than making the reader do the mask arithmetic. */
+			match = (rec[4] == 0x0c && rec[7] == 0x72 &&
+			         rec[8] == 0x66 && rec[9] == 0x03);
+			nio_puts(match ? "MATCH" : "no");
+			nio_puts(" id2=");
+			for (k = 10; k < 16; k++) {
+				nio_hex((u64)rec[k]);
+				nio_puts(" ");
+			}
+			nio_puts("miso=");
+			nio_dec(rec[16]);
+			nio_puts(" irq=");
+			nio_dec(rec[17]);
+			nio_puts(" err=");
+			nio_hex((u64)rec[18] | (u64)rec[19] << 8);
+			nio_puts(" st=");
+			nio_dec(rec[20]);
+		}
+		nio_puts("\n");
+	}
+	nio_puts("nio: R77 touch bitbang probe ok, parking\n");
 
 park:
 	for (;;) {
