@@ -338,6 +338,15 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
   `physical_base=2088370176, display=1, row_bytes=3200, width=800, height=600,
   depth=32`；nio 要对的是 **`physical_base=0x9c000000`、`width=1080`、
   `height=2520`、`row_bytes=4320`、`depth=32`**。
+  **✅ R140 已经能跑了**：上游那个脚本读的是它自己的 DarwinBoot QEMU fixture
+  产物（`gdb-stop.json`），手机这边没有那套夹具，所以 nio 用自己的
+  `tools/check-display-handoff.py`。参数只写一遍，写在
+  `package/nio-hardware.json` 的 `framebuffer` 块里
+  （`base=2617245696`＝0x9C000000、`width=1080`、`height=2520`、
+  `row_bytes=4320`、`bits_per_pixel=32`），脚本从那里读，再和 loader 的
+  `boot_args` 以及内核收到的 PE video 状态对。stride 也从 width 和 depth
+  算一遍（4320＝1080×4），错的面板（例如照抄 sheng 的 800×600/3200）
+  一眼就被抓出来。CI 里它是诊断不是闸门：不通过不拦构建，但会写进注解。
 - **D6｜判定标准**：内核起来后 framebuffer 被 IOMobileFramebuffer 以正确的
   stride 接管；`dumpsys display` 报 1080×2520；屏幕上出现内核/用户态画面
   （不是白屏、不是花屏、不是错位）。

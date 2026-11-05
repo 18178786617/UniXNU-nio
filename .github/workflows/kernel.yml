@@ -524,6 +524,30 @@ jobs:
           fi
           python3 device/tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
 
+      # The display hand-off of nio carries one set of numbers, and they are
+      # the panel's: 1080x2520 at 32 bits, 4320 bytes a row, on the region
+      # uefiplat.cfg reserves at 0x9C000000. Every stage that touches the
+      # display has to agree with them, and a disagreement does not fail
+      # loudly -- the kernel comes up and the screen is black or shows
+      # garbage, with nothing in the log. The check reads the numbers out of
+      # package/nio-hardware.json, which is their one source, and compares
+      # them against the loader's boot arguments when the build produced
+      # them. It never fails the build: it is a diagnosis, not a gate.
+      - name: Check the display hand-off
+        if: always()
+        continue-on-error: true
+        run: |
+          boot_args=""
+          for candidate in $(find out -name 'boot-args*' -o -name 'bootargs*' 2>/dev/null | head -5); do
+            [ -f "$candidate" ] && { boot_args="$candidate"; break; }
+          done
+          if [ -n "$boot_args" ]; then
+            python3 device/tools/check-display-handoff.py --boot-args "$boot_args" | tee "$RUNNER_TEMP/display.txt"
+          else
+            python3 device/tools/check-display-handoff.py | tee "$RUNNER_TEMP/display.txt"
+            echo "no boot-arguments file was produced; only the panel's own numbers were checked"
+          fi
+
       # The build log is the thing that says why the build failed, and it is
       # 22 MB: too big to read, and the artifact it rides in needs a GitHub
       # account to download. So the lines that matter are copied out of it,
