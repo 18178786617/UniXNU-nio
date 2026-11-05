@@ -64,6 +64,103 @@ sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'],
 
 SOURCES = ('kern_init.c', 'kern_support.c', 'kern_synch.c')
 
+# The callback table of the XNU tree the libpthread sources were written
+# against (10063, the 17.7.11 profile UniXNU develops with). It travels with
+# this repository: the two tables are the same table with one name changed,
+# and that name is what the compile trips over.
+REFERENCE_CALLBACKS = ROOT / 'reference/pthread-shims-10063.h'
+if REFERENCE_CALLBACKS.is_file():
+    (ROOT / '.cache').mkdir(parents=True, exist_ok=True)
+    (ROOT / '.cache/pthread-shims-reference.h').write_bytes(REFERENCE_CALLBACKS.read_bytes())
+else:
+    print('the reference callback table is missing: reference/pthread-shims-10063.h')
+
+
+def callbacks_of(path):
+    """The callback table of an XNU tree, as a name -> signature map."""
+    text = path.read_text(errors='replace')
+    table = {}
+    for match in re.finditer(r'\(\*(\w+)\)\(([^;]*?)\);', text, re.S):
+        table[match.group(1)] = ' '.join(match.group(2).split())
+    return table
+
+
+def adapt_callback_names():
+    """Rename the callbacks the sources call to the names this XNU tree uses.
+
+    The libpthread source is the one of the OS profile UniXNU develops against
+    (17.7.11, XNU 10063). This board builds XNU 8796 (16.5), and the two
+    trees do not have to name a callback the same way. They do, at one
+    place: 10063 calls the third callback of the block that follows
+    thread_deallocate_safe proc_get_jit_entitled, and 8796 calls it
+    proc_get_pthread_jit_allowlist. The signature is the same in both --
+    bool (*)(struct proc *) -- and so is the question it answers: whether
+    the process is entitled to the JIT write-protect feature.
+
+    Without this the compile says:
+
+        error: no member named 'proc_get_jit_entitled' in 'struct pthread_callbacks_s'
+
+    which names a symbol and not a cause.
+
+    The two tables are compared slot by slot, because they are the same
+    table: every callback of one has a counterpart of the same signature in
+    the other, in the same order, and only the names differ at one place. A
+    callback that this tree does not have, and that no callback of the same
+    signature stands in for, is reported and stops the build rather than
+    being renamed to something that means another thing.
+    """
+    header = ROOT / '.cache/xnu-work/bsd/sys/pthread_shims.h'
+    reference = ROOT / '.cache/pthread-shims-reference.h'
+    if not header.is_file():
+        print('the callback table of the XNU tree is not there; the compile will speak for itself')
+        return
+    if not reference.is_file():
+        print('the reference callback table is not there; the compile will speak for itself')
+        return
+    mine = callbacks_of(header)
+    theirs = callbacks_of(reference)
+    # The two tables are the same table. Both carry ninety entries, and
+    # entry for entry they are the same, with one name changed at one
+    # place: 10063 calls the thirty-ninth callback proc_get_jit_entitled
+    # and 8796 calls it proc_get_pthread_jit_allowlist. The position is
+    # therefore the correspondence, and the signature has to agree with it
+    # before the source is renamed.
+    mine_order = list(mine)
+    theirs_order = list(theirs)
+    if len(mine_order) != len(theirs_order):
+        print('the two callback tables have %d and %d entries; they are not the same table'
+              % (len(mine_order), len(theirs_order)))
+        raise SystemExit('the libpthread sources do not match this XNU tree\'s callback table')
+    renamed = {}
+    for index, (name, signature) in enumerate(theirs.items()):
+        counterpart = mine_order[index]
+        if counterpart == name:
+            continue
+        if mine[counterpart] != signature:
+            print('slot %d: this tree has %s%s and the sources expect %s%s'
+                  % (index, counterpart, mine[counterpart], name, signature))
+            raise SystemExit('the libpthread sources do not match this XNU tree\'s callback table')
+        renamed[name] = counterpart
+    used = set()
+    for source in SOURCES:
+        body = (SOURCE / 'kern' / source).read_text(errors='replace')
+        used.update(match.group(1) for match in re.finditer(r'pthread_kern->(\w+)\(', body))
+    renamed = {name: replacement for name, replacement in renamed.items() if name in used}
+    if not renamed:
+        print('every callback the sources call has the name this XNU tree uses')
+        return
+    for name, replacement in sorted(renamed.items()):
+        print('this XNU tree calls %s what the sources call %s' % (replacement, name))
+    for source in SOURCES:
+        path = SOURCE / 'kern' / source
+        body = path.read_text(errors='replace')
+        original = body
+        for name, replacement in sorted(renamed.items()):
+            body = re.sub(r'(pthread_kern->)%s\b' % re.escape(name), r'\1%s' % replacement, body)
+        if body != original:
+            path.write_text(body)
+
 
 def check_callbacks():
     """Compare the callback table of this XNU tree with the calls the sources make.
@@ -169,6 +266,7 @@ def names(path, mode, global_only=True):
     return {line.strip() for line in result.splitlines() if line.startswith('_')}
 
 
+adapt_callback_names()
 check_callbacks()
 sources = [SOURCE / 'kern' / name for name in SOURCES]
 objects = []
