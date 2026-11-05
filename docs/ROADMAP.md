@@ -276,6 +276,23 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
   `IOMobileFramebufferLegacy` 的 9 个纯虚槽：211、212、242、243、292、
   293、321、322、329。
 
+- **D3 的 ABI 底稿已经量出来了（R136）**：16.5 的 338 槽地图用
+  `tools/dispatch-layout.py` 从 donor 重新核过，数字与上表逐项吻合；
+  `tools/make-mobile-framebuffer-abi.py`（R136 新增）从同一份 donor 生成
+  16.5 的镜像头 `package/OriginalMobileFramebufferABI16_5.h`，按真实继承链
+  逐层声明各自**新增**的槽：`IOMobileFramebuffer` 168..251、
+  `IOMobileFramebufferService` 不新增、`IOMobileFramebufferLegacy` 252..337。
+
+  槽的**方法名**仍然拿不到：prelinked kext 在 kernelcache 里没有符号表
+  （`LC_SYMTAB` 的 `nsyms` 是 0），自有槽指向的是 kext 内部函数，导出符号
+  表里没有它们。镜像头因此照 sheng 的做法把不能识别的槽写成
+  `unclassifiedNNN()` 纯虚函数（不许返回），具名的槽留到结构化匹配之后再填。
+
+  **D3 剩下的活**：把 16.5 kext 的方法体与 17.7.11 kext 的做结构化匹配，
+  把 `beforeExternalMethod` / `releaseClientState` / `setPixelFormat` 这一类
+  名字落到确切的槽号上。17.7.11 的槽号对照表在生成器里
+  （`I17_SLOTS`：182 / 193 / 249）。
+
 - **D3｜先只做最小形态**：只编 `NativeMobileDisplay.cpp` + `original-bindings.o`，
   跳过 `MobileDisplayProviderProbe`（sheng recipe 的第 83 行起）。少一块就少
   一个失败点，先让 framebuffer 被接管住。

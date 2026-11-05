@@ -135,6 +135,8 @@ def known_warning_flags():
 
 warning_flags = known_warning_flags()
 
+failures = []
+
 for source in sources:
     if not source.is_file():
         sys.exit('source missing: %s' % source)
@@ -163,9 +165,31 @@ for source in sources:
     if source.name == 'GpuProbe.cpp':
         command.append('-DPIPA_GPU_ACCELERATOR=0')
     result = subprocess.run(command, cwd=recipe['directory'], capture_output=True, text=True)
+    # Every source is compiled, and every failure is kept: one CI round then reports the
+    # whole set instead of only the first one, which is what a single -Werror in one
+    # translation unit used to cost. The per-source log is written next to the object so
+    # that the diagnostics branch carries it too.
+    (out / (source.stem + '.log')).write_text(result.stdout + result.stderr)
     if result.returncode:
-        sys.exit(str(source) + ':\n' + result.stderr[-2500:])
+        failures.append((source.name, result.stderr))
+        continue
     objects.append(obj)
+
+if failures:
+    # One report for all of them, each block capped so the summary stays readable.
+    report = []
+    for name, stderr in failures:
+        errors = [line for line in stderr.splitlines() if re.search(r'\berror\b:', line)]
+        report.append('=== %s ===' % name)
+        report.append(errors[0] if errors else stderr.strip().splitlines()[-1] if stderr.strip() else '(no output)')
+        if len(errors) > 1:
+            report.append('  (%d errors in this file, first ones below)' % len(errors))
+            report.extend('  ' + line for line in errors[1:9])
+        report.append('')
+    summary = ('%d of %d sources failed to compile:\n' % (len(failures), len(sources))) + '\n'.join(report)
+    (out / 'compile-errors.log').write_text(summary)
+    print(summary)
+    sys.exit(1)
 
 archive = out / 'libAdreno740.a'
 archive.unlink(missing_ok=True)

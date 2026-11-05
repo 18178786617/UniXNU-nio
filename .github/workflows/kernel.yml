@@ -72,6 +72,11 @@ permissions:
   # broken build can be read without a GitHub account: the artifact that
   # holds the same logs needs one to download.
   contents: write
+  # The diagnostics branch is built as an orphan branch, so its commits never
+  # touch a workflow file. The permission is here anyway: it is what a commit
+  # that does carry one would need, and its absence is a push that fails with
+  # a message nobody reads.
+  workflows: write
 
 concurrency:
   group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
@@ -374,7 +379,48 @@ jobs:
           # anonymous calls from hosted runners hit the shared rate limit.
           # This step also fetches the pinned sources (no separate fetch step).
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./unixnu build kernel
+        run: |
+          # The build's own output is kept in a file as well as on the
+          # console. The output of the pipeline itself -- the "kernel: ..."
+          # lines and any Python error it ends with -- never reaches the log
+          # tree under out/, so a failure in the plan or in the driver was
+          # invisible to everything that reads those logs.
+          set -o pipefail
+          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log"
+
+      - name: Report the failure in the annotations
+        # The annotations are the one channel that needs no account. The API
+        # answers an anonymous request for them, while the artifact that
+        # holds the same logs answers 401 and the job log answers 403. A
+        # broken build that only lives in those two places is a broken build
+        # nobody can read, which is what run 19 and run 20 were: both failed,
+        # and both left nothing behind.
+        #
+        # So the error lines of every log are copied into annotations here.
+        # The newest log comes first, because the last recipe to run is the
+        # deepest cause.
+        if: failure()
+        continue-on-error: true
+        run: |
+          set +e
+          scan() {
+            local name="$1" file="$2"
+            [ -f "$file" ] || return 0
+            local body
+            body=$(grep -E '(^|[^a-z])error:|fatal error|Undefined symbols|ld: error|ld: symbol|Error[ :]?[0-9]|Traceback|Exception|Trace/BPT|no such file|No such file' "$file" 2>/dev/null | head -20)
+            [ -z "$body" ] && return 0
+            # An annotation is one line: the newlines become %0A, and a stray
+            # percent would otherwise be read as an escape.
+            local msg
+            msg=$(printf '%s\n' "$body" | sed 's/%/%25/g; s/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=$name::$msg"
+          }
+          # The console of the build comes first: it is where the pipeline's
+          # own error is.
+          scan build-console "$RUNNER_TEMP/build-console.log"
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            scan "$(basename "$log")" "$log"
+          done
 
       - name: Show the result
         if: always()
@@ -510,17 +556,21 @@ jobs:
             cp "$log" "$RUNNER_TEMP/ci-logs/$(basename "$log")" 2>/dev/null || true
           done
           [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$RUNNER_TEMP/ci-logs/status.txt" || true
+          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$RUNNER_TEMP/ci-logs/build-console.log" || true
 
           cd device
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin ci-diagnostics:refs/remotes/origin/ci-diagnostics 2>/dev/null || true
-          if git show-ref --verify --quiet refs/remotes/origin/ci-diagnostics; then
-            git checkout -B ci-diagnostics refs/remotes/origin/ci-diagnostics
-          else
-            git checkout --orphan ci-diagnostics
-            git rm -rf --cached . >/dev/null 2>&1 || true
-          fi
+          # An orphan branch, not a checkout of the remote one. Switching to
+          # the remote branch removes the repository's own files from the
+          # working tree, and the commit that follows then deletes the
+          # workflow file -- and a token without the workflows permission may
+          # not push that. The orphan keeps the working tree and empties only
+          # the index, so the commit carries the report and nothing else.
+          # This is the shape that pushed the reports of runs 17 and 18; the
+          # checkout shape is what made runs 19 and 20 push nothing at all.
+          git checkout --orphan ci-diagnostics
+          git rm -rf --cached . >/dev/null 2>&1 || true
           mkdir -p ci-diagnostics
           cp "$report" ci-diagnostics/report.md
           git add -f ci-diagnostics/report.md
@@ -534,8 +584,12 @@ jobs:
           cp -f "$RUNNER_TEMP/ci-logs/"* ci-diagnostics/logs/ 2>/dev/null || true
           git add -f ci-diagnostics/logs
           git commit -q -m "ci: the failure report for run $GITHUB_RUN_NUMBER" || true
-          git push -f origin ci-diagnostics:ci-diagnostics || \
-            echo "::warning::the diagnostics branch could not be pushed"
+          # The push is the step that can fail silently, so its own error is
+          # made an annotation: a warning that says the branch could not be
+          # pushed says nothing about why.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-diagnostics 2>&1); then
+            echo "::error title=the diagnostics branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
           echo "the failure was explained in the run summary and on the ci-diagnostics branch"
 
       - name: Upload the kernel
@@ -557,6 +611,7 @@ jobs:
           path: |
             out/*/*/*/logs/*.log
             ${{ runner.temp }}/status.txt
+            ${{ runner.temp }}/build-console.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -580,6 +635,7 @@ jobs:
             cp "$log" "$stage/ci-diagnostics/logs/$(basename "$log")" 2>/dev/null
           done
           [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$stage/ci-diagnostics/logs/status.txt"
+          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$stage/ci-diagnostics/logs/build-console.log"
           [ -f "$RUNNER_TEMP/failure-report.md" ] && cp "$RUNNER_TEMP/failure-report.md" "$stage/ci-diagnostics/report.md"
           if [ -d "$stage/ci-diagnostics/logs" ] && [ -n "$(ls -A "$stage/ci-diagnostics/logs" 2>/dev/null)" ]; then
             (cd "$stage/ci-diagnostics/logs" && tar czf ../logs.tar.gz .)
@@ -589,20 +645,24 @@ jobs:
           cd device
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin ci-diagnostics:refs/remotes/origin/ci-diagnostics 2>/dev/null
-          if git show-ref --verify --quiet refs/remotes/origin/ci-diagnostics; then
-            git checkout -B ci-diagnostics refs/remotes/origin/ci-diagnostics
-          else
-            git checkout --orphan ci-diagnostics
-            git rm -rf --cached . >/dev/null 2>&1
-          fi
+          # A second orphan branch: the report step above already made one,
+          # and a branch name cannot be taken twice in one job.
+          git checkout --orphan ci-diagnostics-publish
+          git rm -rf --cached . >/dev/null 2>&1 || true
           mkdir -p ci-diagnostics
           rm -rf ci-diagnostics/logs ci-diagnostics/logs.tar.gz
           cp -rf "$stage/ci-diagnostics/." ci-diagnostics/ 2>/dev/null
           git add -f ci-diagnostics
           git commit -q -m "ci: the build logs for run $GITHUB_RUN_NUMBER" || true
-          git push -f origin ci-diagnostics:ci-diagnostics || \
-            echo "::warning::the diagnostics branch could not be pushed"
+          # Two channels, because one failing must not lose the logs again:
+          # ci-diagnostics is the branch that is read, and the per-run branch
+          # keeps every round's logs even when the first one is overwritten.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-diagnostics 2>&1); then
+            echo "::error title=the diagnostics branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
+          if ! out=$(git push origin HEAD:refs/heads/ci-logs/run-$GITHUB_RUN_NUMBER 2>&1); then
+            echo "::error title=the per-run log branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
           echo "the build logs are on the ci-diagnostics branch"
 
       - name: Summary
