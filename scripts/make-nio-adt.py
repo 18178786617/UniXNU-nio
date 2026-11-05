@@ -81,7 +81,10 @@ def main():
         hardware = load_hardware()
         platform = {}
         profile_name = None
-        if not args.no_profile:
+        # --ipad-identity is an explicit choice of identity, so it wins over
+        # the profile: the two are not stacked, and the older bring-up keeps
+        # the iPad7,1 identity it was measured with.
+        if not args.no_profile and not args.ipad_identity:
             platform, profile_path = load_platform(args.profile)
             profile_name = profile_path.name
         # The board runs eight cores and the ADT describes all of them: the
