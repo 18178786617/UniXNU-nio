@@ -1,9 +1,28 @@
-# UniXNU-nio — 17.7.11 基线状态
+# UniXNU-nio — 状态
 
-**目标 OS 固定**：iPadOS `17.7.11` / build `21H461` / Darwin `23.6.0` /
-源码内核 `xnu-10063.141.1`。这个选择不做讨论，它就是 umi 已验证的那一版
-（Hello/Setup + 触摸 + UFS + 持久 Data）。改用其他版本等于把 umi 已经打通
-的符号绑定、prelink donor 和补丁系列全部作废重来。
+**目标 OS**：iOS `16.5` / build `20F66` / Darwin `22.5.0` / 源码内核
+`xnu-8796.101.5`，ADT 伪造 **iPhone X（`iPhone10,3` / D22AP）** 身份。这不是
+iPadOS——用户态取自 iPhone X 的 16.5 Restore IPSW，已经在
+`E:\nio-unixnu-port\ios165\` 准备好（IPSW + 解出来的完整用户态 root +
+kernelcache / DeviceTree / trust cache）。未修改的 16.x 用户态必须配 16.x 内核，
+与 xnu-100xx 不匹配。
+
+**当前树里的内核仍是 17.7.11 / `xnu-10063.141.1` 那一版**，因为它是跑通到
+console 的 bring-up 基线：donor、prelink 符号绑定、补丁系列都在这一版上验证
+过。切到 16.5 的三步（NX769J 在红魔 9 上已经做过同一件事）是：
+
+1. 设备仓自带 `os-profiles/ios-16.5-20F66/`，构建时装进 UniXNU 检出；
+2. 共享补丁系列重基到 `xnu-8796.101.5`（NX769J 有一份可复用的）；
+3. donor kernelcache、prelink 绑定、ADT 身份换成 16.5 / D22AP 的那一套。
+
+板级代码（GPU 驱动归档、探针、A650 冷启动、ADT 编码、UEFI 固件）不受影响。
+
+## 为什么 17.7.11 曾经是唯一选择（历史记录）
+
+iPadOS `17.7.11` / build `21H461` / Darwin `23.6.0` / 源码内核
+`xnu-10063.141.1`。它是 umi 已验证的那一版（Hello/Setup + 触摸 + UFS +
+持久 Data），符号绑定、prelink donor 和补丁系列全部继承，不重新推导。
+上面的 16.5 切换完成后，这一版就是历史。
 
 ## 为什么这一版对 nio 有利
 

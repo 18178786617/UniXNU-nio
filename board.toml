@@ -1,9 +1,25 @@
 # UniXNU-nio — MOTO Edge S (XT2125-4) / kona / SM8250-AC
 #
-# Target OS is pinned and does not move: iPadOS 17.7.11 / build 21H461,
-# Darwin 23.6.0, source kernel xnu-10063.141.1. That is the exact profile umi
-# qualified (Hello/Setup, touch, UFS, persistent Data), so the OS-side patch
-# series and the prelink/donor contract are inherited instead of re-derived.
+# The port's target is iOS 16.5 (build 20F66), not iPadOS: the ADT forges an
+# iPhone X identity (iPhone10,3 / D22AP), the userland is the iPhone X 16.5
+# restore image, and the kernel is the xnu-8796 train (Darwin 22.5.0). The
+# user's copy of that image and its extracted root are at E:\nio-unixnu-port\
+# ios165\ on the porting host.
+#
+# The kernel this file still builds is the 17.7.11 one (iPadOS 21H461, Darwin
+# 23.6.0, xnu-10063.141.1). That is not a decision about the target -- it is
+# the bring-up base, the version that reached the console with its donor,
+# its prelink bindings and its patch series all verified. UniXNU-NX769J has
+# already made the 16.5 move on another phone: it keeps its own
+# ios-16.5-20F66 OS profile in the device repository, installs it into the
+# UniXNU checkout before the build, and rebases the shared patch series onto
+# xnu-8796.101.5. The same three steps are what this board's 16.5 switch is,
+# and they are listed in README.md.
+#
+# Until that switch happens, the values below are the 17.7.11 ones and they
+# are the ones the CI builds. They are inherited from umi (Hello/Setup, touch,
+# UFS, persistent Data) rather than re-derived, which is why they are here at
+# all.
 #
 # schema_version 2 means the kernel is built by the shared pipeline:
 #   arch profile -> SoC profile -> OS profile -> this file
@@ -16,6 +32,8 @@ name = "nio"
 soc = "SM8250"
 # UniXNU-sm8250-common: GIC/timer/topology patches, pinned in feeds.toml.
 soc_source = "sm8250"
+# The bring-up base. The 16.5 target uses ios-16.5-20F66 instead, from this
+# repository's own os-profiles/ directory (see the header).
 os_profile = "ipados-17.7.11-21H461"
 description = "MOTO Edge S (XT2125-4) / SM8250-AC UniXNU bring-up"
 kit = "nio"
@@ -93,6 +111,11 @@ early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4
 roots = ["com.apple.driver.AppleMobileFileIntegrity", "com.apple.security.sandbox"]
 
 [ipsw]
+# The bring-up donor: the iPadOS 17.7.11 image umi qualified. The port's
+# target is the iOS 16.5 image (iPhone10,3 / 20F66), whose members are
+# already extracted on the porting host under E:\nio-unixnu-port\ios165\.
+# The 16.5 switch replaces this block with the one from the
+# ios-16.5-20F66 profile, which carries its own pins.
 url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
 product = "iPad7,1"
 version = "17.7.11"

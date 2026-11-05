@@ -93,6 +93,48 @@ sources += [driver / (name + '.cpp') for name in (
     'NativeAdrenoGmuContext', 'NativeAdrenoGmuMemory')]
 
 objects = []
+
+# The warning options this recipe passes next to -Werror, minus the ones this
+# clang does not know.
+#
+# The CI's "Match the warning flags to this clang" step trims the main
+# repository's scripts, but it does not reach the device repository's, so this
+# recipe has to trim itself: one unknown option next to -Werror is a hard
+# error ("unknown warning option '-Wno-unnecessary-virtual-specifier'"), and
+# the option list has grown with the compilers -- macOS 15's clang does not
+# know the virtual-specifier one at all.
+#
+# Dropping an option is safe here. A -Wno- option and the warning it names
+# were introduced together, so a clang that does not know the option does not
+# have the warning either and nothing needs suppressing.
+CANDIDATE_FLAGS = [
+    '-Wno-unused-parameter', '-Wno-incompatible-sysroot', '-Wno-c99-designator',
+    # The fork's kalloc_type_view initializers predate the upstream field additions, and
+    # the remaining designators are the ones that matter.
+    '-Wno-missing-field-initializers',
+    '-Wno-missing-designated-field-initializers',
+    '-Wno-reorder-init-list', '-Wno-deprecated-enum-enum-conversion',
+    '-Wno-unnecessary-virtual-specifier',
+]
+
+
+def known_warning_flags():
+    """The -Wno- options this clang accepts, probed one at a time."""
+    probe = out / 'flagprobe.c'
+    probe.write_text('int main(void) { return 0; }\n')
+    flags = []
+    for flag in CANDIDATE_FLAGS:
+        result = subprocess.run(['xcrun', 'clang', '-Werror', flag, '-c', str(probe),
+                                 '-o', str(out / 'flagprobe.o')], capture_output=True, text=True)
+        if result.returncode == 0:
+            flags.append(flag)
+        else:
+            print('note: %s is not known to this clang, not passing it' % flag)
+    return flags
+
+
+warning_flags = known_warning_flags()
+
 for source in sources:
     if not source.is_file():
         sys.exit('source missing: %s' % source)
@@ -115,14 +157,7 @@ for source in sources:
         i += 1
     command += ['-I', str(KITS / 'AdrenoPM4'), '-I', str(KITS / 'ArmSmmu4K'), '-I', str(KITS / 'AdrenoFirmware'),
                 '-I', str(PIPA.parent), '-I', str(ROOT / '.cache/xnu-work/osfmk'),
-                '-I', str(driver), '-I', str(PACKAGE), '-Wall', '-Wextra', '-Werror',
-                '-Wno-unused-parameter', '-Wno-incompatible-sysroot', '-Wno-c99-designator',
-                # The fork's kalloc_type_view initializers predate the upstream field additions, and
-                # the remaining designators are the ones that matter.
-                '-Wno-missing-field-initializers',
-                '-Wno-missing-designated-field-initializers',
-                '-Wno-reorder-init-list', '-Wno-deprecated-enum-enum-conversion',
-                '-Wno-unnecessary-virtual-specifier']
+                '-I', str(driver), '-I', str(PACKAGE), '-Wall', '-Wextra', '-Werror'] + warning_flags
     # Mode 12's staged accelerator is not built on this board (see the header), so the probe's
     # accelerator path stays compiled out.
     if source.name == 'GpuProbe.cpp':
