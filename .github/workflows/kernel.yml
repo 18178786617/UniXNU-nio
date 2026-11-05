@@ -1,18 +1,35 @@
 name: Build nio kernel
 
-# Builds kernel.macho from Apple's XNU source on a macOS 15 Intel (x86_64)
-# runner and publishes it as an artifact. This repository is the device
-# repository; the UniXNU build system is checked out beside it.
+# Builds kernel.macho from Apple's XNU source on a macOS 26 (arm64) runner
+# and publishes it as an artifact. This repository is the device repository;
+# the UniXNU build system is checked out beside it.
 #
 # The host architecture does not decide the product architecture: clang
 # cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
-# arm64. macos-15-intel is picked because the request is the macOS 15 Intel
-# image and because it carries more RAM than the arm64 standard runner
-# (14 GB vs 7 GB) for the same 4 vCPU. Its Xcode line is older than the one
-# UniXNU develops against -- upstream pins macos-26 precisely because macOS 15's
-# clang rejects the warning options the build passes with -Werror -- so the
-# "Match the warning flags to this clang" step drops whatever this Xcode does
-# not know before anything is compiled.
+# arm64.
+#
+# The runner is macos-26, and the Xcode is pinned to 26.6, because that is the
+# pair UniXNU develops against. Upstream says so in its own workflow:
+#
+#   "Pinned: macos-latest moves between images (macos-15 had an Xcode whose
+#    clang rejects the warning options the build passes with -Werror).
+#    macos-26 is arm64 and carries the Xcode 26 line the build is developed
+#    with."
+#
+# This workflow ran on macos-15-intel with the newest Xcode the image carried
+# (26.3) until run 23, and it never produced a kernel. The build reached the
+# XNU compile and the libpthread archive, and each of them reported a failure
+# that a newer clang does not report: the tree's own -Werror turned warnings
+# into errors, and the libpthread compile ended with "22 warnings and 1 error
+# generated" whose error line the recipe had already cut out of its own log.
+# The "Match the warning flags to this clang" step existed to paper over the
+# difference instead of removing it: it trimmed the option list the build
+# passes, so the tree compiled with fewer warnings than it was written for,
+# and the warning that became the error was still there.
+#
+# macos-26 and Xcode 26.6 are the pair the upstream build is tested on. The
+# macos-15 path is kept as an input for a machine that cannot reach the arm64
+# image, and it is not the one the kernel is built with.
 #
 # It is the nio counterpart of UniXNU's own "macOS build" workflow with one
 # deliberate difference: that workflow publishes text logs only. Here the kernel
@@ -31,13 +48,13 @@ on:
         required: true
         default: "nio_defconfig"
       runner:
-        description: Runner image (macos-15-intel = macOS 15 x86_64; macos-26 = arm64)
+        description: Runner image (macos-26 = arm64, the upstream pair; macos-15-intel = x86_64 fallback)
         required: true
-        default: "macos-15-intel"
+        default: "macos-26"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: true
-        default: "auto"
+        default: "26.6"
       ipsw_url:
         description: IPSW URL (empty uses board.toml)
         required: false
@@ -94,11 +111,14 @@ defaults:
 
 jobs:
   kernel:
-    # macos-15-intel is the x86_64 image: macOS 15, 4 vCPU, 14 GB. It is the
-    # image the earlier builds were made on and the only Intel macOS label
-    # GitHub still ships (until August 2027). macos-latest moves between images
-    # and flips architecture; do not use it.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    # macos-26 is the arm64 image with the Xcode 26 line the build is developed
+    # against; upstream pins it and pins the Xcode version, and the reason it
+    # gives is that macos-15's clang rejects the warning options the build
+    # passes with -Werror. The Intel image stays available as a fallback for a
+    # machine that cannot reach the arm64 one, and the Xcode is pinned there
+    # too: "auto" picks whatever the image carries, and that is how this build
+    # ended up on a clang that its own tree does not compile with.
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
@@ -130,21 +150,33 @@ jobs:
 
       - name: Select Xcode
         env:
-          XCODE_INPUT: ${{ inputs.xcode || 'auto' }}
+          XCODE_INPUT: ${{ inputs.xcode || '26.6' }}
         run: |
           echo "host: $(uname -m) $(sw_vers -productVersion)"
           echo "installed on this image:"
           ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none)"
-          # "auto" takes the newest Xcode installed on the image. The Intel
-          # image carries both the 16 line and the 26 line -- Xcode 26.3 with
-          # SDK 26.2 was what a real run selected -- so this is not pinned to an
-          # old toolchain; whatever it picks, the step below trims the warning
-          # options that particular clang does not know.
+          # The version is picked, not guessed. "auto" is the newest that is
+          # installed, and the newest is not necessarily the one the build was
+          # written for: this build ran on the Intel image, where "auto" picked
+          # Xcode 26.3, and the tree did not compile with it. The number comes
+          # from the workflow input, and the input names the version upstream
+          # develops against.
           if [ "$XCODE_INPUT" = "auto" ] || [ -z "$XCODE_INPUT" ]; then
             app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
           else
-            app="/Applications/Xcode_${XCODE_INPUT}.app"
-            [ -d "$app" ] || app="/Applications/Xcode${XCODE_INPUT}.app"
+            app=""
+            for candidate in "/Applications/Xcode_${XCODE_INPUT}.app" "/Applications/Xcode${XCODE_INPUT}.app" \
+                             "/Applications/Xcode_${XCODE_INPUT}_Release.app" "/Applications/Xcode${XCODE_INPUT}_Release.app"; do
+              [ -d "$candidate" ] && { app="$candidate"; break; }
+            done
+            # The image carries the versions it carries; if the pinned one is
+            # not there, the newest one is used and the fact is said out loud,
+            # because a build on another clang is a build that has to be read
+            # differently.
+            if [ -z "$app" ]; then
+              app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+              echo "::warning title=the pinned Xcode is not on this image::$XCODE_INPUT was asked for, $(basename "${app:-none}") is used"
+            fi
           fi
           if [ -z "$app" ] || [ ! -d "$app" ]; then
             echo "::error::no usable Xcode; installed: $(printf '%s ' /Applications/Xcode*.app)"
@@ -153,6 +185,7 @@ jobs:
           echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
           echo "XCODE_APP=$app" >> "$GITHUB_ENV"
           echo "selected: $app"
+          xcrun clang++ --version | head -2
 
       - name: Check the inputs
         run: |
@@ -389,6 +422,37 @@ jobs:
           set -o pipefail
           ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log"
 
+      - name: Collect the logs
+        # The logs are collected before anything reports on them, so that a
+        # report can read the whole set. Two kinds of log exist and both are
+        # needed:
+        #
+        #   * out/<board>/<os>/<config>/logs/*.log -- what the recipes wrote.
+        #   * out/<board>/<os>/<config>/tree/build/<component>/*.log -- the
+        #     compiler's own output for one source file. This is the only
+        #     place the whole output is kept: a recipe that ends a failed
+        #     compile with SystemExit(output[-4500:]) cuts the beginning away,
+        #     and the beginning is where the error is. Run 23 said "22
+        #     warnings and 1 error generated" and the error itself was in no
+        #     log at all.
+        if: always()
+        continue-on-error: true
+        run: |
+          rm -rf "$RUNNER_TEMP/ci-logs"
+          mkdir -p "$RUNNER_TEMP/ci-logs"
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            cp "$log" "$RUNNER_TEMP/ci-logs/$(basename "$log")" 2>/dev/null || true
+          done
+          find out -path '*/tree/build/*' -name '*.log' -type f 2>/dev/null | head -100 | while IFS= read -r log; do
+            [ -f "$log" ] || continue
+            name=$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')
+            head -c 262144 "$log" > "$RUNNER_TEMP/ci-logs/build-$name" 2>/dev/null || true
+          done
+          [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$RUNNER_TEMP/ci-logs/status.txt" || true
+          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$RUNNER_TEMP/ci-logs/build-console.log" || true
+          echo "collected:"
+          ls -1 "$RUNNER_TEMP/ci-logs" | sed 's/^/  /'
+
       - name: Report the failure in the annotations
         # The annotations are the one channel that needs no account. The API
         # answers an anonymous request for them, while the artifact that
@@ -527,6 +591,30 @@ jobs:
               echo '```'
               echo
             done
+            # The per-file compile logs, which the recipe cut the head off. The
+            # error of a failed compile is at the point of the failure, and a
+            # file with twenty warnings around it pushes that line out of any
+            # tail. These are the logs that still have it.
+            for log in $(ls -1 "$RUNNER_TEMP/ci-logs/"build-* 2>/dev/null); do
+              [ -f "$log" ] || continue
+              if ! grep -qE '(^|[^a-z])error:|fatal error' "$log"; then
+                continue
+              fi
+              echo "## $(basename "$log")"
+              echo
+              echo "### the errors"
+              echo
+              echo '```'
+              grep -nE '(^|[^a-z])error:|fatal error' "$log" | head -30 || true
+              echo '```'
+              echo
+              echo "### around them"
+              echo
+              echo '```'
+              grep -nE -B8 -A12 '(^|[^a-z])error:|fatal error' "$log" | head -100 || true
+              echo '```'
+              echo
+            done
             echo "## status.txt"
             echo
             echo '```'
@@ -561,13 +649,15 @@ jobs:
           # `cd device` the build's output tree is at ../out, not at out.
           # Getting that wrong is how run 19 ended with no report at all:
           # the step failed, and a step that fails leaves no explanation.
-          rm -rf "$RUNNER_TEMP/ci-logs"
-          mkdir -p "$RUNNER_TEMP/ci-logs"
-          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
-            cp "$log" "$RUNNER_TEMP/ci-logs/$(basename "$log")" 2>/dev/null || true
-          done
-          [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$RUNNER_TEMP/ci-logs/status.txt" || true
-          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$RUNNER_TEMP/ci-logs/build-console.log" || true
+          # The logs were collected in the "Collect the logs" step, before
+          # anything reported on them and before this step moves into the
+          # device checkout. After `cd device` the build's output tree is at
+          # ../out, not at out, and getting that wrong is how run 19 ended
+          # with no report at all.
+          if [ ! -d "$RUNNER_TEMP/ci-logs" ]; then
+            echo "::warning::the logs were not collected"
+            mkdir -p "$RUNNER_TEMP/ci-logs"
+          fi
 
           cd device
           git config user.name  "github-actions[bot]"
