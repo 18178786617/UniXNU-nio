@@ -421,6 +421,14 @@ jobs:
           for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
             scan "$(basename "$log")" "$log"
           done
+          # The size of the logs, because a push that carries a file over
+          # 100 MB is turned down and the XNU build log is that big. This
+          # says whether that is what happened.
+          sizes=$(for log in out/*/*/*/logs/*.log; do
+                    [ -f "$log" ] || continue
+                    printf '%s %s\\n' "$(wc -c < "$log")" "$(basename "$log")"
+                  done | sort -rn | head -6 | sed 's/%/%25/g' | tr '\\n' ' ')
+          [ -n "$sizes" ] && echo "::warning title=the size of the logs::$sizes"
 
       - name: Show the result
         if: always()
@@ -579,10 +587,19 @@ jobs:
           # lines: a compiler error that sits above a wall of warnings is
           # missed by a grep for "error:" when the message does not carry
           # that word. The whole file does not have that problem.
+          # The logs go into the branch as one compressed archive, and the
+          # loose copies are cut to a megabyte each. GitHub refuses a push
+          # that carries a file over 100 MB, and the XNU build log is that
+          # big -- which is why runs 19 and 20 pushed nothing at all: the
+          # report step added the raw logs and the push was turned down.
           rm -rf ci-diagnostics/logs
           mkdir -p ci-diagnostics/logs
-          cp -f "$RUNNER_TEMP/ci-logs/"* ci-diagnostics/logs/ 2>/dev/null || true
-          git add -f ci-diagnostics/logs
+          for log in "$RUNNER_TEMP/ci-logs/"*; do
+            [ -f "$log" ] || continue
+            head -c 1048576 "$log" > "ci-diagnostics/logs/$(basename "$log")"
+          done
+          (cd ci-diagnostics/logs && tar czf ../logs.tar.gz .) 2>/dev/null || true
+          git add -f ci-diagnostics/logs ci-diagnostics/logs.tar.gz
           git commit -q -m "ci: the failure report for run $GITHUB_RUN_NUMBER" || true
           # The push is the step that can fail silently, so its own error is
           # made an annotation: a warning that says the branch could not be
@@ -640,6 +657,13 @@ jobs:
           if [ -d "$stage/ci-diagnostics/logs" ] && [ -n "$(ls -A "$stage/ci-diagnostics/logs" 2>/dev/null)" ]; then
             (cd "$stage/ci-diagnostics/logs" && tar czf ../logs.tar.gz .)
             echo "the logs are in ci-diagnostics/logs.tar.gz"
+            # The archive holds the whole log; the loose copies are cut to a
+            # megabyte each, because a push that carries a file over 100 MB
+            # is turned down and the XNU build log is that big.
+            for log in "$stage/ci-diagnostics/logs/"*; do
+              [ -f "$log" ] || continue
+              head -c 1048576 "$log" > "$log.cut" && mv "$log.cut" "$log"
+            done
           fi
 
           cd device
