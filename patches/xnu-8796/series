@@ -5,6 +5,7 @@ cxx-flag-dependencies.patch
 disabled-deferred-reclaim.patch
 external-archive-dependencies.patch
 kernel-sdk-root.patch
+xnu-8796-compile-records.patch
 local-availability.patch
 mockfs-intermediate-lookup.patch
 mockfs-memory-device-width.patch

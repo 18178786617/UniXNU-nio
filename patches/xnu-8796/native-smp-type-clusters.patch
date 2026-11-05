@@ -1,5 +1,5 @@
 diff --git a/osfmk/kern/sched_clutch.c b/osfmk/kern/sched_clutch.c
-index 3657d83..8cace2a 100644
+index 3657d83..4bda387 100644
 --- a/osfmk/kern/sched_clutch.c
 +++ b/osfmk/kern/sched_clutch.c
 @@ -1113,6 +1113,20 @@ sched_clutch_bucket_init(
@@ -38,10 +38,11 @@ index 3657d83..8cace2a 100644
  	/*
  	 * All thread groups should be initialized to be interactive; this allows the newly launched
  	 * thread groups to fairly compete with already running thread groups.
-@@ -4888,6 +4908,31 @@ sched_edge_cpu_init_completed(void)
+@@ -4886,6 +4906,31 @@ sched_edge_cpu_init_completed(void)
+ 		pset_unlock(src_pset);
+ 	}
  	splx(s);
- }
- 
++
 +	/* The preferences without a performance controller (sched_edge_clutch_bucket_group_preferred_cluster) */
 +	int e_cluster = -1, p_cluster = -1;
 +	for (int cluster_id = 0; cluster_id < sched_edge_max_clusters; cluster_id++) {
@@ -66,10 +67,9 @@ index 3657d83..8cace2a 100644
 +	os_atomic_store(&sched_edge_default_preferences_ready, true, release);
 +	extern void thread_group_set_default_preferred_clusters(uint32_t *tg_bucket_preferred_cluster);
 +	thread_group_set_default_preferred_clusters(sched_edge_default_preferred_cluster);
-+
+ }
+ 
  static bool
- sched_edge_thread_eligible_for_pset(thread_t thread, processor_set_t pset)
- {
 diff --git a/osfmk/kern/thread_group.c b/osfmk/kern/thread_group.c
 index f04b813..c743b1e 100644
 --- a/osfmk/kern/thread_group.c

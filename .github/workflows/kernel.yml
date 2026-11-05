@@ -348,6 +348,23 @@ jobs:
           find out -name 'kernel.macho' -exec ls -la {} \; 2>/dev/null || true
           du -sh out 2>/dev/null || true
 
+      # A hand-made rebase can move a patch block out of the function it
+      # belongs to: the patch still applies, because git matches the context
+      # lines and not the structure, and the compiler then rejects a `for`
+      # loop or a bare `return;` that sits at file scope. The checker reads
+      # the tree's own diff and reports every added line that landed outside
+      # a function. It never fails the build: it is a diagnosis, not a gate.
+      - name: Check the patch series for rebase damage
+        if: always()
+        continue-on-error: true
+        run: |
+          tree=$(find out -type d -name xnu-work -path '*/.cache/*' 2>/dev/null | head -1)
+          if [ -z "$tree" ]; then
+            echo "no patched tree: the build did not get as far as patching"
+            exit 0
+          fi
+          python3 device/tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
+
       # The build log is the thing that says why the build failed, and it is
       # 22 MB: too big to read, and the artifact it rides in needs a GitHub
       # account to download. So the lines that matter are copied out of it,
@@ -391,6 +408,14 @@ jobs:
             echo '```'
             tail -n 60 "$RUNNER_TEMP/status.txt" 2>/dev/null || echo "(no status)"
             echo '```'
+            if [ -f "$RUNNER_TEMP/scope.txt" ]; then
+              echo
+              echo "## patch scope"
+              echo
+              echo '```'
+              cat "$RUNNER_TEMP/scope.txt"
+              echo '```'
+            fi
           } > "$report"
           {
             echo "## Why the build failed"

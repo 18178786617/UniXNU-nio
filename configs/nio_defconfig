@@ -11,7 +11,7 @@
 # The source kernel comes from the apple-oss-distributions/xnu tag
 # xnu-8796.101.5, which the OS profile pins; see feeds.toml and the [os] block
 # of os-profiles/ios-16.5-20F66/profile.toml. The patch series applied on top
-# of it is patches/xnu-8796/series, and all 66 of its patches were verified to
+# of it is patches/xnu-8796/series, and all 67 of its patches were verified to
 # apply in order on the real tree.
 #
 # The board-level values below are inherited from umi (Hello/Setup, touch, UFS,

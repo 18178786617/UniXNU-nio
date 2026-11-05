@@ -20,7 +20,7 @@ PM4，读数都要有人能立刻看到。
 | 步 | 做什么 | 谁做的 |
 |---|---|---|
 | 0.1 | 设备仓自带 `os-profiles/ios-16.5-20F66/`，构建工作流把它 `cp -R` 进 `UniXNU/profiles/os/` | NX769J 的 `build.yml:148` |
-| 0.2 | 共享补丁系列重基到 `xnu-8796.101.5`（66 个补丁文件）；**GPU 探针钩子补丁按 8796 的 `bsd/kern/bsd_init.c` 重做** | NX769J + 本仓 |
+| 0.2 | 共享补丁系列重基到 `xnu-8796.101.5`（67 个补丁文件）；**GPU 探针钩子补丁按 8796 的 `bsd/kern/bsd_init.c` 重做** | NX769J + 本仓 |
 | 0.3 | donor kernelcache 换成 iPhone10,3 的 `e6fa7559…`，prelink 绑定、ADT 身份（`iPhone10,3` / D22AP）一起换 | 本仓 R123 |
 
 **为什么必须排在显示之前**：显示组件（GopFramebuffer）要用 donor kernelcache
@@ -43,17 +43,42 @@ PM4，读数都要有人能立刻看到。
 | `board.toml` 的 `[kernel.prelink]` | 16.5 donor、`e6fa7559…`、本仓包装脚本、30 条 roots、`early_security_init` 留空 | 生效 |
 | `board.toml` 的 `[ipsw]` | 16.5 成员名 + 6 个实测 pin | 生效 |
 | `os-profiles/ios-16.5-20F66/` | 16.5 的 OS profile（`prelink.tool` 改成 nio 自己的包装脚本） | 就位 |
-| `patches/xnu-8796/` | 66 个重基到 xnu-8796.101.5 的补丁 + series | 就位 |
+| `patches/xnu-8796/` | 67 个重基到 xnu-8796.101.5 的补丁 + series | 就位 |
+| `patches/xnu-8796/xnu-8796-compile-records.patch` | 8796 缺的编译记录（`-MJ`），archive 构建器和 bootstrap 都要它 | 已验 |
 | `patches/xnu-8796/gpu-probe-start.patch` | nio 自己的 GPU 探针钩子，按 8796 的 `offline-legacy-start.patch` 之后的锚点重写，插在 series 第 36 位 | 已验 |
 | `patches/xnu-8796/native-smp-type-clusters.patch` | SM8250 特有的双集群调度补丁，本仓在 8796 上重做（NX769J 是 SM8550，没有这条） | 已验 |
+| `tools/check-patch-scope.py` | 查补丁有没有把代码块甩到函数外面（rebase 损伤）；CI 每次构建都会跑 | 已验 |
 | `scripts/emit-prelink-nio.py` | prelink 包装脚本（16.5 kernelcache 的 Libm 常量池表） | 就位 |
 | `donor/kernelcache.decompressed.gz` | 16.5 kernelcache 的 arm64 切片（17.6 MB gzip），构建时按 board.toml 的 pin 校验 | 就位 |
 
-**整套 66 条已经在真实的 xnu-8796.101.5 上按序 apply 过，零失败。**
+**整套 67 条已经在真实的 xnu-8796.101.5 上按序 apply 过，零失败。**
 验证方法（可复现）：从 Apple 的开源发行拿到 `xnu-8796.101.5.tar.gz`
 （`codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/xnu-8796.101.5`），
-`git init` 后逐条 `git apply`，顺序照 series。结果：**66 条全部 ok**，
-改动落在 81 个文件上（+2791 / -125）。
+`git init` 后逐条 `git apply`，顺序照 series。结果：**67 条全部 ok**，
+改动落在 82 个文件上（+2794 / -128）。
+
+### 16.5 切换踩到的两个坑（R132 修掉）
+
+「apply 干净」不等于「编译得过」。两个坑都在重基这一步：
+
+1. **`native-smp-type-clusters.patch` 的代码块被甩到了函数外面。** 上游
+   （xnu-10063）那一版的 hunk 把函数结尾的 `}` 当作**新增之后**的上下文行，
+   所以代码块落在函数体内；手抄到 8796 时 `}` 变成了新增**之前**的上下文行，
+   代码块就掉到了文件作用域 —— 一个 `for`、一个裸 `return;`、一个函数调用
+   站在文件作用域上，任何 C 编译器都不会收。git 照样 apply 成功，因为 git 匹配
+   的是上下文行，不是结构。
+2. **xnu-8796 不写编译记录。** xnu-10063 的三条编译规则里有 `-MJ`，
+   每个目标文件旁边都会落一份 JSON 编译记录；8796 没有。archive 构建器
+   （mockfs fixture、GPU 归档、libpthread）要靠这份记录重放编译命令，
+   构建驱动也要靠 `startup.o.json` 判断 bootstrap 那趟的编译部分成功了没有。
+   缺了它，bootstrap 的链接必然失败（mockfs 的三个符号只在
+   `libmockfs_fixture.a` 里，而 bootstrap 那一趟不链它），而且这个失败**吞不掉**，
+   因为「编译部分成功了」的凭据不存在。
+
+第 1 条是 8796 特有的重基损伤，第 2 条是 8796 与 10063 的机制差异。
+`tools/check-patch-scope.py` 是为第 1 条写的：它读补丁树的 git diff，
+把**新增行**逐行按大括号深度扫一遍，报出落在文件作用域上的语句。
+CI 每次构建都会跑一遍这个检查，坏了会直接写进失败报告。
 
 **donor 的哈希是实测的，不是抄的**：16.5 镜像里的 kernelcache 走
 IMG4 → LZFSE → 取 arm64 切片，切片哈希
