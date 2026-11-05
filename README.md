@@ -82,6 +82,7 @@ console 的 bring-up 基线：donor、prelink 符号绑定、补丁系列都在�
 | `scripts/nio_adt.py` | ADT 编码器 |
 | `docs/STATUS.md` | 每一轮的判决、踩过的坑、还缺的实测值 |
 | `docs/BUILD-GITHUB.md` | GitHub 构建步骤 |
+| `docs/ROADMAP.md` | 刷入 iOS 之后的施工顺序：显示 → WiFi → 触摸 → 存储 → GPU |
 
 ## 当前进度
 
@@ -98,6 +99,9 @@ console 的 bring-up 基线：donor、prelink 符号绑定、补丁系列都在�
 - **触摸**：Novatek NT36672C 的 SPI 读通了（R77 用 bit-bang 换掉 GENI 引擎，
   两次读到同一签名 `0c 00 00 72 66 03`），但还没接成 HID 设备。
 - **显示、存储（UFS LUN 4 选择器）**：还没接。
+- **WiFi**：无线芯片已查清是 **QCA6390 / QCA6490（CNSS2 + q6v5 + MHI）**，
+  不是 ath12k，所以目录里的 `Ath12kWifi` 组件用不上。施工顺序见
+  [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 声明
 
