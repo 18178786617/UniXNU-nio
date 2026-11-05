@@ -239,6 +239,27 @@ jobs:
           PY
           echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
 
+      # board.os_profile names a directory under UniXNU/profiles/os/. The iOS
+      # 16.5 profile this port targets does not exist upstream yet, so it
+      # ships in this repository (os-profiles/ios-16.5-20F66/) and is installed
+      # into the checkout before the configuration is resolved. The step reads
+      # the name out of board.toml, so it does the right thing for whichever
+      # profile the board currently names: while that is still the 17.7.11 one
+      # the directory does not exist and the profile in the UniXNU checkout is
+      # used unchanged.
+      - name: Install the OS profile
+        run: |
+          profile=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['board']['os_profile'])")
+          echo "os profile: $profile"
+          if [ -d "device/os-profiles/$profile" ]; then
+            mkdir -p "profiles/os"
+            cp -R "device/os-profiles/$profile" "profiles/os/$profile"
+            echo "installed device-provided profile"
+          else
+            echo "using the profile already in UniXNU"
+          fi
+          test -f "profiles/os/$profile/profile.toml"
+
       - name: Resolve the configuration
         run: |
           ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"

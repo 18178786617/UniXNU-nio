@@ -1,0 +1,26 @@
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1203,6 +1203,22 @@ bsd_autoconf(void)
+ 	}
+ 
+ 	kern_return_t result = IOKitBSDInit();
++#if (DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_ADRENO) && XNU_NATIVE_ADRENO
++	/* nio's Adreno 650 probe (package/GpuProbe.cpp).
++	 *
++	 * The reference board starts the same probe from its legacy-display late probe, because
++	 * that board has a display personality. nio has none: CONFIG_XNU_NATIVE_LEGACY_DISPLAY is
++	 * off, so the legacy-display hook below is compiled out and the probe would never run.
++	 * This board's own hook is therefore here, next to IOKitBSDInit(): the probe maps the GPU
++	 * register windows through IODeviceMemory and, at mode 11, publishes a device and opens a
++	 * user client, so IOKit has to be up before it starts.
++	 *
++	 * The probe is off unless the boot arguments ask for it (nio-gpu=<mode>), and it prints its
++	 * rows through the kernel console, which this board's console patch points at the panel.
++	 */
++	extern void native_gpu_probe(void);
++	native_gpu_probe();
++#endif
+ #if (DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
+ 	/* The original IOSurface personality requires the genuine IOBSD resource.
+ 	 * The default-off framebuffer instrument may start only after publication.

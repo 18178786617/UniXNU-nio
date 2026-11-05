@@ -6,5 +6,8 @@
 *.json text eol=lf
 *.py text eol=lf
 *.series text eol=lf
+# The series files are named "series" without an extension, so *.series does
+# not match them.
+series text eol=lf
 *.dts text eol=lf
 *.dtsi text eol=lf

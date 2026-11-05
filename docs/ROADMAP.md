@@ -31,6 +31,24 @@ PM4，读数都要有人能立刻看到。
 板级代码（GPU 驱动归档、探针、A650 冷启动、ADT 编码、UEFI 固件）不受影响，
 只有「内核侧的钩子」和补丁系列要跟着换内核重做。
 
+### 已经备好的料（仓库里现成）
+
+| 位置 | 内容 | 状态 |
+|---|---|---|
+| `os-profiles/ios-16.5-20F66/` | 16.5 的 OS profile（从 NX769J 抄来，`prelink.tool` 改成 nio 自己的包装脚本） | 就位 |
+| `patches/xnu-8796/` | 64 个重基到 xnu-8796.101.5 的补丁 + series，NX769J 已验证**严格按序全部 apply** | 就位 |
+| `patches/xnu-8796/gpu-probe-start.patch` | nio 自己的 GPU 探针钩子，按 8796 的 `offline-legacy-start.patch` 之后的锚点重写，插在 series 第 36 位 | 已写，待 CI 验 |
+| `scripts/emit-prelink-nio.py` | prelink 包装脚本（16.5 kernelcache 的 Libm 常量池表） | 就位 |
+| `.github/workflows/kernel.yml` 的「Install the OS profile」 | 构建时把设备仓的 profile 装进 UniXNU 检出 | 就位（对当前 17.7.11 无副作用） |
+
+**还差一块，而且只有一块**：`native-smp-type-clusters.patch` —— SM8250 特有的
+双集群调度补丁（`board_config.h` 的 `MAX_CPU_CLUSTERS=2` + `sched_clutch.c` +
+`thread_group.c`）。NX769J 是 SM8550，它的重基系列里**没有**这一条。
+
+三个锚点在 8796 上都还在，但上下文已经变了（`sched_clutch_bucket_init` 后面
+的空行数、`thread_group.c` 的函数排布都不同），`git apply --check` 直接报
+「patch does not apply」。所以这条要重做三个 hunk，不是改行号那么简单。
+
 ---
 
 ## 阶段 1：显示正常
