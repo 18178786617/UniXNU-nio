@@ -42,12 +42,27 @@ on:
         description: IPSW URL (empty uses board.toml)
         required: false
         default: ""
+  # A push to main also builds, but only when something the kernel is made of
+  # changed. The bring-up loop commits one board change at a time and needs the
+  # artifact of every one of them, and dispatching by hand each time is the
+  # step that gets forgotten. The path filter keeps the UEFI-side commits
+  # (rootfs/, which carry their own image and their own build) from spending
+  # macOS runner minutes on a kernel that did not change.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/kernel.yml"
+      - "board.toml"
+      - "configs/**"
+      - "package/**"
+      - "patches/**"
+      - "scripts/**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig }}
+  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
   cancel-in-progress: false
 
 env:
@@ -69,15 +84,15 @@ jobs:
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
-      UNIXNU_IPSW: ${{ inputs.ipsw_url }}
-      DEFCONFIG: ${{ inputs.defconfig }}
+      UNIXNU_IPSW: ${{ inputs.ipsw_url || '' }}
+      DEFCONFIG: ${{ inputs.defconfig || 'nio_defconfig' }}
 
     steps:
       - name: Check out UniXNU
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: UniXNU/UniXNU
-          ref: ${{ inputs.unixnu_ref }}
+          ref: ${{ inputs.unixnu_ref || '04573c510c5fd4892ca6948739389141cc9e05f5' }}
           path: .
           persist-credentials: false
 
@@ -93,7 +108,7 @@ jobs:
 
       - name: Select Xcode
         env:
-          XCODE_INPUT: ${{ inputs.xcode }}
+          XCODE_INPUT: ${{ inputs.xcode || 'auto' }}
         run: |
           echo "host: $(uname -m) $(sw_vers -productVersion)"
           echo "installed on this image:"
@@ -288,7 +303,7 @@ jobs:
             echo "## nio kernel: $RESULT"
             echo
             echo "- defconfig: \`$DEFCONFIG\`"
-            echo "- UniXNU: \`${{ inputs.unixnu_ref }}\`"
+            echo "- UniXNU: \`${{ inputs.unixnu_ref || '04573c510c5fd4892ca6948739389141cc9e05f5' }}\`"
             echo "- host: \`$(uname -m)\` on macOS \`$(sw_vers -productVersion)\`"
             echo "- Xcode: \`${XCODE_APP:-unknown}\`"
             if [ -n "${DROPPED_FLAGS:-}" ]; then
