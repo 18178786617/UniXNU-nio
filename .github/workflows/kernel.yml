@@ -71,6 +71,13 @@ on:
   # step that gets forgotten. The path filter keeps the UEFI-side commits
   # (rootfs/, which carry their own image and their own build) from spending
   # macOS runner minutes on a kernel that did not change.
+  #
+  # The scripts are named one by one, because scripts/ holds two kinds: the
+  # ones the kernel is built from (the archives, the link stubs, the prelink
+  # record, the reference table the libpthread build compares against) and
+  # the ones that make the images around it (the ADT, the packaging). A
+  # change to the second kind does not touch the kernel, and building it
+  # anyway spends a runner on a build that says the same thing twice.
   push:
     branches: [main]
     paths:
@@ -81,7 +88,11 @@ on:
       - "os-profiles/**"
       - "package/**"
       - "patches/**"
-      - "scripts/**"
+      - "scripts/build-adreno650.py"
+      - "scripts/build-libpthread-kernel.py"
+      - "scripts/build-link-stubs.py"
+      - "scripts/emit-prelink-nio.py"
+      - "scripts/reference/**"
 
 permissions:
   # read is enough for the build itself. The one write is for the
@@ -736,6 +747,63 @@ jobs:
             out/*/*/*/kernel/*.json
           if-no-files-found: error
           retention-days: 7
+
+      # The kernel is the one thing a person needs to get at, and the
+      # artifact that carries it answers 401 to an anonymous download: the
+      # API wants an account. A branch is plain git and it is readable over
+      # SSH without one, so the kernel is put on a branch of its own, named
+      # after the run. The machine that drives the build fetches it from
+      # there and puts it on the phone; nobody has to download anything by
+      # hand and the loop does not stop on a login.
+      #
+      # The branch is an orphan, like the diagnostics one: it carries the
+      # kernel and its record and nothing else, and it never touches the
+      # history of the source.
+      - name: Publish the kernel on a branch
+        if: success()
+        continue-on-error: true
+        run: |
+          set +e
+          stage="$RUNNER_TEMP/ci-kernel"
+          rm -rf "$stage"
+          mkdir -p "$stage/ci-kernel"
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "::warning title=no kernel::the build produced no kernel.macho"
+            exit 0
+          fi
+          cp "$kernel" "$stage/ci-kernel/kernel.macho"
+          for record in $(find out -path '*/kernel/*.json' -type f 2>/dev/null | head -5); do
+            cp "$record" "$stage/ci-kernel/$(basename "$record")"
+          done
+          # The size and the digest go with it, so that what was fetched can
+          # be checked against what was built without the build machine.
+          python3 - "$stage/ci-kernel/kernel.macho" > "$stage/ci-kernel/SHA256SUMS" <<'PY'
+          import hashlib, sys
+          data = open(sys.argv[1], 'rb').read()
+          print("%s  kernel.macho" % hashlib.sha256(data).hexdigest())
+          print("%d bytes" % len(data))
+          PY
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-kernel
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p ci-kernel
+          rm -rf ci-kernel/*
+          cp -rf "$stage/ci-kernel/." ci-kernel/ 2>/dev/null
+          git add -f ci-kernel
+          git commit -q -m "ci: the kernel of run $GITHUB_RUN_NUMBER" || true
+          if ! out=$(git push origin HEAD:refs/heads/ci-kernel/run-$GITHUB_RUN_NUMBER 2>&1); then
+            echo "::error title=the kernel branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          else
+            echo "the kernel is on ci-kernel/run-$GITHUB_RUN_NUMBER"
+          fi
+          # The newest run also answers to one name that does not change, so
+          # that a fetch does not have to know the run number.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-kernel/latest 2>&1); then
+            echo "::warning title=the latest kernel branch::$(printf '%s' "$out" | head -4 | tr '\n' ' ')"
+          fi
 
       - name: Upload the build logs
         if: always()
