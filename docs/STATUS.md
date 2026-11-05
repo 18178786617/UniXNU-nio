@@ -216,3 +216,82 @@ ConSplitter 通过协议通知把它并进 `gST->ConIn`，UniXNU 的菜单因此
    产物 `kernel.macho` 下载回 `out/`。不需要自己有 Mac。
 6. 首次交接：`DarwinBoot` + 8 GiB 板子的 `owned_memory_size` 小步试。
    顺序是先让 kernel 打印第一行（`-v` 已带），再谈 UFS / 显示。
+
+## R134：上机第一次（2026-11-05）
+
+`fastboot boot out/Mu-nio-0.img`（不写任何分区，断电即回 Android），
+手机进到 UEFI → UniXNU 菜单 → DarwinBoot → **XNU 内核**。
+
+### 判定：链路每一环都通了
+
+屏幕上跑的是内核自己的启动日志，不是 UEFI 的。每一行都在 `out/kernel.macho`
+里逐字核过：
+
+| 屏幕上的行 | 在 kernel.macho 里 |
+|---|---|
+| `kernel_bootstrap: %s` | ✅ |
+| `kernel_startup_initialize_upto` | ✅ |
+| `zone_init: map %-5s %p:%p (%u%c)` | ✅ |
+| `zone_init: metadata  %p:%p (%u%c)` | ✅ |
+| `zone_init: pgzalloc  %p:%p (%u%c) [%d slots]` | ✅ |
+
+读出来的启动序列（内核实测）：
+
+```
+kernel_bootstrap: clock_init
+kernel_bootstrap: thread_group_initrank 1
+kernel_bootstrap: coalition_initrank 1
+kernel_bootstrap: code_signing_init
+kernel_bootstrap: task_init is 2500 us per-slot size: 32768, total size:
+kernel_bootstrap: thread_initrank 1
+kernel_bootstrap: restartable_initrank 0
+kernel_bootstrap: workq_init
+kernel_bootstrap: turnstiles_initrank 3
+kernel_bootstrap: mach_init_activity_id
+kernel_bootstrap: exception_init
+kernel_bootstrap: kernel_thread_create
+kernel_bootstrap: load_context - done
+kernel_bootstrap_thread: idle_thread_create
+kernel_startup_initialize_upto(18, rank 2147483647)
+```
+
+⇒ 内核走完了 `zone_init`（内存分区已建立）、`code_signing_init`、
+`exception_init`、`idle_thread_create`，停在 **rank 18**。
+`zone_init` 打印出的 GEN1/GEN2/GEN3/RAM/metadata 五个 zone 布局也读到了。
+
+### 这次 panic 的原因
+
+```
+R107 gpu mmu + fault
+```
+
+**GPU MMU fault**。这条消息不在我们的补丁里、不在 `out/kernel.macho` 里、
+也不在 16.5 donor 里 —— 它来自 **AppleGPUFamily kext**（系统自带的 GPU 驱动）。
+
+注意这次跑的是 **payload 里那个 17.7.11 的旧内核**，配 16.5 的 ADT。
+版本错配下 GPU kext 拿到的寄存器窗口和 MMU 配置对不上，MMU fault 是必然的。
+所以这条 panic **不是** 16.5 内核的判决，是"旧内核 + 新身份"的判决。
+
+### 这一轮证明了什么
+
+1. **UEFI 固件这条路彻底通了**：ABL 接受我们的 boot.img，shim 把 FD 和
+   payload 卷搬到位，NioBoot 读出 payload，DarwinBoot 加载 kernel.macho，
+   内核跑到 rank 18。上机链路上再没有未知环节。
+2. **UniXNU 菜单 + DarwinBoot 这条装载链可用**（R25–R28 的成果在真机上确认）。
+3. **内核崩溃的观测手段成立**：屏显日志 → 视频 → 帧提取 → 逐行转录，
+   再用 `kernel.macho` 里的格式串交叉验证，避免靠猜。
+4. 剩下的是内核版本本身：从 17.7.11 换到 16.5（`xnu-8796.101.5`），
+   CI 正在过最后一个 libpthread 归档。
+
+### 视频处理方法（可复用）
+
+`ffmpeg`（GamePP 版）没有 PNG/JPEG/rawvideo 编码器，抽帧走 `cv2`：
+
+```python
+cap = cv2.VideoCapture(path); fps = cap.get(cv2.CAP_PROP_FPS)
+ok, frame = cap.read()          # 逐帧读，自己按 fps 定位
+```
+
+提高可读性的三招：① 用 `Laplacian` 方差挑最清晰的一帧；
+② `addWeighted(g, 2.6, blur, -1.6, 0)` 做 unsharp mask；
+③ 按水平投影找文本行带再逐行 6 倍切出，避免坐标漂移。
