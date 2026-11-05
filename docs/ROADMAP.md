@@ -145,26 +145,74 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
      （`0xfffffff00577b318` / `0xfffffff00577b364` / `0xfffffff006b313d8`），
      那是它 donor 里的。nio 要从 16.5 donor 里重新定位。
 
-  **第 3 条已经做完一半了。** 16.5 donor 的符号表已经解开（5868 个导出名），
-  两个原版绑定都在：
+  **第 3 条已经做完了**，而且结论比预想的更重要：16.5 的 donor 符号表里
+  **一个 kext 符号都没有**（5868 个导出名全是内核自己的），所以三个绑定
+  只能从二进制结构反推。反推的办法写成了工具
+  `tools/find-mobile-framebuffer-bindings.py`：它对任意 prelink 镜像都能
+  重新算出这三个地址。
 
-  | 符号 | 16.5 地址 |
+  定位链条（三步，每步都有可验证的证据）：
+
+  1. **段归属**。`_PrelinkExecutableLoadAddr`（`0xfffffff004f67b40`）只是
+     kext 的 Mach-O **头**，不是代码。kext 的四段分别落在：
+     `__TEXT`（头 + cstring）在 `__PRELINK_TEXT`、`__TEXT_EXEC`（代码 +
+     `__stubs`）在 `__PLK_TEXT_EXEC`、`__DATA` 在 `__PRELINK_DATA`、
+     `__DATA_CONST`（`__got` + `__const`）在 `__PLK_DATA_CONST`。
+     所以「142 对 stub」不能靠 kext 的 load addr 圈，要靠 kext 自己的
+     `__stubs` 段。
+  2. **类初始化器**。XNU 在运行时才填 metaclass 的名字，所以「类 ↔ 地址」
+     的唯一静态联系是每个类自己的初始化器：它拿类名字符串和 metaclass
+     去注册。`IOMobileFramebuffer` 的字符串在 `__cstring` 的
+     `0xfffffff004f69113`，初始化器在 `0xfffffff005c03724`，它把
+     metaclass `0xfffffff006ded568` 写进 `&gMetaClass`。
+  3. **`this[0]` 是 vtable，不是 isa**。内核自己的
+     `__ZN9IOServiceC2EPK11OSMetaClass`（`0xfffffff007758008`）写的是
+     `str x8,[x0]`，x8 = vtable 地址。所以派生类的 C2 写进 `this[0]` 的
+     是**它自己的 dispatch table**；而 dispatch table 里有一项会返回
+     `&gMetaClass` —— 只有拥有那个 metaclass 的类才有这一项。
+
+  结论，16.5 donor 上的四个绑定：
+
+  | 符号 | 16.5 donor |
   |---|---|
-  | `__ZN9IOServiceC2EPK11OSMetaClass` | `0xfffffff007758008` |
-  | `__ZN9IOServiceD2Ev` | `0xfffffff007758038` |
+  | `__ZN19IOMobileFramebufferC2EPK11OSMetaClass` | `0xfffffff005c03674` |
+  | `__ZN19IOMobileFramebufferD2Ev` | `0xfffffff005c036c0` |
+  | `__ZN19IOMobileFramebuffer10gMetaClassE` | `0xfffffff007a3bfd8` |
+  | 父类 dispatch table | `0xfffffff006decd70`（**252 项**） |
 
-  而 kext 侧调用它们的 stub 也在 `__PLK_TEXT_EXEC`（`0xfffffff005594000`，
-  size `0x16cc000`）里找到了 **142 对**，每对的偏移是 +0xC —— 与 sheng 的
-  +0x14 同一形状。定位方法是把 sheng 的 `resolve_stub` 那三指令模式
-  （`ADRP` + `LDR` + `BR`）在 16.5 的 `__PLK_TEXT_EXEC` 上全扫一遍，读出
-  stub 指向的 8 字节槽，比对导出表。**还差的是挑出属于
-  `IOMobileGraphicsFamily` 的那一对** —— 该 kext 在 16.5 的
-  `_PrelinkExecutableLoadAddr` 是 `0xfffffff004f67b40`（size `0x8378`），
-  但它在 `__PRELINK_TEXT`（`0xfffffff004dd0000`，size `0x7c4000`）里，
-  而那 142 对 stub 在 `__PLK_TEXT_EXEC` 里，两段的映射关系要再查。
+  交叉验证：C2 在 `+0x30` 处 `bl` 到 `IOService::C2` 的 veneer
+  （`0xfffffff005c29184` → `0xfffffff007758008`），D2 在 `+0x18` 处 `bl` 到
+  `IOService::D2` 的 veneer（`0xfffffff005c29190` → `0xfffffff007758038`）——
+  与 sheng 的 17.7.11 **偏移完全一致**（+0x30 / +0x18）。
+
+  **但这三个地址是 donor 坐标，不能直接抄进 recipe。** prelink 会把 donor
+  的 kext 段按 slide（`board.toml` 里 `-0x1000000`）重定址，而最终内核
+  自己的段布局又不同。sheng 的做法是从**自己构建出的 prelink candidate**
+  里读地址，nio 要照做：先出内核，再从内核里读，再编驱动，再重链。
+
+  另一条更要紧的发现：**16.5 上该继承哪个类，变了。**
+
+  | 类 | C2 | dispatch table | 表长 |
+  |---|---|---|---|
+  | `IOMobileFramebuffer` | `0xfffffff005c03674` | `0xfffffff006decd70` | 252 |
+  | `IOMobileFramebufferService` | `0xfffffff005c0386c` | `0xfffffff006ded600` | 252 |
+  | `IOMobileFramebufferLegacy` | `0xfffffff005c0dbbc` | `0xfffffff006def260` | **338** |
+  | `IOMobileFramebufferUserClient` | `0xfffffff005bff01c` | `0xfffffff006debde8` | 187 |
+
+  `IOMobileFramebuffer` 在 16.5 只实现了 252 项里的 **10 项**（索引
+  {0,1,7,168,172,225,248,249,250,251}），其余 242 项指向内核符号，其中
+  44 项是 `___cxa_pure_virtual`。而 sheng 的 17.7.11 上 `IOMobileFramebuffer`
+  实现了 262 项里的约 98 项。**所以 sheng 那份按 17.7.11 写的
+  `NativeMobileDisplay` 不能只换地址就搬过来** —— 父类的 dispatch table
+  形状完全不同；真正承载 16.5 显示逻辑的是 `IOMobileFramebufferLegacy`
+  （338 项，多出 86 项），kext 里的源码路径
+  `/Library/Caches/com.apple.xbs/Sources/IOMobileFramebuffer/Kernel/AppleDisplayPipe/…`
+  也指向它。D2 之前要先把「继承谁」这件事定下来。
 
   需要的工具：`kits/XnuPrelink/native_prelink.py` 的
-  `macho()` / `exports()` / `backed_offset()`，全部现成。
+  `macho()` / `exports()` / `backed_offset()` / `unserialize_xml()`，
+  全部现成；`__PRELINK_INFO` 是 **XML plist**（不是二进制 plist），
+  `unserialize_xml()` 能直接解。
 - **D3｜先只做最小形态**：只编 `NativeMobileDisplay.cpp` + `original-bindings.o`，
   跳过 `MobileDisplayProviderProbe`（sheng recipe 的第 83 行起）。少一块就少
   一个失败点，先让 framebuffer 被接管住。
@@ -191,7 +239,16 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
   （`donor/kernelcache.decompressed.gz`），符号表 5868 个导出名，
   `tools/prelink-kexts-16.5.json` 里有 239 个 kext 的地址表，
   `IOMobileGraphicsFamily` 在 `0xfffffff004f67b40`（size `0x8378`）。
-  剩下的是「挑出属于它的那一对 stub」这一步，不是「有没有符号」的问题。
+  ~~剩下的是「挑出属于它的那一对 stub」这一步~~ —— **这一步也做完了**，
+  三个原版绑定已经算出来（见 D2 第 3 条），并且写成了可复用的工具
+  `tools/find-mobile-framebuffer-bindings.py`。
+- **新风险：16.5 的 `IOMobileFramebuffer` 不是 17.7.11 的那个形状。**
+  它的 dispatch table 只有 252 项且只实现 10 项（17.7.11 是 262 项、实现
+  约 98 项），真正承载显示逻辑的 `IOMobileFramebufferLegacy` 是 338 项。
+  sheng 的 `NativeMobileDisplay` 按 17.7.11 写死的那套继承关系与入口选择
+  （`beforeExternalMethod` / `releaseClientState` / `getDisplayDimensions`
+  在他那边落在 182 / 193 / 249）在 16.5 上**对不上**。D2 之前要先定
+  「继承谁、接管哪几项」。
 - `GopFramebuffer` 的 `os_abi` 没写 16.5。这是目录里的元数据声明，
   `scripts/unixnu/*.py` **完全不校验 `os_abi`**（grep 零命中），所以不会挡住
   构建；但要在 `porting.toml` 里记一笔「声明与事实不符」。
