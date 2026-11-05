@@ -110,6 +110,49 @@ NX769J 是 SM8550，它的重基系列里没有 SM8250 的
 
 ---
 
+## 阶段 0.5：把内核刷上手机（CI → 分支 → 打包 → fastboot）
+
+这一段是「阶段 1 显示正常」的前置：显示要调，首先得有一个能跑起来的 16.5
+内核。整条链路现在**在本机闭环**，不依赖 CI 打包，也不需要人手动下载文件。
+
+| 步 | 在哪 | 做什么 |
+|---|---|---|
+| 1 | CI `kernel.yml` | 编出 `kernel.macho`（arm64 Mach-O），并**推到分支** `ci-kernel/run-N` 和 `ci-kernel/latest` |
+| 2 | `flash/flash-ci.sh` | 从分支把内核取下来（artifact 要账号，分支不要），校验 magic 与 sha256 |
+| 3 | `scripts/make-nio-adt.py` | 生成 `out/kernel.macho.adt`：身份取自 board.toml 命名的 OS profile（16.5 → iPhone10,3 / D22），硬件取自 `package/nio-hardware.json` |
+| 4 | `tools/make-payload-vol.sh` | 把 `kernel.macho`、`kernel.macho.adt`、`rootfs.img`、`unixnu.toml` 装进 FAT32 卷，独立回读校验 sha256 |
+| 5 | `build/mkimg.sh` | BootShim ‖ UEFI FD ‖ 卷 → `out/Mu-nio-0.img`（`tools/verify_bootimg.py` 校验） |
+| 6 | `flash/flash-mu.sh` | `fastboot boot`，**不写任何分区**，断电回 Android |
+
+**为什么 CI 要推分支**：artifact 的下载接口对匿名请求回 401，每一轮都要人
+手动下载再放到指定位置，那正是把循环卡住的那一步。分支是普通 git，SSH 就能
+读。
+
+**为什么 ADT 在本机生成**：ADT 里没有内核 —— 它装的是 DRAM 布局、CPU 列表、
+平台身份和平台种子，内核不在其中。内核一换，ADT 不用重来；在本机生成，一轮
+就是一条命令。
+
+### 这一段踩到的坑（R141–R144）
+
+1. **libpthread 的回调名**（R141–R142）：libpthread 源码是 17.7.11 的，16.5
+   的 `bsd/sys/pthread_shims.h` 在**同一个槽位**换了名字
+   （`proc_get_jit_entitled` ↔ `proc_get_pthread_jit_allowlist`），签名一样。
+   16.5 表里同签名的回调有**七个**，所以只能按位置对应，不能按签名猜。
+   R141 把参考表放在 `reference/`，而构建跑在**组装树**里 —— 组装树只带
+   `scripts/ drivers/ kits/ patches/ refer/ build/ .cache/`，不带 `reference/`，
+   于是脚本"发现文件不在、照样往下走"，报错和改名前一模一样，白费一轮。
+   R142 把表挪进 `scripts/reference/`（组装树确实带 `scripts/`），路径从脚本
+   自身位置算，并且**表不在就让构建停**。
+2. **ADT 的身份**（R143）：ADT 之前带的是 17.7 时期的 iPad7,1 / J120，而 16.5
+   profile 自带 iPhone10,3 / D22 的真实身份（含 20 字节 product-id）。现在
+   ADT 从 profile 读身份，board 的 `adt` 段深合并在上面 —— 与上游 payload
+   步的合并方式一致。
+3. **CI 的 runner 与 Xcode**（R139）：上游用的是 `macos-26` + Xcode 26.6，
+   并写明"macos-15 的 clang 不接受构建所传的 warning 选项"。之前用的是
+   `macos-15-intel` + `auto`（选出 26.3）。
+
+---
+
 ## 阶段 1：显示正常
 
 ### 已经有的
