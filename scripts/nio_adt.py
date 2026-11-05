@@ -167,6 +167,78 @@ def apply_ipad_profile(tree):
     })
 
 
+PROPERTY_TYPES = ("string", "strings", "u32", "u64", "bytes")
+
+
+def typed_properties(table):
+    """The properties of a configured ADT node, by type.
+
+    The same reading the upstream payload step does: a table is a mapping of
+    type name to that type's properties, and the types are string, strings,
+    u32, u64 and bytes.
+    """
+    result = []
+    for kind, properties in table.items():
+        if kind not in PROPERTY_TYPES:
+            raise ValueError("unknown ADT property type: %s" % kind)
+        for key, value in properties.items():
+            if kind == "string":
+                raw = value.encode() + b"\0"
+            elif kind == "strings":
+                raw = b"".join(item.encode() + b"\0" for item in value)
+            elif kind == "bytes":
+                raw = bytes.fromhex(value)
+            elif kind == "u32":
+                raw = u32(int(value, 0) if isinstance(value, str) else value)
+            else:
+                raw = u64(int(value, 0) if isinstance(value, str) else value)
+            result.append((key, raw))
+    return result
+
+
+def platform_node(name, table):
+    """A configured ADT node: its property tables by type, and any other key
+    as a child node of the same form."""
+    properties = typed_properties({kind: value for kind, value in table.items()
+                                   if kind in PROPERTY_TYPES})
+    children = [platform_node(child, value) for child, value in table.items()
+                if child not in PROPERTY_TYPES]
+    return Node(name, dict(properties), children)
+
+
+def apply_platform(tree, platform):
+    """The OS profile's ADT sections, laid over the hardware tree.
+
+    The profile carries the identity of the OS it builds for: the root's
+    model and board name, the product table, the buttons, the defaults. The
+    hardware tree carries nio. The upstream payload step merges the two the
+    same way -- the profile is the base and the board is laid over it, so a
+    value the board names wins and a value only the profile names stays.
+
+    The four identity nodes are replaced rather than merged: they are the
+    profile's tables, and a value left over from the previous identity would
+    be a wrong answer to a question the profile has already answered.
+    """
+    for name in ("defaults", "options", "product", "buttons"):
+        if name not in platform and name not in ("defaults", "options", "product"):
+            continue
+        node = platform_node(name, platform.get(name, {}))
+        for index, child in enumerate(tree.children):
+            if child.name == name:
+                tree.children[index] = node
+                break
+        else:
+            tree.children.append(node)
+    chosen = tree.at("/chosen")
+    for key, raw in typed_properties(platform.get("chosen", {})):
+        chosen.properties[key] = raw
+    configured = dict(typed_properties(platform.get("root", {})))
+    compatible = configured.pop("compatible", b"") + tree.properties["compatible"]
+    tree.properties["compatible"] = compatible
+    tree.properties.update(configured)
+    return tree
+
+
 def apply_smp_profile(tree, hardware):
     """Add the observed nio cores and PSCI conduit to the qualified tree.
 
