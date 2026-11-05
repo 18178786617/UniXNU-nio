@@ -71,12 +71,13 @@ permissions:
   # ci-diagnostics branch, which carries the failure report so that a
   # broken build can be read without a GitHub account: the artifact that
   # holds the same logs needs one to download.
+  #
+  # There is no "workflows" key here on purpose. It reads like it belongs,
+  # and GitHub does not accept it: the whole workflow file is refused with
+  # "Unexpected value 'workflows'" and the run never starts. The diagnostics
+  # branch needs no such permission, because it is built as an orphan branch
+  # whose commits carry the report and nothing else.
   contents: write
-  # The diagnostics branch is built as an orphan branch, so its commits never
-  # touch a workflow file. The permission is here anyway: it is what a commit
-  # that does carry one would need, and its absence is a push that fails with
-  # a message nobody reads.
-  workflows: write
 
 concurrency:
   group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
