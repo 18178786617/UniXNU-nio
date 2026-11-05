@@ -11,17 +11,17 @@ PM4，读数都要有人能立刻看到。
 
 ---
 
-## 阶段 0（前置）：16.5 内核切换
+## 阶段 0（前置）：16.5 内核切换 ✅ 已完成
 
-这不是「刷完 iOS 之后」的事，而是「把 iOS 刷上去」这件事本身。现在树里的
+这不是「刷完 iOS 之后」的事，而是「把 iOS 刷上去」这件事本身。之前树里的
 内核是 17.7.11 / xnu-10063.141.1，而 16.5 的用户态必须配 xnu-8796 一类的
 16.x 内核，两边不匹配。NX769J（红魔 9）已经把同一件事做完了，三步：
 
-| 步 | 做什么 | 谁做过 |
+| 步 | 做什么 | 谁做的 |
 |---|---|---|
 | 0.1 | 设备仓自带 `os-profiles/ios-16.5-20F66/`，构建工作流把它 `cp -R` 进 `UniXNU/profiles/os/` | NX769J 的 `build.yml:148` |
-| 0.2 | 共享补丁系列重基到 `xnu-8796.101.5`（66 个补丁文件，见其 `patches/xnu/series` 与 `patch-rebase.md`）；**GPU 探针钩子补丁要按 8796 的 `bsd/kern/bsd_init.c` 重做** | NX769J |
-| 0.3 | donor kernelcache 换成 iPhone10,3 的 `e6fa7559…`，prelink 绑定、ADT 身份（`iPhone10,3` / D22AP）一起换 | 本仓 README 已有对照表 |
+| 0.2 | 共享补丁系列重基到 `xnu-8796.101.5`（66 个补丁文件）；**GPU 探针钩子补丁按 8796 的 `bsd/kern/bsd_init.c` 重做** | NX769J + 本仓 |
+| 0.3 | donor kernelcache 换成 iPhone10,3 的 `e6fa7559…`，prelink 绑定、ADT 身份（`iPhone10,3` / D22AP）一起换 | 本仓 R123 |
 
 **为什么必须排在显示之前**：显示组件（GopFramebuffer）要用 donor kernelcache
 里原版 `IOMobileFramebuffer` 的三个绑定地址。先在 17.7.11 上把显示做通、
@@ -31,22 +31,38 @@ PM4，读数都要有人能立刻看到。
 板级代码（GPU 驱动归档、探针、A650 冷启动、ADT 编码、UEFI 固件）不受影响，
 只有「内核侧的钩子」和补丁系列要跟着换内核重做。
 
-### 已经备好的料（仓库里现成）
+### 现在的状态
+
+三步全部完成（commit `24f0fa8` = R123，`a7bd213` = R124）：
 
 | 位置 | 内容 | 状态 |
 |---|---|---|
-| `os-profiles/ios-16.5-20F66/` | 16.5 的 OS profile（从 NX769J 抄来，`prelink.tool` 改成 nio 自己的包装脚本） | 就位 |
-| `patches/xnu-8796/` | 65 个重基到 xnu-8796.101.5 的补丁 + series，NX769J 已验证**严格按序全部 apply**；加上本仓的两条共 **66 条** | 就位 |
+| `board.toml` 的 `os_profile` | `ios-16.5-20F66` | 生效 |
+| `board.toml` 的 `patch_series` | `device:patches/xnu-8796/series` | 生效 |
+| `board.toml` 的 `config_fragments` | `os:configs/ios.config`（16.5 的 OS 片段） | 生效 |
+| `board.toml` 的 `[kernel.prelink]` | 16.5 donor、`e6fa7559…`、本仓包装脚本、30 条 roots、`early_security_init` 留空 | 生效 |
+| `board.toml` 的 `[ipsw]` | 16.5 成员名 + 6 个实测 pin | 生效 |
+| `os-profiles/ios-16.5-20F66/` | 16.5 的 OS profile（`prelink.tool` 改成 nio 自己的包装脚本） | 就位 |
+| `patches/xnu-8796/` | 66 个重基到 xnu-8796.101.5 的补丁 + series | 就位 |
 | `patches/xnu-8796/gpu-probe-start.patch` | nio 自己的 GPU 探针钩子，按 8796 的 `offline-legacy-start.patch` 之后的锚点重写，插在 series 第 36 位 | 已验 |
 | `patches/xnu-8796/native-smp-type-clusters.patch` | SM8250 特有的双集群调度补丁，本仓在 8796 上重做（NX769J 是 SM8550，没有这条） | 已验 |
 | `scripts/emit-prelink-nio.py` | prelink 包装脚本（16.5 kernelcache 的 Libm 常量池表） | 就位 |
-| `.github/workflows/kernel.yml` 的「Install the OS profile」 | 构建时把设备仓的 profile 装进 UniXNU 检出 | 就位（对当前 17.7.11 无副作用） |
+| `donor/kernelcache.decompressed.gz` | 16.5 kernelcache 的 arm64 切片（17.6 MB gzip），构建时按 board.toml 的 pin 校验 | 就位 |
 
 **整套 66 条已经在真实的 xnu-8796.101.5 上按序 apply 过，零失败。**
 验证方法（可复现）：从 Apple 的开源发行拿到 `xnu-8796.101.5.tar.gz`
 （`codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/xnu-8796.101.5`），
 `git init` 后逐条 `git apply`，顺序照 series。结果：**66 条全部 ok**，
 改动落在 81 个文件上（+2791 / -125）。
+
+**donor 的哈希是实测的，不是抄的**：16.5 镜像里的 kernelcache 走
+IMG4 → LZFSE → 取 arm64 切片，切片哈希
+`e6fa75598f47b5a9460a60913e2ac8e4cd6cd60eb475bb31da65b68ffbcfdad5`，
+与 profile 的 pin 一致；两个 dmg 与两个 trust cache 也是在本机
+`E:\nio-unixnu-port\ios165\ipsw\` 上实测的。
+
+**构建不再需要 IPSW**：内核阶段只需要 kernelcache 一个成员，
+`UNIXNU_KERNELCACHE` 直接给它；restore image 不可再分发，这件事不再是障碍。
 
 ### 双集群补丁为什么必须重做
 
@@ -196,27 +212,51 @@ QCA6490，走 CNSS2 + q6v5 + MHI**。
 | **W1** | PCIe RC0 枚举 + **MHI firmware boot**（CNSS2 core） | 读到 MHI 的固件版本，不出网 |
 | **W2** | **QMI / WMI handshake** | 拿到 firmware 版本、**board ID**、reg domain |
 | **W3** | **HTT datapath**（RX/TX） | 内核侧能收发自收发的帧 |
-| **W4** | **Darwin 侧 Apple80211 ioctl 桥**（sheng `package/WifiNet.cpp` 模式：`SIOCSA80211`=0x802869c8、`SIOCGA80211`=0xc02869c9）+ 把 16.5 的用户态栈接上 | iOS 侧能扫到 AP |
+| **W4.0** | 从 `096-04088-077.dmg` 取出 16.5 的 dyld shared cache 并 dump，列出 CoreWIFI / IO80211 的真实导出符号 | 拿到 CoreWIFI 的符号表，W4 不再靠猜 |
+| **W4** | **Darwin 侧 Apple80211 ioctl 桥**（sheng `package/WifiNet.cpp` 模式：`SIOCSA80211`=0x802869c8、`SIOCGA80211`=0xc02869c9）+ 把 16.5 的 CoreWIFI 用户态栈接上 | iOS 侧能扫到 AP |
 | **W5** | 与 iOS 网络栈联调：关联、DHCP、上网 | 能上网 |
 | **BT** | 与 WiFi 共享电源与 CNSS，走 **GENI UART + HCI**，接 iOS `bluetoothd` | 能被 iOS 发现 |
 
-### W4 的硬难点：16.5 没有 IO80211 用户态栈
+### W4 的硬难点：16.5 的无线用户态是 CoreWIFI，不在文件系统里
 
-16.5 用户态 root 的 `System/Library/Extensions/` 里**没有 IO80211Family.kext**
-（只有 `IOHIDFamily.kext`、`IOUSBDeviceFamily.kext`、
-`AppleMultitouchSPI.kext` 等 18 个）；无线只在
-`System/Library/PrivateFrameworks/IO80211.framework` 和
-`System/DriverKit/System/Library/PrivateFrameworks/IO80211DriverKit.framework`。
-NX769J 的 16.5 profile.toml 的 `roots` 列表里也**没有 IO80211Family**
-（对比 17.7.11 的 roots 有 `IOHIDFamily` 和 `IOHIDEventDriver`，16.5 只有
-`IOHIDFamily`）。
+这一条在 16.5 切换完成后可以确定地说了，因为它是在本机的 16.5 用户态上查的：
 
-所以 W4 有两条路，得在 W1 之前就定：
+- `System/Library/Extensions/` 里**没有 IO80211Family.kext**（只有
+  `IOHIDFamily.kext`、`IOUSBDeviceFamily.kext`、`AppleMultitouchSPI.kext`
+  等 18 个）；
+- `System/Library/PrivateFrameworks/IO80211.framework/` 里**只有
+  `Info.plist` 和 `_CodeSignature`，没有二进制**；
+- `System/Library/PrivateFrameworks/CoreWiFi.framework/` 同样**只有
+  `Info.plist` 和签名**；
+- 16.5 的 profile `roots` 列表里也**没有 IO80211Family**（对比 17.7.11 的
+  roots 有 `IOHIDFamily` 和 `IOHIDEventDriver`，16.5 只有 `IOHIDFamily`）。
+
+原因不是「Apple 把 kext 删了」，而是**16.5 的用户态二进制全部在 dyld shared
+cache 里**。本机 `E:\nio-unixnu-port\ios165\root\` 是从 IPSW 解出的文件系统，
+它**不含** dyld cache —— cache 在 `096-04088-077.dmg`（4.7 GB 的系统镜像）
+里面，`AirPortAssistant.framework`、`CoreWiFi.framework` 这些在 root 里都只剩
+骨架。
+
+这件事对 W4 有两个后果，都要提前决定：
+
+- **内核侧要做的是 Apple80211 的 ioctl 契约**，不是 IO80211Family 的。
+  CoreWIFI 的客户端通过 `Apple80211` 的 ioctl 与内核对话（`SIOCSA80211` =
+  0x802869c8、`SIOCGA80211` = 0xc02869c9），这条契约在 16.5 依然成立 ——
+  IO80211 的 ioctl 号码是稳定的，框架换了而已。所以 sheng
+  `package/WifiNet.cpp` 的路子是对的：内核侧实现 Apple80211 的 ioctl 与
+  接口注册。
+- **要拿到 CoreWIFI 的真实符号表**，得先从 `096-04088-077.dmg` 里取出
+  dyld shared cache 并 dump 它。仓库里没有这一步的工具（`tools/` 下只有
+  `patch-xnu-console.py` 一类），而没有符号表就只能猜接口。
+
+所以 W4 之前要先补一步 **W4.0：取出并 dump 16.5 的 dyld shared cache**，
+把 CoreWIFI / IO80211 相关的真实导出符号列出来。这一步不做，W4 就是猜。
+
+两条路，代价不同：
 
 - **自建 Apple80211 ioctl 桥**（sheng `WifiNet.cpp` 的路子）：内核侧实现
-  Apple80211 的 ioctl 与接口注册，用户态侧用 16.5 里那份
-  `IO80211.framework` 或 `IO80211DriverKit.framework` 来驱动它。工作量大，
-  但不依赖系统里没有的 kext。
+  Apple80211 的 ioctl 与接口注册，用户态侧用 16.5 里那份 CoreWIFI 家族来
+  驱动它。工作量大，但方向是确定的。
 - **只做到 L2**：内核侧给出网卡与帧收发，不接 iOS 的无线服务栈。能测、能用
   自己写的工具验证，但不是「系统里的 WiFi」。
 

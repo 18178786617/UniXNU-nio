@@ -32,22 +32,27 @@ trust cache）。这份用户态是 **未修改的 iPhone X 16.5 用户态**，�
 同一件事做完了——自带 `ios-16.5-20F66` OS profile、把它装进 UniXNU 检出、
 把共享补丁系列重基到 xnu-8796.101.5。nio 走同一条路。
 
-## 现在仓库里的内核是哪一个（重要）
+## 树里的内核是哪一个（重要）
 
-**树里的内核目前仍是 17.7.11 / xnu-10063.141.1 那一版**，因为它是已经跑通到
-console 的 bring-up 基线：donor、prelink 符号绑定、补丁系列都在这一版上验证
-过。切换到 16.5 会换掉：
+**树里的内核已经是 16.5 / xnu-8796.101.5 那一版**（R123 起）。切换的三个步骤
+全部完成，并且都在真实的 8796.101.5 源码树上验证过：
 
-| 项 | 现在（17.7.11） | 目标（16.5） |
+| 项 | 切换前（17.7.11） | 现在（16.5） |
 |---|---|---|
 | OS profile | `ipados-17.7.11-21H461`（UniXNU 主仓自带） | `ios-16.5-20F66`（**设备仓自带**，构建时装进 UniXNU 检出） |
-| 源码内核 | `xnu-10063.141.1` | `xnu-8796.101.5` |
-| donor kernelcache | iPad7,1 的 `f18b4df8…` | iPhone10,3 的 `e6fa7559…` |
-| 补丁系列 | arch(56)+soc(2)+prelink(2)+设备层 | 需要重基到 8796（NX769J 有一份可复用） |
-| ADT 身份 | iPad7,1 / j120ap | iPhone10,3 / D22AP |
+| 源码内核 | `xnu-10063.141.1` | `xnu-8796.101.5`（`feeds.py` 读 profile 自动覆盖 `feeds.toml` 的钉） |
+| donor kernelcache | iPad7,1 的 `f18b4df8…` | iPhone10,3 的 `e6fa7559…`（`donor/kernelcache.decompressed.gz`，构建时校验） |
+| 补丁系列 | arch(56)+soc(2)+prelink(2)+设备层 | `patches/xnu-8796/series`，66 条，在真实 8796.101.5 上按序 apply 全通过 |
+| prelink 工具 | `kits/XnuPrelink/emit_prelink.py` | `scripts/emit-prelink-nio.py`（本仓的 16.5 常量池包装） |
+| ADT 身份 | iPad7,1 / j120ap | iPhone10,3 / D22AP（带真实 D22AP 设备树值） |
 
 **板级代码不受影响**：GPU 驱动归档、探针、A650 冷启动、ADT 编码、UEFI 固件
-都是板级的，只有"内核侧的钩子"和"补丁系列"要跟着换内核重做一遍。
+都是板级的，只有"内核侧的钩子"和"补丁系列"要跟着换内核重做一遍——前者是
+`patches/xnu-8796/gpu-probe-start.patch`，后者已经全部重基完毕。
+
+**构建不再需要 IPSW**：16.5 的 restore image 不可再分发，但内核阶段只需要其中
+一个成员（kernelcache），`UNIXNU_KERNELCACHE` 直接给它，其余成员本机已有
+（`E:\nio-unixnu-port\ios165\`）。
 
 ## 编内核（不需要 Mac）
 
