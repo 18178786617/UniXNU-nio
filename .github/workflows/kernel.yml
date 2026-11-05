@@ -427,9 +427,11 @@ jobs:
           # says whether that is what happened.
           sizes=$(for log in out/*/*/*/logs/*.log; do
                     [ -f "$log" ] || continue
-                    printf '%s %s\\n' "$(wc -c < "$log")" "$(basename "$log")"
-                  done | sort -rn | head -6 | sed 's/%/%25/g' | tr '\\n' ' ')
+                    printf '%s %s\n' "$(wc -c < "$log")" "$(basename "$log")"
+                  done | sort -rn | head -6 | sed 's/%/%25/g' | tr '\n' ' ')
           [ -n "$sizes" ] && echo "::warning title=the size of the logs::$sizes"
+          # The step's own exit code must not be the report's business.
+          exit 0
 
       - name: Show the result
         if: always()

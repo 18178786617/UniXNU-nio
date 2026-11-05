@@ -293,6 +293,37 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
   名字落到确切的槽号上。17.7.11 的槽号对照表在生成器里
   （`I17_SLOTS`：182 / 193 / 249）。
 
+- **16.5 没有 `getDisplayDimensions` —— 替代入口找到了（R136）**：
+  16.5 的 kext 把显示状态放在 `IOMFB::RuntimeProperty` 上，而不是方法上。
+  从 donor 里把 kext 自己的 `__cstring` 读出来，runtime property 的名字表是：
+
+  ```
+  width  height  format  rotation  allocateDefaultFramebuffer
+  enableDither  enablePartialUpdate  enableGammaCorrection
+  displayMaxRefreshInterval  displayMinRefreshInterval  displayRefreshStep
+  overrideBacklight  backlightValue  totalSwaps  totalVBLs  swapId
+  setActive  setParameter  isSetBlockEnumAllowed  ...
+  ```
+
+  kext 里的辅助函数名也在字符串里：
+  `IOMFB::getRuntimePropertyName` / `getRuntimePropertyType` /
+  `getRuntimePropertyType` / `getBitDepthValue` /
+  `getGamutConversionLocationFromRTP` / `getIdleDetectorFromRTP` /
+  `getIdleDetectorRTPTypeForIdleDetectorRTP` / `get_RTP_boot_arg_name`。
+
+  **但方法名拿不到**：kext 没有把 `__FUNCTION__` 展开进字符串 ——
+  `setPixelFormat` / `getDisplayDimensions` / `completeCurrentSwap` /
+  `setPowerState` / `newUserClient` 在 16.5 的 `__cstring` 里一个都不在。
+  所以槽名仍需靠方法体的结构化匹配来认。
+
+  顺带拿到了 16.5 kext 的**源文件清单**（从字符串里的路径反推）：
+  `IOMobileFramebufferLegacy.cpp`、`IOMobileFramebufferRuntimeProperties.cpp`、
+  `IOMobileFramebufferUserClient.cpp`、`DriverCommonFunctions.cpp`、
+  `DCPUtils.cpp`、`IOAVHandler.cpp`、`IOAVHandlerInternalDisplay.cpp`、
+  `IOMFBBlockManager.cpp`、`InterruptSource.cpp`、`RefCounted.cpp`、
+  `UPAAFProxy.cpp`、`UPAsynchronousScheduler.cpp`、`UPIOMemory.cpp`、
+  `UPIOSvcProxy.cpp`。
+
 - **D3｜先只做最小形态**：只编 `NativeMobileDisplay.cpp` + `original-bindings.o`，
   跳过 `MobileDisplayProviderProbe`（sheng recipe 的第 83 行起）。少一块就少
   一个失败点，先让 framebuffer 被接管住。
