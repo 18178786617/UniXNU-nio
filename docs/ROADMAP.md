@@ -192,30 +192,71 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
 
   另一条更要紧的发现：**16.5 上该继承哪个类，变了。**
 
-  | 类 | C2 | dispatch table | 表长 |
-  |---|---|---|---|
-  | `IOMobileFramebuffer` | `0xfffffff005c03674` | `0xfffffff006decd70` | 252 |
-  | `IOMobileFramebufferService` | `0xfffffff005c0386c` | `0xfffffff006ded600` | 252 |
-  | `IOMobileFramebufferLegacy` | `0xfffffff005c0dbbc` | `0xfffffff006def260` | **338** |
-  | `IOMobileFramebufferUserClient` | `0xfffffff005bff01c` | `0xfffffff006debde8` | 187 |
+  | 类 | C2 | D2 | dispatch table | 表长 | 自有 |
+  |---|---|---|---|---|---|
+  | `IOMobileFramebuffer` | `0xfffffff005c03674` | `0xfffffff005c036c0` | `0xfffffff006decd70` | 252 | 10 |
+  | `IOMobileFramebufferService` | `0xfffffff005c0386c` | `0xfffffff005c038b8` | `0xfffffff006ded600` | 252 | 10 |
+  | `IOMobileFramebufferLegacy` | `0xfffffff005c0dbbc` | `0xfffffff005c0d668` | `0xfffffff006def260` | **338** | **174** |
+  | `IOMobileFramebufferUserClient` | `0xfffffff005bff01c` | `0xfffffff005bff09c` | `0xfffffff006debde8` | 187 | 10 |
 
   `IOMobileFramebuffer` 在 16.5 只实现了 252 项里的 **10 项**（索引
-  {0,1,7,168,172,225,248,249,250,251}），其余 242 项指向内核符号，其中
-  44 项是 `___cxa_pure_virtual`。而 sheng 的 17.7.11 上 `IOMobileFramebuffer`
+  {0,1,7,168,172,225,248,249,250,251}），其余 165 项指向内核符号，其中
+  77 项是 `___cxa_pure_virtual`。而 sheng 的 17.7.11 上 `IOMobileFramebuffer`
   实现了 262 项里的约 98 项。**所以 sheng 那份按 17.7.11 写的
   `NativeMobileDisplay` 不能只换地址就搬过来** —— 父类的 dispatch table
   形状完全不同；真正承载 16.5 显示逻辑的是 `IOMobileFramebufferLegacy`
   （338 项，多出 86 项），kext 里的源码路径
   `/Library/Caches/com.apple.xbs/Sources/IOMobileFramebuffer/Kernel/AppleDisplayPipe/…`
-  也指向它。D2 之前要先把「继承谁」这件事定下来。
+  也指向它。继承关系和实例大小见下面 D2 那段。
 
   需要的工具：`kits/XnuPrelink/native_prelink.py` 的
   `macho()` / `exports()` / `backed_offset()` / `unserialize_xml()`，
   全部现成；`__PRELINK_INFO` 是 **XML plist**（不是二进制 plist），
   `unserialize_xml()` 能直接解。
+
+  **16.5 的继承链已经量出来了**（类初始化器里传给 metaclass 构造器的
+  父类 gMetaClass，加上 `w3` 的实例大小）：
+
+  ```
+  IOService                                   136 字节
+   └─ IOMobileFramebuffer                     144 字节   252 槽
+       └─ IOMobileFramebufferService          144 字节   252 槽
+           └─ IOMobileFramebufferLegacy     5728 字节   338 槽
+  ```
+
+  这条链是移植的根据，有三处和 sheng 的 17.7.11 不同：
+
+  1. **要继承的是 `IOMobileFramebufferLegacy`**，不是
+     `IOMobileFramebuffer`。它才实现 338 槽里的 174 槽（自有实现在
+     168..337 之间连续排开），而 `IOMobileFramebuffer` 只实现 252 槽里的
+     10 槽 —— 后者是抽象壳，屏走不通。
+  2. **`IOMobileFramebufferLegacy` 的父类是
+     `IOMobileFramebufferService`**，不是 `IOMobileFramebuffer`。
+     派生类要一路继承下来，中间那层不能跳。
+  3. **16.5 的 kext 里没有 `getDisplayDimensions`**（17.7.11 才有）。
+     它的 `__cstring` 是旧式的 `iomfb_RuntimeProperty_*` 一套，
+     和 17.7.11 的方法集不同，所以 sheng 的 `OriginalMobileFramebufferABI.h`
+     那个 262 槽的声明**在 16.5 上整体不能用**。
+
+  槽位地图由 `tools/dispatch-layout.py` 给出（自有 / 继承 / 纯虚，
+  逐槽标注）；三个绑定由 `tools/find-mobile-framebuffer-bindings.py`
+  给出（这两个工具都在本仓，R128/R129）。
+
+  | 类 | C2 | D2 | gMetaClass | dispatch table | 槽数 | 自有 |
+  |---|---|---|---|---|---|---|
+  | `IOMobileFramebuffer` | `0xfffffff005c03674` | `0xfffffff005c036c0` | `0xfffffff007a3bfd8` | `0xfffffff006decd70` | 252 | 10 |
+  | `IOMobileFramebufferService` | `0xfffffff005c0386c` | `0xfffffff005c038b8` | `0xfffffff007a3c000` | `0xfffffff006ded600` | 252 | 10 |
+  | `IOMobileFramebufferLegacy` | `0xfffffff005c0dbbc` | `0xfffffff005c0d668` | `0xfffffff007a40540` | `0xfffffff006def260` | **338** | **174** |
+
+  `IOMobileFramebufferLegacy` 的 9 个纯虚槽：211、212、242、243、292、
+  293、321、322、329。
+
 - **D3｜先只做最小形态**：只编 `NativeMobileDisplay.cpp` + `original-bindings.o`，
   跳过 `MobileDisplayProviderProbe`（sheng recipe 的第 83 行起）。少一块就少
   一个失败点，先让 framebuffer 被接管住。
+  **但 ABI 头文件要重写**：按上面 338 槽的地图重新声明
+  `IOMobileFramebufferLegacy`（以及它继承的 `IOMobileFramebufferService`
+  和 `IOMobileFramebuffer`），不能照抄 sheng 的 262 槽版本。
 - **D4｜打开开关**：`CONFIG_XNU_NATIVE_MOBILE_DISPLAY=1`
   （`configs/nio_defconfig` 第 74 行现在是 `n`）。`build-xnu-4k-baseline.sh`
   第 652 行会 force_load `build/gop-framebuffer/libGopFramebuffer.late.a`。
