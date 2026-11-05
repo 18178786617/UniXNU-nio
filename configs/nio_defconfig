@@ -72,6 +72,30 @@ CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=n
 
 # SM8250 implements PAN; copyin/copyout must manage it on exception entry.
 CONFIG_XNU_NATIVE_PAN=y
+
+# The kernel's screen channel is the injected console blob, not boot_progress.
+#
+# R149 tried CONFIG_XNU_BOOT_PROGRESS=y and that was wrong for this board:
+#
+#   * Upstream's build-xnu-4k-baseline.sh:84 refuses BOOT_PROGRESS=1 unless
+#     XNU_NATIVE_UFS=1, XNU_OWNER_ROOT_AUDIT=1 and XNU_SOURCE_CORECRYPTO14=1
+#     are all set. This board has no UFS and no owner-root audit -- nio's
+#     userdata is LUN 4 of a 6-LUN UFS and the inherited host driver only
+#     speaks LUN 0 -- so the build stops with "Boot progress requires the
+#     audited UFS/owner-root and source-corecrypto build".
+#   * boot_progress_bind() is only called from initialize_screen() in
+#     osfmk/console/video_console.c, and the display personality below is off,
+#     so the diagnostic would never learn the framebuffer address anyway.
+#
+# The 17.7.11 bring-up solved this without boot_progress: it injects a console
+# blob into the kernel image itself (tools/patch-xnu-console.py plus
+# tools/install-blob.py), which replaces console_putc with a routine that
+# draws straight into the framebuffer the loader handed over, and hangs
+# sysent[SYS_write] on the same routine so userland writes land on the screen
+# too. That path needs no display personality and no storage, which is why it
+# worked with this switch off (R56-R118 all ran with BOOT_PROGRESS=n).
+#
+# So the switch stays off, and the screen comes back through the blob.
 CONFIG_XNU_BOOT_PROGRESS=n
 
 # Display stays off. The UEFI firmware leaves a GOP surface at
