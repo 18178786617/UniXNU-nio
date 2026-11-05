@@ -11,6 +11,10 @@
 series text eol=lf
 *.dts text eol=lf
 *.dtsi text eol=lf
+# The reference callback table the libpthread build compares against travels
+# in scripts/, because the build runs inside the assembled tree and the tree
+# carries scripts/ and nothing else.
+scripts/reference/*.h text eol=lf
 # The kernel configuration is read by the build as a text file: a CRLF line
 # ending would make a value carry a trailing carriage return into the merged
 # .config.
