@@ -1,0 +1,51 @@
+Cloning into '/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work'...
+s/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:785:30: warning: implicit conversion changes signedness: 'int' to 'vm_size_t' (aka 'unsigned long') [-Wsign-conversion]
+  785 |         const vm_size_t guardsize = vm_map_page_size(map);
+      |                         ~~~~~~~~~   ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:843:10: warning: implicit conversion changes signedness: 'int' to '__uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+  842 |                 arm_thread_state_t state = {
+      |                                            ~
+  843 |                         .pc = (int)wqstart_fnptr,
+      |                               ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:852:10: warning: implicit conversion changes signedness: 'int' to '__uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+  842 |                 arm_thread_state_t state = {
+      |                                            ~
+  843 |                         .pc = (int)wqstart_fnptr,
+  844 |                         .r[0] = (unsigned int)addrs->self,
+  845 |                         .r[1] = (unsigned int)kport,
+  846 |                         .r[2] = (unsigned int)addrs->stack_bottom,
+  847 |                         .r[3] = (unsigned int)kevent_list,
+  848 |                         // will be pushed onto the stack as arg4/5
+  849 |                         .r[4] = (unsigned int)upcall_flags,
+  850 |                         .r[5] = (unsigned int)kevent_count,
+  851 | 
+  852 |                         .sp = (int)(addrs->stack_top)
+      |                               ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:901:4: warning: implicit conversion changes signedness: 'int' to 'unsigned int' [-Wsign-conversion]
+  898 |         ret = pthread_kern->kevent_workq_internal(p, eventlist, nevents,
+      |               ~~~~~~~~~~~~
+  899 |                         kevent_list, WQ_KEVENT_LIST_LEN,
+  900 |                         data_buf, &data_available,
+  901 |                         kevent_flags, kevent_count_out);
+      |                         ^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:979:36: warning: implicit conversion changes signedness: 'unsigned int' to 'int' [-Wsign-conversion]
+  979 |                 workq_kevent(p, &th_addrs, 0, 0, flags, &kevent_list, &kevent_count);
+      |                 ~~~~~~~~~~~~                     ^~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:983:17: warning: implicit conversion changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+  982 |         workq_set_register_state(p, th, &th_addrs, kport,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~
+  983 |                         kevent_list, upcall_flags, kevent_count);
+      |                                      ^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:1007:54: warning: implicit conversion changes signedness: 'unsigned int' to 'int' [-Wsign-conversion]
+ 1007 |         error = workq_kevent(p, &th_addrs, events, nevents, flags,
+      |                 ~~~~~~~~~~~~                                ^~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:1018:17: warning: implicit conversion changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 1017 |         workq_set_register_state(p, th, &th_addrs, kport,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~
+ 1018 |                         kevent_list, upcall_flags, kevent_count);
+      |                                      ^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work/kern/kern_support.c:1049:34: warning: implicit conversion changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 1049 |                 pthread_mutex_default_policy = policy_bootarg;
+      |                                              ~ ^~~~~~~~~~~~~~
+22 warnings and 1 error generated.
+
