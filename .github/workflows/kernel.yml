@@ -60,6 +60,7 @@ on:
       - ".github/workflows/kernel.yml"
       - "board.toml"
       - "configs/**"
+      - "donor/**"
       - "os-profiles/**"
       - "package/**"
       - "patches/**"
@@ -269,25 +270,34 @@ jobs:
       # The prelink step needs the donor kernelcache, and the donor for a 16.5
       # build is the arm64 slice of the iOS 16.5 kernelcache. The restore image
       # is not redistributable, so it cannot be downloaded here the way the
-      # 17.7.11 one was; instead the slice is published as a release asset and
-      # fetched from there.
+      # 17.7.11 one was.
       #
-      # The pin is board.toml's [kernel.prelink].kernelcache_sha256, and it is
-      # checked here as well as by the build: a truncated or substituted asset
-      # must not reach the prelink.
+      # The donor lives in this repository under donor/. It is checked here
+      # against board.toml's pin before the build uses it, so a truncated or
+      # substituted file cannot reach the prelink.
       #
       # UNIXNU_KERNELCACHE makes scripts/unixnu/kernel.py:prelink() take the
       # donor from this path instead of from an IPSW, so no IPSW is fetched at
       # all.
+      #
+      # The kernelcache_url input overrides the file: a build that wants a
+      # different donor points it at one.
       - name: Fetch the donor kernelcache
         env:
-          KERNELCACHE_URL: ${{ inputs.kernelcache_url || 'https://github.com/18178786617/UniXNU-nio/releases/download/donor-16.5/kernelcache.decompressed.gz' }}
+          KERNELCACHE_URL: ${{ inputs.kernelcache_url || '' }}
         run: |
           pin=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['kernel']['prelink']['kernelcache_sha256'])")
           echo "pin: $pin"
           mkdir -p out/kernelcache
-          curl -fsSL --retry 3 -o out/kernelcache/kernelcache.gz "$KERNELCACHE_URL"
+          if [ -n "$KERNELCACHE_URL" ]; then
+            echo "fetching $KERNELCACHE_URL"
+            curl -fsSL --retry 3 -o out/kernelcache/kernelcache.gz "$KERNELCACHE_URL"
+          else
+            echo "using the donor in the repository"
+            cp device/donor/kernelcache.decompressed.gz out/kernelcache/kernelcache.gz
+          fi
           ls -la out/kernelcache/kernelcache.gz
+          gzip -t out/kernelcache/kernelcache.gz
           gzip -dc out/kernelcache/kernelcache.gz > out/kernelcache/kernelcache.decompressed
           got=$(shasum -a 256 out/kernelcache/kernelcache.decompressed | cut -d' ' -f1)
           echo "sha256: $got"

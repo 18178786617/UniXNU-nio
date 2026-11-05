@@ -13,12 +13,11 @@ name: Publish the donor kernelcache
 #
 # The upload is deliberately a separate workflow rather than a step of the
 # kernel build: the kernel build runs on every push, and the donor does not
-# change with the kernel. Publishing it once means the kernel builds fetch a
-# stable URL instead of carrying 17 MB of base64 in the repository.
+# change with the kernel. Publishing it once means there is a stable URL for
+# the donor, next to the one the kernel build reads from the repository.
 #
-# To use a different image, put the gzipped arm64 slice in the repository's
-# "donor" directory (or attach it to this workflow run) and dispatch the
-# workflow with the file's path.
+# The kernel build does not depend on this workflow: it reads the donor from
+# the repository's donor/ directory. This workflow is for the releases page.
 
 on:
   workflow_dispatch:
