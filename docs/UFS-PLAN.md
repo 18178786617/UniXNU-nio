@@ -79,44 +79,120 @@ framebuffer）是 **sheng 的显示通路**，nio 没有显示 personality，移
 
 ShengUfs 是为 sheng 写的，它假设了三件 nio 不成立的事：
 
-### 1. LUN 4 选择器
+### 1. LUN 4 —— 驱动已经支持，不用新写
 
-`board.toml` 的 `[userdata]` 写的是 `lun = "sde"`，真机分区表确认
-userdata 在 **LUN 4**（LBA 3178592 起，224.3 GiB）。UFSHCI 的
-`UFSHCE` / `UP` 寄存器组里没有 LUN 号——LUN 是在 **UFS 配置描述符**里的
-`bNumberLU` 之下，由设备自己报告。sheng 是单 LUN，nio 是 6 LUN。
+一开始以为要写 LUN 选择器，核过源码之后发现**已经有了**：
 
-⇒ 移植时要新增：**读设备描述符 → 找 target 的 LUN 4 → 让 UFS 配置描述符
-指向它**。这是整个移植里**唯一需要新写**的硬件逻辑。
+```c
+// RootCommands.h:171  —— UFS Command UPIU 的 byte 2 就是 LUN 字段
+ucd[2] = lun;
+
+// RootCommands.h:241  —— 读接口直接带 LUN
+static IOReturn hostRead4k (uint8_t lun, uint64_t lba, uint32_t blocks, void *dst)
+
+// NativeUfs.cpp:1384 —— 分区扫描已经在遍历 6 个 LUN
+extern "C" int native_ufs_part_find (const char *name, uint32_t *lun, uint64_t *first, uint64_t *blocks)
+{
+  for (uint32_t l = 0; l < 6 && !found; ++l) {
+    if (hostRead4k (l, 1, 1, buffer) != kIOReturnSuccess || memcmp (buffer, "EFI PART", 8)) continue;
+    ...
+```
+
+`native_ufs_part_find` 会**遍历 LUN 0..5**，找到带 "EFI PART" 签名的那个，
+把 LUN 号和 LBA 一起返回。nio 的 userdata 在 LUN 4，
+所以这条路径**直接就能找到它**。
+
+⇒ nio 要做的只是**调用层**：把 `board.toml` 的 `[userdata]`（`lun = "sde"`、
+`first_lba = 0x308060`）喂给 `native_ufs_part_find`，并把返回的 LUN 号
+与 board.toml 声明的一致性**验一下**（不是 4 就要报错，不要静默跑偏）。
+
+要注意的是：**store / log 两个写窗口目前硬编码在 LUN 0**
+（`RootCommands.h:263` 注释："At most two windows of 4096-byte LBAs on LUN 0"，
+`hostStoreOpen` / `hostLogOpen` 不带 lun 参数）。nio 的持久化区在 LUN 4，
+所以这两处要加一个 LUN 参数 —— 这是**小改**，不是新功能。
 
 ### 2. root image 的分区起点
 
-sheng 的 persistent store 布局（`RootLayout.h`）假设 userdata 分区从 LBA 0
-开始可用。nio 的 userdata 从 `first_lba = 0x308060` 起，SHNGROOT 镜像的
-窗口偏移要减去这个起点。
+sheng 的 persistent store 布局（`RootLayout.h`）里，
+`hostRead4k (0, 1, 1, ...)` 和 `hostRead4k (0, layout->userdataFirst, ...)`
+都写死 LUN 0。nio 的 userdata 在 LUN 4 且从 `first_lba = 0x308060` 起，
+这几处要跟着改。
 
-### 3. 16.5 的 prelink 与 IOStorageFamily
+### 3. 16.5 的 IOStorageFamily 策略版本（U6，唯一需要真新写的部分）
 
-ShengUfs 走的是 "public-source storage" 路径：运行时加载原版 IOStorageFamily
-和 APFS（`RootPublication.h` / `RootCommands.h` / `RootDiagnostics.h`），
-检查原版基类大小，认证 23F84 策略，注册 source 类。
+ShengUfs 走的是 "public-source storage" 路径：运行时加载**原版** IOStorageFamily
+和 APFS，检查原版基类大小，认证 23F84 策略，注册 source 类。
 
-⇒ 在 16.5 上，这套 **23F84 策略认证** 是 17.7.11 的东西，需要换成 16.5 的
-策略版本（16.5 的 `kernelcache.release.iphone10b` 里 IOStorageFamily 的
-版本号和策略表都要重取）。这是移植里第二块需要重做的部分。
+16.5 上这套要换。从 16.5 的 donor（`out/donor16.5.bin`）里读出来的事实：
+
+| 事实 | 值 | 出处 |
+|---|---|---|
+| SDK | `iphoneos16.5.internal` | IOStorageFamily 的 `DTSDKName` |
+| bundle id | `com.apple.iokit.IOStorageFamily` | 同上 |
+| 依赖方声明的版本 | `1.5` / `1.5.6` | `OSBundleLibraries` 里 `com.apple.iokit.IOStorageFamily` |
+| 本体 `OSBundleRequired` | `Local-Root` | 同上 |
+| `_PrelinkExecutableLoadAddr` | `0xfffffff004dd7280` | 同上 |
+| `_PrelinkExecutableSize` | `0x1fc0` | 同上 |
+| `_PrelinkKmodInfo` | `0xfffffff007a05000` | 同上 |
+
+⇒ U6 要做的是：**按 16.5 的 IOStorageFamily 重新做一次"原版基类大小检查 +
+策略认证"**，策略来源换成 16.5 的（不是 sheng 的 23F84）。这一项没法照抄，
+必须对着 16.5 的 donor 量。
+
+⇒ **在 U6 之前，NioUfs 是可以先编进去的**：驱动的完整性校验整段都在
+`#if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK` 里
+（`NioUfs.cpp` 的 1590–1764 行），不带这个宏时走 `return true`，
+也就是"读了但不校验"。对第一版上机（先证明 UFS 传输通、7.7 GB 能落盘）
+来说这是可以接受的，**但要在日志里写明这条是未校验的**。
 
 ## 移植工作分解
 
-| 步骤 | 内容 | 难度 |
+| 步骤 | 内容 | 状态 |
 |---|---|---|
-| U1 | 复制 ShengUfs 到 `device/UniXNU-nio/drivers/NioUfs`，改名为 `NativeUfs` → `NioUfs` | 低 |
-| U2 | 删掉 DPU / 显示通路（`kDpuWindow` 及相关），保留纯 UFS 传输 | 低 |
-| U3 | 加 LUN 4 选择器（读描述符、选 target） | **中** |
-| U4 | 改 root image 布局起点（`first_lba = 0x308060`） | 低 |
-| U5 | 换成 16.5 的 IOStorageFamily 策略版本 | **中** |
-| U6 | 在 `components.toml` 注册 `NioUfs` 组件，`build-arm-driver.py` 入口 | 低 |
-| U7 | `configs/nio_defconfig` 打开 `CONFIG_XNU_NATIVE_UFS=y` | 低 |
-| U8 | 构建 7.7 GB 的 SHNGROOT userdata 镜像（`scripts/unixnu/userdata.py` 那一套） | 中 |
+| U1 | 复制 ShengUfs 到 `drivers/NioUfs`，类名 `NativeUfs`→`NioUfs` | ✅ R135 |
+| U2 | 删掉 DPU / 显示通路（`dpuEnable` / `dpuClean` / `dpuTlbFlush` / `native_ufs_dpu_map` / `native_ufs_dpu_live`） | ✅ R135 |
+| U3 | 引导参数改名 `sheng-*` → `nio-*`；`Info.plist` 改成 nio 身份 | ✅ R135 |
+| U4 | **GCC 寄存器偏移改成 kona 的**（见下） | ✅ R135 |
+| U5 | 写窗口与 GPT 解析的 LUN 从写死 0 改成 `NIO_UFS_USERDATA_LUN`（4） | ✅ R135 |
+| U6 | 换成 16.5 的 IOStorageFamily 策略版本（23F84 → 16.5 的） | ⬜ 未做 |
+| U7 | 在 `components.toml` 注册 `NioUfs` 组件，`build-arm-driver.py` 入口 | ⬜ 未做 |
+| U8 | `configs/nio_defconfig` 打开 `CONFIG_XNU_NATIVE_UFS=y` | ⬜ 未做 |
+| U9 | 构建 7.7 GB 的 SHNGROOT userdata 镜像（`scripts/unixnu/userdata.py` 那一套） | ⬜ 未做 |
+
+### U4：GCC 寄存器偏移在两代之间不同（这是移植里最要命的一处）
+
+**物理地址相同，寄存器布局不同。** SM8550 把 UFS PHY 的时钟分支摆得更开，
+SM8250 挤得更紧，所以照抄 sheng 的偏移会读到**别的寄存器**：
+
+| 寄存器 | sheng (SM8550) | kona (SM8250) | 差 |
+|---|---|---|---|
+| UFS PHY GDSC | `0x77004` | `0x77004` | — |
+| PHY AXI | `0x77018` | `0x77010` | −8 |
+| PHY AHB | `0x77024` | `0x77018` | −12 |
+| PHY TX_SYMBOL0 | `0x77028` | `0x7701c` | −12 |
+| PHY RX_SYMBOL0 | `0x7702c` | `0x77020` | −12 |
+| PHY UNIPRO_CORE | `0x77068` | `0x7705c` | −12 |
+| PHY ICE_CORE | `0x77074` | `0x77064` | −16 |
+| PHY PHY_AUX | `0x770b0` | `0x7709c` | −20 |
+| PHY RX_SYMBOL1 | `0x770cc` | `0x770b8` | −20 |
+| AGGRE PHY AXI | `0x770e4` | `0x770cc` | −24 |
+
+kona 的每一个值都是从 `refs/linux/gcc-sm8250.c` 的
+`clk_branch.enable_reg` 读出来的（`gcc_ufs_phy_axi_clk`、`gcc_ufs_phy_ahb_clk`、
+`gcc_aggre_ufs_phy_axi_clk` 等），GDSC 则来自 `ufs_phy_gdsc.gdscr`。
+`GccUfs.h` 现在带的是 kona 的值，每个都注明了 kona 侧的来源。
+
+### U5：LUN
+
+驱动**本来就支持任意 LUN**（UFS Command UPIU 的 byte 2 就是 LUN 字段，
+`native_ufs_part_find` 已经在扫 LUN 0..5）。要改的只有三处写死的 0：
+
+- `RootLayout.h` 的 GPT 解析 —— 原来在 LUN 0 找 "userdata"，现在在
+  `NIO_UFS_USERDATA_LUN`（4）找；
+- `RootCommands.h` 的 `hostWrite4k` —— 原来 `lun != 0` 就拒绝；
+- `hostScsiDir (0, ...)` 的写命令与 SYNCHRONIZE CACHE。
+
+⇒ 改动比原估计小很多。**不需要新写 LUN 选择器。**
 
 ## 顺序上的取舍
 
