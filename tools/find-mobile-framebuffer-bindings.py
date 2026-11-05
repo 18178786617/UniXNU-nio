@@ -247,8 +247,11 @@ def main():
         else:
             address += 4
     c2_veneers = {a for a, t in kext_veneers.items() if t == ioc2}
-    d2_veneers = {a for a, t in kext_veneers.items()
-                   if names_by_value.get(t, '').endswith('D2Ev')}
+    # The IOService::D2 veneer is matched by its target address, not by the
+    # name it resolves to: the kext has one veneer per class in the
+    # hierarchy, and they all resolve to some class's destructor, so a
+    # name-suffix match would claim four of them for the base class.
+    d2_veneers = {a for a, t in kext_veneers.items() if t == iod2}
     print('  %d veneers, %d call IOService::C2, %d call IOService::D2'
           % (len(kext_veneers), len(c2_veneers), len(d2_veneers)))
 
@@ -395,27 +398,42 @@ def main():
             c2, dispatch = start, stored
             break
 
-    # The destructor: the first function after the constructor that calls
-    # the IOService::D2 veneer.  XNU lets a class skip the intermediate
-    # destructors when they add nothing, so every level of the hierarchy
-    # calls the veneer itself.
+    # The destructor: every function that calls the IOService::D2 veneer.
+    # XNU lets a class skip the intermediate destructors when they add
+    # nothing, so every level of the hierarchy calls the veneer itself.
+    #
+    # Which of those calls belongs to *this* class is not decided by
+    # address order: on iOS 16.5 the legacy class's destructor sits at a
+    # lower address than its constructor (0xfffffff005c0d680 against
+    # 0xfffffff005c0dbbc), so "the first call after the constructor" picks
+    # the wrong one.
+    #
+    # The destructor is matched by proximity instead: a class's constructor
+    # and its destructor sit in the same region of the kext's text, while
+    # the other classes of the kext sit in their own regions.
     d2 = None
     if c2 is not None:
+        candidates = []
         for ins in body:
-            if ins.address <= c2 or ins.mnemonic != 'bl':
+            if ins.mnemonic != 'bl':
                 continue
-            if ins.address > c2 + 0x200:
-                break
-            if int(ins.op_str[1:], 0) in d2_veneers:
-                d2 = owner_of(ins.address)
-                break
+            if int(ins.op_str[1:], 0) not in d2_veneers:
+                continue
+            start = owner_of(ins.address)
+            if start is not None and start not in candidates:
+                candidates.append(start)
+        print('  %d functions call the IOService::D2 veneer: %s'
+              % (len(candidates), ', '.join(hex(c) for c in candidates)))
+        if candidates:
+            d2 = min(candidates, key=lambda c: abs(c - c2))
 
     print()
     print('=== the bindings of %s ===' % class_name)
+    mangled = '_ZN%d%s' % (len(class_name), class_name)
     for name, value in (
-            ('__ZN19IOMobileFramebufferC2EPK11OSMetaClass', c2),
-            ('__ZN19IOMobileFramebufferD2Ev', d2),
-            ('__ZN19IOMobileFramebuffer10gMetaClassE', gmetaclass)):
+            (mangled + 'C2EPK11OSMetaClass', c2),
+            (mangled + 'D2Ev', d2),
+            (mangled + '10gMetaClassE', gmetaclass)):
         print('  %-44s %s' % (name, hex(value) if value else 'NOT FOUND'))
     print('  parent dispatch table                      %s'
           % (hex(dispatch) if dispatch else 'NOT FOUND'))
