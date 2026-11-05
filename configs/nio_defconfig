@@ -97,4 +97,13 @@ CONFIG_XNU_CONSTANT_UPLOADS_PROBE=n
 CONFIG_XNU_NATIVE_OFFLINE_GPU=n
 
 CONFIG_XNU_BUILD_ARCHIVES=y
-CONFIG_XNU_EXTRA_LD_ARCHIVES=""
+# The link stubs. The GPU archive imports six names that no selected component
+# defines (package/LinkStubs.c), and ld64 refuses to leave a weak_import
+# undefined in a static kernel link, so the kernel link needs an answer for each
+# of them. scripts/build-link-stubs.py compiles the file into
+# build/link-stubs/libLinkStubs.a, and scripts/build-xnu-4k-baseline.sh appends
+# this value to LD_KERNEL_ARCHIVES.
+#
+# {tree} is substituted by xnu_env() with the absolute path of the assembled tree,
+# which is what the build script and the kernel's own link both need.
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"

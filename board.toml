@@ -88,6 +88,13 @@ patch_series = [
 #
 # Keep the eight arch entries in step with profiles/arch/arm64/profile.toml:
 # the pipeline refuses the build when a kernel-stage component has no entry.
+#
+# build-link-stubs.py is the ninth recipe: the GPU archive imports six names
+# that no selected component defines, and ld64 refuses to leave a weak_import
+# undefined in a static kernel link, so the link needs an answer for each of
+# them. The recipe compiles package/LinkStubs.c into
+# build/link-stubs/libLinkStubs.a, which reaches the kernel link through
+# CONFIG_XNU_EXTRA_LD_ARCHIVES (see configs/nio_defconfig).
 archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
@@ -98,6 +105,7 @@ archives = [
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
   "build-adreno650.py",
+  "build-link-stubs.py",
 ]
 
 # Donor contract inherited verbatim from umi: the initializer address belongs to
