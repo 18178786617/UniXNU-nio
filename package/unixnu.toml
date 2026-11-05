@@ -8,7 +8,7 @@ timeout = 3
 default = "xnu"
 
 [ui]
-title = "Edge S - UniXNU 17.7.11"
+title = "Edge S - UniXNU iOS 16.5"
 
 [[entry]]
 id = "tools"
@@ -18,7 +18,7 @@ action = "tools"
 
 [[entry]]
 id = "xnu"
-title = "iPadOS 17.7.11 kernel"
+title = "iOS 16.5 kernel"
 type = "xnu"
 # Supplied by the packer once a kernel.macho exists; until then this entry is
 # the placeholder that proves the menu and the file path are wired.

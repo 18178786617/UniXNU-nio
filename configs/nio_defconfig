@@ -7,9 +7,16 @@
 # own qualified inputs, and turning one on now would only move the first failure
 # further from the cause.
 #
-# Inherited from umi's 17.7.11 baseline on purpose: same SoC, same Darwin
-# 23.6.0 / xnu-10063.141.1 source, same prelink donor. Every deviation is
-# called out with its reason.
+# The port's target is iOS 16.5 (build 20F66): Darwin 22.5.0, xnu-8796.101.5.
+# The source kernel comes from the apple-oss-distributions/xnu tag
+# xnu-8796.101.5, which the OS profile pins; see feeds.toml and the [os] block
+# of os-profiles/ios-16.5-20F66/profile.toml. The patch series applied on top
+# of it is patches/xnu-8796/series, and all 66 of its patches were verified to
+# apply in order on the real tree.
+#
+# The board-level values below are inherited from umi (Hello/Setup, touch, UFS,
+# persistent Data) rather than re-derived, which is why they are here at all.
+# Every deviation from the inherited baseline is called out with its reason.
 
 # ArmCpu requires a source crypto provider and ArmDTPlatform.
 CONFIG_XNU_SOURCE_CORECRYPTO14=y

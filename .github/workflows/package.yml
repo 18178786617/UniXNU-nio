@@ -7,8 +7,11 @@ name: package
 # the run.
 #
 # nio adaptation notes (vs UniXNU-sheng's package.yml):
-# - Only OS profile 17 (ipados-17.7.11-21H461) exists for this board; the 27
-#   Data-seed cache/backup machinery does not apply.
+# - The board builds the iOS 16.5 OS profile (ios-16.5-20F66, xnu-8796), not
+#   an iPadOS one; the 27 Data-seed cache/backup machinery does not apply.
+# - The restore image is not redistributable, so [ipsw].url names the member
+#   rather than a URL. Point the run at a local copy with the ipsw_url input
+#   or UNIXNU_IPSW.
 # - UniXNU is pinned to 04573c510c5fd4892ca6948739389141cc9e05f5, the same
 #   revision source-lock.json and the kernel.yml workflow use, so every run
 #   resolves the same feeds and unixnu.lock.

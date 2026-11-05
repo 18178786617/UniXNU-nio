@@ -11,3 +11,11 @@
 series text eol=lf
 *.dts text eol=lf
 *.dtsi text eol=lf
+# The kernel configuration is read by the build as a text file: a CRLF line
+# ending would make a value carry a trailing carriage return into the merged
+# .config.
+*defconfig text eol=lf
+# The OS profiles' config fragments are read the same way. The pattern is
+# anchored to the fragments directory so it does not reach unrelated files
+# that happen to be named "config".
+/os-profiles/**/configs/*.config text eol=lf

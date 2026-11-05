@@ -42,6 +42,12 @@ on:
         description: IPSW URL (empty uses board.toml)
         required: false
         default: ""
+      kernelcache_url:
+        description: >-
+          URL of the gzipped donor kernelcache (the arm64 slice of the iOS
+          16.5 kernelcache). Empty uses the release asset of this repository.
+        required: false
+        default: ""
   # A push to main also builds, but only when something the kernel is made of
   # changed. The bring-up loop commits one board change at a time and needs the
   # artifact of every one of them, and dispatching by hand each time is the
@@ -54,6 +60,7 @@ on:
       - ".github/workflows/kernel.yml"
       - "board.toml"
       - "configs/**"
+      - "os-profiles/**"
       - "package/**"
       - "patches/**"
       - "scripts/**"
@@ -244,9 +251,8 @@ jobs:
       # ships in this repository (os-profiles/ios-16.5-20F66/) and is installed
       # into the checkout before the configuration is resolved. The step reads
       # the name out of board.toml, so it does the right thing for whichever
-      # profile the board currently names: while that is still the 17.7.11 one
-      # the directory does not exist and the profile in the UniXNU checkout is
-      # used unchanged.
+      # profile the board currently names: the 16.5 one is installed from this
+      # repository, and a profile that is upstream is used as it is.
       - name: Install the OS profile
         run: |
           profile=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['board']['os_profile'])")
@@ -259,6 +265,37 @@ jobs:
             echo "using the profile already in UniXNU"
           fi
           test -f "profiles/os/$profile/profile.toml"
+
+      # The prelink step needs the donor kernelcache, and the donor for a 16.5
+      # build is the arm64 slice of the iOS 16.5 kernelcache. The restore image
+      # is not redistributable, so it cannot be downloaded here the way the
+      # 17.7.11 one was; instead the slice is published as a release asset and
+      # fetched from there.
+      #
+      # The pin is board.toml's [kernel.prelink].kernelcache_sha256, and it is
+      # checked here as well as by the build: a truncated or substituted asset
+      # must not reach the prelink.
+      #
+      # UNIXNU_KERNELCACHE makes scripts/unixnu/kernel.py:prelink() take the
+      # donor from this path instead of from an IPSW, so no IPSW is fetched at
+      # all.
+      - name: Fetch the donor kernelcache
+        env:
+          KERNELCACHE_URL: ${{ inputs.kernelcache_url || 'https://github.com/18178786617/UniXNU-nio/releases/download/donor-16.5/kernelcache.decompressed.gz' }}
+        run: |
+          pin=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['kernel']['prelink']['kernelcache_sha256'])")
+          echo "pin: $pin"
+          mkdir -p out/kernelcache
+          curl -fsSL --retry 3 -o out/kernelcache/kernelcache.gz "$KERNELCACHE_URL"
+          ls -la out/kernelcache/kernelcache.gz
+          gzip -dc out/kernelcache/kernelcache.gz > out/kernelcache/kernelcache.decompressed
+          got=$(shasum -a 256 out/kernelcache/kernelcache.decompressed | cut -d' ' -f1)
+          echo "sha256: $got"
+          if [ "$got" != "$pin" ]; then
+            echo "::error::the kernelcache does not match board.toml's pin"
+            exit 1
+          fi
+          echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/out/kernelcache/kernelcache.decompressed" >> "$GITHUB_ENV"
 
       - name: Resolve the configuration
         run: |

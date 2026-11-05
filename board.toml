@@ -6,20 +6,23 @@
 # user's copy of that image and its extracted root are at E:\nio-unixnu-port\
 # ios165\ on the porting host.
 #
-# The kernel this file still builds is the 17.7.11 one (iPadOS 21H461, Darwin
-# 23.6.0, xnu-10063.141.1). That is not a decision about the target -- it is
-# the bring-up base, the version that reached the console with its donor,
-# its prelink bindings and its patch series all verified. UniXNU-NX769J has
-# already made the 16.5 move on another phone: it keeps its own
-# ios-16.5-20F66 OS profile in the device repository, installs it into the
-# UniXNU checkout before the build, and rebases the shared patch series onto
-# xnu-8796.101.5. The same three steps are what this board's 16.5 switch is,
-# and they are listed in README.md.
+# The kernel this file builds is the 16.5 one: Darwin 22.5.0, xnu-8796.101.5.
+# The switch from the bring-up base -- the iPadOS 17.7.11 kernel that reached
+# the console with its donor, its prelink bindings and its patch series all
+# verified, and that linked for the first time in R120 -- is the three steps
+# UniXNU-NX769J made on another phone:
 #
-# Until that switch happens, the values below are the 17.7.11 ones and they
-# are the ones the CI builds. They are inherited from umi (Hello/Setup, touch,
-# UFS, persistent Data) rather than re-derived, which is why they are here at
-# all.
+#   1. the OS profile, kept in this repository (os-profiles/ios-16.5-20F66/)
+#      and installed into the UniXNU checkout before the build;
+#   2. the patch series, rebased onto xnu-8796.101.5
+#      (patches/xnu-8796/, verified to apply in order on the real tree);
+#   3. this file, which names the profile and carries the 16.5 donor, the
+#      prelink bindings and the ADT identity.
+#
+# NX769J is an SM8550 board. This one is SM8250, so the series carries the
+# SM8250 two-cluster scheduler patch that NX769J does not have, and the
+# board-level values below (memory window, kernel arguments, the display and
+# GPU switches) are nio's own and unchanged by the switch.
 #
 # schema_version 2 means the kernel is built by the shared pipeline:
 #   arch profile -> SoC profile -> OS profile -> this file
@@ -32,9 +35,25 @@ name = "nio"
 soc = "SM8250"
 # UniXNU-sm8250-common: GIC/timer/topology patches, pinned in feeds.toml.
 soc_source = "sm8250"
-# The bring-up base. The 16.5 target uses ios-16.5-20F66 instead, from this
-# repository's own os-profiles/ directory (see the header).
-os_profile = "ipados-17.7.11-21H461"
+# The port's target. iOS 16.5 (build 20F66), Darwin 22.5.0, xnu-8796.101.5.
+# The ADT forges an iPhone X identity (iPhone10,3 / D22AP) and the userland is
+# the iPhone X 16.5 restore image, whose members are extracted on the porting
+# host under E:\nio-unixnu-port\ios165\.
+#
+# The profile lives in this repository (os-profiles/ios-16.5-20F66/) rather
+# than upstream, and the build workflow installs it into the UniXNU checkout
+# before the configuration is resolved. scripts/unixnu/feeds.py:69-78 reads
+# this profile and overrides the xnu source it declares: the ref becomes
+# xnu-8796.101.5, the commit becomes aca3beaa3dfbd42498b42c5e5ce20a938e6554e5,
+# darwin becomes 22.5.0, and the driverkit and trustcache tags follow. So the
+# feeds.toml xnu pin is the 17.7.11 one and this line is what moves the whole
+# build onto the 16.5 train.
+#
+# This is the third of the three steps UniXNU-NX769J made on another phone
+# (the profile above, the rebased patch series below, and this line). NX769J is
+# an SM8550 board; this one is SM8250, and the difference is in the series:
+# patches/xnu-8796/ carries the SM8250 two-cluster scheduler patch as well.
+os_profile = "ios-16.5-20F66"
 description = "MOTO Edge S (XT2125-4) / SM8250-AC UniXNU bring-up"
 kit = "nio"
 
@@ -55,24 +74,37 @@ include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", 
 defconfig = "nio_defconfig"
 # Same fragment order as alioth (SM8250, same OS profile). The device defconfig
 # is applied last, so every nio override below wins.
-config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ipados.config"]
-# arch (56) + soc (2) + the two prelink patches from XnuPrelink + this board's
-# GPU probe start hook.
 #
-# The OS profile's own series adds zzz-boot-progress.patch between them, and
-# that patch edits the sheng_pmgr_run() block inside bsd_init.c: it applies only
-# after sheng's platform-power patch, which is a sheng-hardware patch this board
-# does not carry. Measured here: it fails at hunk @@ -773 with "patch does not
-# apply" once the 58 arch+soc patches are in, and the two prelink patches apply
-# cleanly without it. So the device series is spelled out instead of inheriting
-# os:patches/xnu/series. With CONFIG_XNU_BOOT_PROGRESS=n the omitted patch only
-# guarded diagnostic calls that are compiled out anyway.
-patch_series = [
-  "arch:patches/xnu/series",
-  "soc:patches/xnu/series",
-  "device:patches/xnu-prelink/series",
-  "device:patches/xnu/gpu/series",
-]
+# The OS fragment is the 16.5 profile's own ios.config, not the 17.7.11
+# profile's ipados.config. The two differ in one line: the 16.5 fragment does
+# not set CONFIG_XNU_SOURCE_MOCKFS. This board's defconfig does set it, and
+# that is deliberate and unchanged -- mockfs is what mounts the N4KROOT image
+# off the RAMDisk memory device as the root filesystem, and without it the boot
+# stops at "Failed to mount root device" (R54 measured that). The 8796 series
+# below carries the five mockfs patches, so mockfs is buildable on this train.
+config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ios.config"]
+# The whole series lives in this repository, rebased onto xnu-8796.101.5.
+#
+# The shared arch and soc series still target xnu-10063.141.1, so referencing
+# them here would abort `unixnu status` with "patch missing" or fail during
+# patch application. patches/xnu-8796/series holds the resolved order on
+# 8796.101.5: the ARM64, SoC and OS patches in their original order, the two
+# prelink patches XnuPrelink ships only for xnu-10063, this board's GPU probe
+# start hook, and the SM8250 two-cluster scheduler patch that NX769J (an
+# SM8550 board) does not carry.
+#
+# The 66 patches were applied, in this order, onto the real xnu-8796.101.5
+# tree: none failed, and the result touches 81 files. The check is
+# reproducible -- take the tag tarball from Apple's open source distribution,
+# git init the tree, and apply the series file in order:
+#
+#   codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/xnu-8796.101.5
+#
+# Switch back to
+#   ["arch:patches/xnu/series", "soc:patches/xnu/series",
+#    "os:patches/xnu/series", "device:patches/xnu/series"]
+# once the shared series are rebased, and delete the duplicated copies here.
+patch_series = ["device:patches/xnu-8796/series"]
 # The arch profile's default archives cover the components selected above.
 #
 # The GPU archive needs one more recipe, and a list in this file REPLACES the
@@ -108,38 +140,101 @@ archives = [
   "build-link-stubs.py",
 ]
 
-# Donor contract inherited verbatim from umi: the initializer address belongs to
-# kernelcache f18b4df8..., never to a nio address. Keep the SHA, or re-derive.
+# The prelink contract for the 16.5 kernelcache.
+#
+# The tool is a device wrapper rather than kits/XnuPrelink/emit_prelink.py
+# directly: the kit's known-literal-pool catalogue is per kernelcache, and the
+# entries it ships with belong to the iPadOS 17.7.11 image. The wrapper verifies
+# this kernelcache's Libm coefficient table against the image, records it, and
+# runs the kit's own tool unchanged (scripts/emit-prelink-nio.py).
+#
+# The kernel path is the 16.5 train's own name. xnu-8796 links no
+# .unstripped.noctf: its MakeInc.kernel lists five primary outputs and the
+# .noctf variant is a later XNU naming. The raw linked kernel carries no CTF
+# section, so there is nothing to strip. Pointing at the name xnu-10063 uses
+# fails with "not found; run unixnu build kernel first" even after a clean link.
+#
+# kernelcache_sha256 covers the decompressed arm64 kernelcache Mach-O slice,
+# which is what scripts/unixnu/ipsw.py writes to kernelcache.decompressed.
+# The pin is the one the ios-16.5-20F66 profile carries.
+#
+# early_security_init is left unset on purpose. The value would be an unslid
+# __TEXT_EXEC address inside AppleMobileFileIntegrity, and identifying it is a
+# reversing task, not a field lookup: the 17.7.11 profile's value
+# (0xfffffff005ab4ae0) is version bound and must not be copied. With it unset,
+# emit_prelink skips that path: AMFI still starts through its ordinary start
+# routine, but the pre-lockdown call does not happen.
+#
+# The roots are the bundle identifiers this kernelcache's __PRELINK_INFO
+# actually carries. The 17.7.11 list also kept com.apple.iokit.IOHIDEventDriver,
+# which this kernelcache does not contain.
 [kernel.prelink]
-tool = "kits/XnuPrelink/emit_prelink.py"
-kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
-kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+tool = "scripts/emit-prelink-nio.py"
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped"
+kernelcache_sha256 = "e6fa75598f47b5a9460a60913e2ac8e4cd6cd60eb475bb31da65b68ffbcfdad5"
 slide = "-0x1000000"
-early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
-roots = ["com.apple.driver.AppleMobileFileIntegrity", "com.apple.security.sandbox"]
+roots = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
+  "com.apple.driver.AppleARMPlatform",
+  "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs",
+  "com.apple.driver.AppleEffaceableStorage",
+  "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver",
+  "com.apple.driver.AppleMobileFileIntegrity",
+  "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily",
+  "com.apple.filesystems.apfs",
+  "com.apple.iokit.CoreAnalyticsFamily",
+  "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family",
+  "com.apple.iokit.IOCECFamily",
+  "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily",
+  "com.apple.iokit.IOHDCPFamily",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily",
+  "com.apple.iokit.IOSlowAdaptiveClockingFamily",
+  "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface",
+  "com.apple.kec.Libm",
+  "com.apple.kec.corecrypto",
+  "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+]
 
 [ipsw]
-# The bring-up donor: the iPadOS 17.7.11 image umi qualified. The port's
-# target is the iOS 16.5 image (iPhone10,3 / 20F66), whose members are
-# already extracted on the porting host under E:\nio-unixnu-port\ios165\.
-# The 16.5 switch replaces this block with the one from the
-# ios-16.5-20F66 profile, which carries its own pins.
-url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
-product = "iPad7,1"
-version = "17.7.11"
-build = "21H461"
-device_class = "j120ap"
-chip_id = 0x8011
-board_id = 12
+# The target: the iOS 16.5 image (iPhone10,3 / 20F66). The restore image is
+# not redistributable, so the URL names the member instead of pointing at
+# Apple's CDN; point the build at a local copy with --ipsw or UNIXNU_IPSW.
+# The user's copy and its extracted members are on the porting host under
+# E:\nio-unixnu-port\ios165\.
+url = "iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw"
+product = "iPhone10,3"
+version = "16.5"
+build = "20F66"
+device_class = "d22ap"
+chip_id = 32789
+board_id = 6
 fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
 
 [ipsw.sha256]
-"kernelcache.release.ipad7" = "13b97fa2c5ce97f04408dcc28c41fb6b0d60b9440065197879acf44b2572bf7b"
-"DeviceTree.j120ap.im4p" = "3f612f64819fbf6a8aacc03fabeda08ba897c4bf5385df995c59815c0c80c8f0"
-"044-76040-038.dmg.trustcache" = "4563bdbf6ed8f72237d45dbba3ccde432634338f95c10d79d5d4631678a97c7c"
-"044-76034-038.dmg.trustcache" = "9742f3d566369e6c48f63b3dc0740b06c243d13c6650e25bbf44616e13d6d097"
-"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
-"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+# Member hashes pinned by member file name. These are the two disk images the
+# [userdata] windows consume: OS and Cryptex1,SystemOS. unixnu ipsw fetch
+# checks every extracted member against its pin.
+#
+# The values were measured on the porting host against the extracted members
+# of E:\nio-unixnu-port\ios165\ipsw\, and they are the same two the
+# ios-16.5-20F66 profile carries.
+"096-04088-077.dmg" = "64354ba3475d3c34d6fc531f75585a7b24af0fdb7a3a8a2bdf95c7f351a3f290"
+"096-04666-078.dmg" = "2279bf443856fcb6a3f00b1fa06a32ba02a66fdf6ab6b12019462c7498aafdd3"
+"kernelcache.release.iphone10b" = "f753edf09be3cf2b21f4dead9deb44809d1f7f0efe8fb94c767ff500dc763fc1"
+"096-04088-077.dmg.trustcache" = "df0f60fd05b7c312ad0fddb5c85d8adf97b487e8500518337bc4cbde3ca73ea7"
+"096-04666-078.dmg.trustcache" = "501fa23c4620e68e48b91bd2ba8d74251d4fbe37147290650cf717bbef619616"
+"DeviceTree.d22ap.im4p" = "51e7e42b74fb5e4cf5c7c1eed30b3d79ec829edfe8c0884c2e7839ddf62a4853"
 
 # userdata lives on LUN 4 (sde). 224.3 GiB raw; the tested-disk size is a
 # separate decision and is deliberately not set here.
@@ -170,7 +265,7 @@ ENABLE_SECUREBOOT = "0"
 DEVICE_MODEL = "0"
 MEMORY_PROTECTION = "TRUE"
 SHIP_MODE = "FALSE"
-BUILDID_STRING = "nio-xnu-17.7.11"
+BUILDID_STRING = "nio-xnu-16.5"
 
 # nio's own boot.img is header v3 (no kernel_offset/tags_offset); ABL decides
 # where the payload lands, so the packer only needs the page size.
@@ -189,7 +284,7 @@ base = 0
 unixnu = "../UniXNU"
 
 [package.defconfig]
-"ipados-17.7.11-21H461" = "nio_defconfig"
+"ios-16.5-20F66" = "nio_defconfig"
 
 [payload]
 volume = "NIOXNU"
