@@ -67,7 +67,11 @@ on:
       - "scripts/**"
 
 permissions:
-  contents: read
+  # read is enough for the build itself. The one write is for the
+  # ci-diagnostics branch, which carries the failure report so that a
+  # broken build can be read without a GitHub account: the artifact that
+  # holds the same logs needs one to download.
+  contents: write
 
 concurrency:
   group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
@@ -108,7 +112,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: device
-          persist-credentials: false
+          # The credentials are kept so that the failure report can be
+          # pushed onto the ci-diagnostics branch of THIS repository. The
+          # token is written into device/.git/config and is used by nothing
+          # else: the build reads the tree and never talks to the network.
+          persist-credentials: true
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -341,39 +349,81 @@ jobs:
           du -sh out 2>/dev/null || true
 
       # The build log is the thing that says why the build failed, and it is
-      # 27 MB: too big to read, and the artifact it rides in needs a GitHub
-      # account to download. So the lines that matter are copied into the run
-      # summary, which anyone can read on the run page without one.
+      # 22 MB: too big to read, and the artifact it rides in needs a GitHub
+      # account to download. So the lines that matter are copied out of it,
+      # twice, into two places that need no account:
       #
-      # What matters is the tail of the step that failed: the compiler's or the
-      # linker's own words, not the recipe's summary line. The recipes print
-      # one "unixnu: <recipe> failed (n)" line at the end, which names the
-      # recipe but not the reason, so the log file it points at is what gets
-      # read here.
+      #   * the run summary, which anyone can read on the run page
+      #   * the ci-diagnostics branch of this repository, which anyone can
+      #     clone over SSH
+      #
+      # The branch is the reliable one: the run summary is rendered by
+      # javascript, so a reader that does not run javascript sees nothing
+      # there. The branch is plain git.
+      #
+      # What matters is the tail of the step that failed: the compiler's or
+      # the linker's own words, not the recipe's summary line. The recipes
+      # print one "unixnu: <recipe> failed (n)" line at the end, which names
+      # the recipe but not the reason, so the log file it points at is what
+      # gets read here.
       - name: Explain the failure
         if: failure()
         run: |
+          report="$RUNNER_TEMP/failure-report.md"
           {
-            echo "## Why the build failed"
+            echo "# Why the build failed"
+            echo
+            echo "run: $GITHUB_RUN_NUMBER, commit $GITHUB_SHA"
             echo
             # Every log the build wrote, newest name first, so the deepest
             # cause (the last recipe to run) is read first.
             for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
               name=$(basename "$log")
-              echo "### $name"
+              echo "## $name"
               echo
               echo '```'
-              tail -n 60 "$log"
+              tail -n 80 "$log"
               echo '```'
               echo
             done
-            echo "### status.txt"
+            echo "## status.txt"
             echo
             echo '```'
-            tail -n 40 "$RUNNER_TEMP/status.txt" 2>/dev/null || echo "(no status)"
+            tail -n 60 "$RUNNER_TEMP/status.txt" 2>/dev/null || echo "(no status)"
             echo '```'
+          } > "$report"
+          {
+            echo "## Why the build failed"
+            echo
+            echo "The full report is on the \`ci-diagnostics\` branch: \`ci-diagnostics/report.md\`."
+            echo
+            cat "$report"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "the failure was explained in the run summary"
+
+          # Push the report onto its own branch. A branch and not the main
+          # one: this is a machine-written note about a broken build, and it
+          # must not land in the history of the source.
+          #
+          # The push happens in the device checkout, because that is the
+          # repository the branch belongs to; the checkout's token is what
+          # authorizes it.
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin ci-diagnostics:refs/remotes/origin/ci-diagnostics 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/ci-diagnostics; then
+            git checkout -B ci-diagnostics refs/remotes/origin/ci-diagnostics
+          else
+            git checkout --orphan ci-diagnostics
+            git rm -rf --cached . >/dev/null 2>&1 || true
+          fi
+          mkdir -p ci-diagnostics
+          cp "$report" ci-diagnostics/report.md
+          git add -f ci-diagnostics/report.md
+          git commit -q -m "ci: the failure report for run $GITHUB_RUN_NUMBER" || true
+          git push -f origin ci-diagnostics:ci-diagnostics || \
+            echo "::warning::the diagnostics branch could not be pushed"
+          echo "the failure was explained in the run summary and on the ci-diagnostics branch"
 
       - name: Upload the kernel
         if: success()
