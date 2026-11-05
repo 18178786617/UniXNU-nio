@@ -36,18 +36,36 @@ PM4，读数都要有人能立刻看到。
 | 位置 | 内容 | 状态 |
 |---|---|---|
 | `os-profiles/ios-16.5-20F66/` | 16.5 的 OS profile（从 NX769J 抄来，`prelink.tool` 改成 nio 自己的包装脚本） | 就位 |
-| `patches/xnu-8796/` | 64 个重基到 xnu-8796.101.5 的补丁 + series，NX769J 已验证**严格按序全部 apply** | 就位 |
-| `patches/xnu-8796/gpu-probe-start.patch` | nio 自己的 GPU 探针钩子，按 8796 的 `offline-legacy-start.patch` 之后的锚点重写，插在 series 第 36 位 | 已写，待 CI 验 |
+| `patches/xnu-8796/` | 65 个重基到 xnu-8796.101.5 的补丁 + series，NX769J 已验证**严格按序全部 apply**；加上本仓的两条共 **66 条** | 就位 |
+| `patches/xnu-8796/gpu-probe-start.patch` | nio 自己的 GPU 探针钩子，按 8796 的 `offline-legacy-start.patch` 之后的锚点重写，插在 series 第 36 位 | 已验 |
+| `patches/xnu-8796/native-smp-type-clusters.patch` | SM8250 特有的双集群调度补丁，本仓在 8796 上重做（NX769J 是 SM8550，没有这条） | 已验 |
 | `scripts/emit-prelink-nio.py` | prelink 包装脚本（16.5 kernelcache 的 Libm 常量池表） | 就位 |
 | `.github/workflows/kernel.yml` 的「Install the OS profile」 | 构建时把设备仓的 profile 装进 UniXNU 检出 | 就位（对当前 17.7.11 无副作用） |
 
-**还差一块，而且只有一块**：`native-smp-type-clusters.patch` —— SM8250 特有的
-双集群调度补丁（`board_config.h` 的 `MAX_CPU_CLUSTERS=2` + `sched_clutch.c` +
-`thread_group.c`）。NX769J 是 SM8550，它的重基系列里**没有**这一条。
+**整套 66 条已经在真实的 xnu-8796.101.5 上按序 apply 过，零失败。**
+验证方法（可复现）：从 Apple 的开源发行拿到 `xnu-8796.101.5.tar.gz`
+（`codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/xnu-8796.101.5`），
+`git init` 后逐条 `git apply`，顺序照 series。结果：**66 条全部 ok**，
+改动落在 81 个文件上（+2791 / -125）。
 
-三个锚点在 8796 上都还在，但上下文已经变了（`sched_clutch_bucket_init` 后面
-的空行数、`thread_group.c` 的函数排布都不同），`git apply --check` 直接报
-「patch does not apply」。所以这条要重做三个 hunk，不是改行号那么简单。
+### 双集群补丁为什么必须重做
+
+NX769J 是 SM8550，它的重基系列里没有 SM8250 的
+`native-smp-type-clusters.patch`。这条补丁做三件事：
+`board_config.h` 里给 BCM2837 放开 `MAX_CPU_CLUSTERS = 2` 与 `__ARM_AMP__`；
+`sched_clutch.c` 里在没有性能控制器时给每个 bucket group 一个默认偏好簇；
+`thread_group.c` 里加 `thread_group_set_default_preferred_clusters()`。
+
+三个锚点在 8796 上都还在，但**上下文都变了**：
+
+- `board_config.h`：8796 里 BCM2837 块在 VMAPPLE 块**之前**（10063 在之后），
+  所以覆盖块要插到 VMAPPLE 的 `#endif` 之后、`#if MAX_CPU_CLUSTERS == 1` 之前 ——
+  位置很关键，放晚了下面那句 `#undef __ARM_AMP__` 会把它清掉。
+- `sched_clutch.c`：结构没变，锚点还在，只是行号变了。
+- `thread_group.c`：8796 里 `sched_perfcontrol_edge_cpu_rotation_bitmasks_set()`
+  **不存在了**（8796 那一支把它删了），所以新增函数后面接的是
+  `#else /* CONFIG_SCHED_EDGE */` 而不是原来那个函数。新函数仍然落在
+  `#if CONFIG_SCHED_EDGE` 分支里。
 
 ---
 

@@ -54,6 +54,7 @@ zzy-staged-system-apps.patch
 zzyb-native-cryptex-os-view.patch
 zzyc-owner-skip-launch-constraints.patch
 native-smp-secondary.patch
+native-smp-type-clusters.patch
 sheng-platform-power.patch
 zzz-boot-progress.patch
 xnu-8796.101.5-security-init.patch
