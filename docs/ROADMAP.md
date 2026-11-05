@@ -144,6 +144,27 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
   3. **原版绑定地址**。sheng 写死了三个地址
      （`0xfffffff00577b318` / `0xfffffff00577b364` / `0xfffffff006b313d8`），
      那是它 donor 里的。nio 要从 16.5 donor 里重新定位。
+
+  **第 3 条已经做完一半了。** 16.5 donor 的符号表已经解开（5868 个导出名），
+  两个原版绑定都在：
+
+  | 符号 | 16.5 地址 |
+  |---|---|
+  | `__ZN9IOServiceC2EPK11OSMetaClass` | `0xfffffff007758008` |
+  | `__ZN9IOServiceD2Ev` | `0xfffffff007758038` |
+
+  而 kext 侧调用它们的 stub 也在 `__PLK_TEXT_EXEC`（`0xfffffff005594000`，
+  size `0x16cc000`）里找到了 **142 对**，每对的偏移是 +0xC —— 与 sheng 的
+  +0x14 同一形状。定位方法是把 sheng 的 `resolve_stub` 那三指令模式
+  （`ADRP` + `LDR` + `BR`）在 16.5 的 `__PLK_TEXT_EXEC` 上全扫一遍，读出
+  stub 指向的 8 字节槽，比对导出表。**还差的是挑出属于
+  `IOMobileGraphicsFamily` 的那一对** —— 该 kext 在 16.5 的
+  `_PrelinkExecutableLoadAddr` 是 `0xfffffff004f67b40`（size `0x8378`），
+  但它在 `__PRELINK_TEXT`（`0xfffffff004dd0000`，size `0x7c4000`）里，
+  而那 142 对 stub 在 `__PLK_TEXT_EXEC` 里，两段的映射关系要再查。
+
+  需要的工具：`kits/XnuPrelink/native_prelink.py` 的
+  `macho()` / `exports()` / `backed_offset()`，全部现成。
 - **D3｜先只做最小形态**：只编 `NativeMobileDisplay.cpp` + `original-bindings.o`，
   跳过 `MobileDisplayProviderProbe`（sheng recipe 的第 83 行起）。少一块就少
   一个失败点，先让 framebuffer 被接管住。
@@ -165,9 +186,12 @@ B 的 `build-gop-legacy-display.py` 一口气编 20 多个 sheng 专属组件，
 
 ### 风险
 
-- 16.5 donor 里必须有 `IOMobileFramebuffer`。iPhone X 的 16.5 有，但要先解开
-  IMG4/LZFSE 才能读到符号表 —— 本机没有 `lzfse`/`lz4`/`img4lib`，
-  `compression_tool` 只有 macOS 有。这件事要放 CI（macOS runner）做。
+- ~~16.5 donor 里必须有 `IOMobileFramebuffer`。iPhone X 的 16.5 有，但要先解开
+  IMG4/LZFSE 才能读到符号表~~ —— **这条已经排除**：donor 已解开
+  （`donor/kernelcache.decompressed.gz`），符号表 5868 个导出名，
+  `tools/prelink-kexts-16.5.json` 里有 239 个 kext 的地址表，
+  `IOMobileGraphicsFamily` 在 `0xfffffff004f67b40`（size `0x8378`）。
+  剩下的是「挑出属于它的那一对 stub」这一步，不是「有没有符号」的问题。
 - `GopFramebuffer` 的 `os_abi` 没写 16.5。这是目录里的元数据声明，
   `scripts/unixnu/*.py` **完全不校验 `os_abi`**（grep 零命中），所以不会挡住
   构建；但要在 `porting.toml` 里记一笔「声明与事实不符」。
@@ -217,46 +241,53 @@ QCA6490，走 CNSS2 + q6v5 + MHI**。
 | **W5** | 与 iOS 网络栈联调：关联、DHCP、上网 | 能上网 |
 | **BT** | 与 WiFi 共享电源与 CNSS，走 **GENI UART + HCI**，接 iOS `bluetoothd` | 能被 iOS 发现 |
 
-### W4 的硬难点：16.5 的无线用户态是 CoreWIFI，不在文件系统里
+### W4 的硬难点：16.5 的无线用户态是 CoreWIFI，而内核侧有 IO80211Family
 
-这一条在 16.5 切换完成后可以确定地说了，因为它是在本机的 16.5 用户态上查的：
+先纠正一处：早先这里写的是「16.5 没有 IO80211 用户态栈」，那是查了用户态
+文件系统得出的结论，**只对了一半**。16.5 切换完成后把 donor kernelcache 解开
+查了 `__PRELINK_INFO`，真���是：
+
+**内核侧有 IO80211Family。** 16.5 的 kernelcache 里有 239 个 kext，其中
+`com.apple.iokit.IO80211Family` 在列：
+
+| kext | `_PrelinkExecutableLoadAddr` | size |
+|---|---|---|
+| `com.apple.iokit.IO80211Family` | `0xfffffff005409780` | `0x72968` |
+| `com.apple.iokit.IOMobileGraphicsFamily` | `0xfffffff004f67b40` | `0x8378` |
+| `com.apple.iokit.IOSurface` | `0xfffffff004ed7400` | `0x5a05` |
+
+完整的 239 条清单在 `tools/prelink-kexts-16.5.json`（31 KB），由 donor 的
+`__PRELINK_INFO` 段反序列化而来。**board.toml 那 30 条 roots 全部在这份清单里
+核实存在** —— 这条 pin 在本机镜像上完整验证过。
+
+用户态那一半的结论仍然成立：
 
 - `System/Library/Extensions/` 里**没有 IO80211Family.kext**（只有
   `IOHIDFamily.kext`、`IOUSBDeviceFamily.kext`、`AppleMultitouchSPI.kext`
   等 18 个）；
-- `System/Library/PrivateFrameworks/IO80211.framework/` 里**只有
-  `Info.plist` 和 `_CodeSignature`，没有二进制**；
-- `System/Library/PrivateFrameworks/CoreWiFi.framework/` 同样**只有
-  `Info.plist` 和签名**；
-- 16.5 的 profile `roots` 列表里也**没有 IO80211Family**（对比 17.7.11 的
-  roots 有 `IOHIDFamily` 和 `IOHIDEventDriver`，16.5 只有 `IOHIDFamily`）。
+- `System/Library/PrivateFrameworks/IO80211.framework/` 和
+  `PrivateFrameworks/CoreWiFi.framework/` 都**只有 `Info.plist` 和签名，
+  没有二进制**。
 
-原因不是「Apple 把 kext 删了」，而是**16.5 的用户态二进制全部在 dyld shared
-cache 里**。本机 `E:\nio-unixnu-port\ios165\root\` 是从 IPSW 解出的文件系统，
-它**不含** dyld cache —— cache 在 `096-04088-077.dmg`（4.7 GB 的系统镜像）
-里面，`AirPortAssistant.framework`、`CoreWiFi.framework` 这些在 root 里都只剩
-骨架。
+原因是 **16.5 的用户态二进制全部在 dyld shared cache 里**，而本机
+`E:\nio-unixnu-port\ios165\root\` 是从 IPSW 解出的文件系统，不含 cache ——
+cache 在 `096-04088-077.dmg`（4.7 GB）里面。
 
-这件事对 W4 有两个后果，都要提前决定：
+所以 W4 的形状变了，而且变好了：
 
-- **内核侧要做的是 Apple80211 的 ioctl 契约**，不是 IO80211Family 的。
-  CoreWIFI 的客户端通过 `Apple80211` 的 ioctl 与内核对话（`SIOCSA80211` =
-  0x802869c8、`SIOCGA80211` = 0xc02869c9），这条契约在 16.5 依然成立 ——
-  IO80211 的 ioctl 号码是稳定的，框架换了而已。所以 sheng
-  `package/WifiNet.cpp` 的路子是对的：内核侧实现 Apple80211 的 ioctl 与
-  接口注册。
-- **要拿到 CoreWIFI 的真实符号表**，得先从 `096-04088-077.dmg` 里取出
-  dyld shared cache 并 dump 它。仓库里没有这一步的工具（`tools/` 下只有
-  `patch-xnu-console.py` 一类），而没有符号表就只能猜接口。
-
-所以 W4 之前要先补一步 **W4.0：取出并 dump 16.5 的 dyld shared cache**，
-把 CoreWIFI / IO80211 相关的真实导出符号列出来。这一步不做，W4 就是猜。
+- **内核侧不是从零写 IO80211**，而是实现 Apple80211 的 ioctl 契约
+  （`SIOCSA80211` = 0x802869c8、`SIOCGA80211` = 0xc02869c9），让 16.5 的
+  IO80211Family（已经在 donor 里）能驱动它。sheng `package/WifiNet.cpp` 的
+  路子正是这个，方向确定。
+- **用户侧仍然要自己找栈**：CoreWIFI 的客户端在 dyld cache 里，root 里只剩
+  骨架。要用它们就得把 cache 从 `096-04088-077.dmg` 里取出来 dump，拿到
+  CoreWIFI 的真实导出符号。所以 W4 之前仍然要先做 **W4.0**。
 
 两条路，代价不同：
 
 - **自建 Apple80211 ioctl 桥**（sheng `WifiNet.cpp` 的路子）：内核侧实现
-  Apple80211 的 ioctl 与接口注册，用户态侧用 16.5 里那份 CoreWIFI 家族来
-  驱动它。工作量大，但方向是确定的。
+  Apple80211 的 ioctl 与接口注册，用户态侧用 16.5 的 CoreWIFI 家族驱动它。
+  工作量大，但方向是确定的。
 - **只做到 L2**：内核侧给出网卡与帧收发，不接 iOS 的无线服务栈。能测、能用
   自己写的工具验证，但不是「系统里的 WiFi」。
 
