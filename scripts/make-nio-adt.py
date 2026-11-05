@@ -87,6 +87,24 @@ def main():
         if not args.no_profile and not args.ipad_identity:
             platform, profile_path = load_platform(args.profile)
             profile_name = profile_path.name
+        # The menu declares the initrd and the ADT has to declare the same
+        # thing. DarwinBoot refuses the kernel when the two disagree: a
+        # kernel entry that carries an initrd, with a device tree that has no
+        # RAMDisk placeholder to put it in, is read as a tampered image and
+        # the boot stops with "Compromised Data" before a single byte of the
+        # kernel runs.
+        #
+        # The pairing is read from the menu rather than asked for on the
+        # command line, so the two cannot drift apart: the menu is what the
+        # firmware reads.
+        menu = tomllib.loads((REPO / "package" / "unixnu.toml").read_text())
+        initrd = any(entry.get("initrd") for entry in menu.get("entry", []))
+        if initrd and not (args.data_ramdisk or args.packed_data_ramdisk):
+            args.data_ramdisk = True
+        if not initrd and (args.data_ramdisk or args.packed_data_ramdisk):
+            raise ValueError(
+                "the ADT declares a data ramdisk but the menu declares no "
+                "initrd; DarwinBoot refuses a kernel whose two disagree")
         # The board runs eight cores and the ADT describes all of them: the
         # upstream payload step takes them from the hardware device tree, and
         # the hardware profile here is the same eight. One CPU is a bring-up
@@ -121,10 +139,12 @@ def main():
         "hardware_profile_sha256": hashlib.sha256(hardware_path().read_bytes()).hexdigest(),
         "hardware_sources": hardware["sources"], **summary(decoded),
         "os_profile": profile_name,
+        "menu_initrd": initrd,
+        "data_ramdisk_declared": bool(args.data_ramdisk or args.packed_data_ramdisk),
         "roundtrip_verified": True, "hardware_tested": False,
         "memory_window_requires_firmware_validation": True,
         "limitations": [
-            "No nio attempt has reached XNU yet; this ADT alone proves nothing about firmware handoff.",
+            "No nio attempt has reached XNU yet; this ADT alone proves nothing about firmware hand-off.",
             "dram-size must equal the measured bank total, not the 8 GiB soldered capacity.",
             "Framebuffer is handed over from GOP in boot_args, not initialized by this ADT.",
             "No GPU/touch hardware driver nodes; the OS identity is a userspace compatibility input.",
@@ -132,9 +152,11 @@ def main():
     }
     args.output.with_name(args.output.name + ".json").write_text(json.dumps(report, indent=2) + "\n")
     identity = tree.properties.get("model", b"").rstrip(b"\0").decode("ascii", "replace")
+    handoff = tree.at("/chosen/memory-map").properties
     print(f"nio ADT: {len(blob)} bytes; {len(tree.at('/cpus').children)} CPU(s); "
           f"GIC {report['gic_distributor']}/{report['gic_redistributor']}; "
           f"model {identity}; host-validated only")
+    print("  handoff %s" % (", ".join(sorted(handoff)) or "(nothing)"))
 
 
 if __name__ == "__main__":
