@@ -25,14 +25,21 @@ kit = "nio"
 # and start secondary cores; storage, display and GPU are added once the boot
 # reaches the console. DarwinBoot/GopFramebuffer are firmware/embedded and are
 # not compiled here.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink"]
+#
+# ArmSmmu4K, AdrenoPM4 and AdrenoFirmware are the GPU's three upstream kits.
+# They are "embedded" kits (build_stage = embedded, no build of their own), so
+# selecting them adds no archive and no second copy: it only makes the tree
+# carry their sources at kits/<name>, where scripts/build-adreno650.py compiles
+# them into the board's GPU archive. Without them the recipe has no input.
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware"]
 
 [kernel]
 defconfig = "nio_defconfig"
 # Same fragment order as alioth (SM8250, same OS profile). The device defconfig
 # is applied last, so every nio override below wins.
 config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ipados.config"]
-# arch (56) + soc (2) + the two prelink patches from XnuPrelink.
+# arch (56) + soc (2) + the two prelink patches from XnuPrelink + this board's
+# GPU probe start hook.
 #
 # The OS profile's own series adds zzz-boot-progress.patch between them, and
 # that patch edits the sheng_pmgr_run() block inside bsd_init.c: it applies only
@@ -46,10 +53,34 @@ patch_series = [
   "arch:patches/xnu/series",
   "soc:patches/xnu/series",
   "device:patches/xnu-prelink/series",
+  "device:patches/xnu/gpu/series",
 ]
 # The arch profile's default archives cover the components selected above.
-# No [kernel] archives override on purpose: any override must name every
-# kernel-stage component recipe or the pipeline refuses the build.
+#
+# The GPU archive needs one more recipe, and a list in this file REPLACES the
+# arch profile's list (profiles.merge() replaces lists, it does not append),
+# so the override below has to repeat the arch profile's eight entries
+# verbatim and add build-adreno650.py to them. The pipeline's rule
+# (scripts/unixnu/kernel.py archive_plan) is: as soon as one "component:"
+# entry is present, every kernel-stage component must be named. This board's
+# kernel-stage components are ArmDTPlatform, ArmCpu and SoftwareAES -- the
+# three "component:" lines below. The three GPU kits are build_stage =
+# "embedded" with no build of their own, so they need no entry of their own;
+# selecting them only puts their sources in the tree for the recipe to read.
+#
+# Keep the eight arch entries in step with profiles/arch/arm64/profile.toml:
+# the pipeline refuses the build when a kernel-stage component has no entry.
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "component:ArmDTPlatform",
+  "component:ArmCpu",
+  "component:SoftwareAES",
+  "build-software-aes-bindings.py",
+  "build-mockfs-fixture.py",
+  "build-libpthread-kernel.py",
+  "build-adreno650.py",
+]
 
 # Donor contract inherited verbatim from umi: the initializer address belongs to
 # kernelcache f18b4df8..., never to a nio address. Keep the SHA, or re-derive.
@@ -142,7 +173,21 @@ title = "Edge S - XNU bring-up"
 dram_size = "0x180000000"
 panic_screen = false
 timeout = -1
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120"]
+# nio-gpu=8 is the GPU probe's mode. Mode 8 is the first one that reaches the
+# hardware this phone can already do: it runs the probe's modes 1-7 (read the
+# GCC/GPUCC/SMMU state, bring the GMU clocks up, run the A650 cold start with
+# the HFI tables built from the AOP command database) and then powers GX
+# through the GMU, reading back the GX GDSC, RBBM_STATUS and both GBIF halt
+# registers. That is the state R117 measured from the UEFI side on this exact
+# phone (GX domain and GX clock on, GD=f8222800, RB=00000001, OI=80000001,
+# DB=0c0330db), so it is the first mode with a known-good baseline.
+#
+# The probe prints its rows through the kernel console, which this board's
+# console patch points at the panel: every changed row is printed as
+# "GPUROWnn <text>". Modes 9-11 add the first GPU command, the zap shader
+# with the GPU interrupt, and the user-client path; they are raised one at a
+# time, each with its own image, so a fault is attributable.
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not

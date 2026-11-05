@@ -67,12 +67,29 @@ CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=n
 CONFIG_XNU_NATIVE_PAN=y
 CONFIG_XNU_BOOT_PROGRESS=n
 
-# Display and GPU stay off. The UEFI firmware leaves a GOP surface at
+# Display stays off. The UEFI firmware leaves a GOP surface at
 # 0x9c000000, but the legacy path needs umi's absolute IOMobileFramebuffer
 # bindings, which are not qualified for this kernel yet.
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
-CONFIG_XNU_NATIVE_ADRENO=n
+# The GPU is on now, but only as far as mode 8 (power, clocks, GMU cold start,
+# GX up). The Metal accelerator is not built on this board: the accelerator is
+# an IOAccelerator subclass and this kernel has no IOAccelerator class at all
+# (IOAcceleratorFamily2 is absent from this XNU tree), so the archive carries
+# the driver half of NativeAdreno and the board probe, and the probe's mode 12
+# stays compiled out.
+#
+# The archive path uses {tree}: xnu_env() substitutes it, so the value is
+# absolute and satisfies both checks -- unixnu's in scripts/unixnu/kernel.py,
+# which runs from the checkout root, and build-xnu-4k-baseline.sh, which runs
+# from the tree. A relative path satisfied neither.
+#
+# scripts/build-xnu-4k-baseline.sh hard-codes build/adreno740/libAdreno740.a
+# for this archive and ignores the value below, so the recipe writes it under
+# that name. The A740 in the path is the catalog component's name, not this
+# board's silicon: the silicon is an A650.
+CONFIG_XNU_NATIVE_ADRENO=y
+CONFIG_XNU_NATIVE_ADRENO_ARCHIVE="{tree}/build/adreno740/libAdreno740.a"
 CONFIG_XNU_ADRENO_FIRMWARE_PROBE=n
 CONFIG_XNU_ADRENO_PM4_PROBE=n
 CONFIG_XNU_SMMU4K_PROBE=n

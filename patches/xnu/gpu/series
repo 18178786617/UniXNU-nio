@@ -1,0 +1,7 @@
+# nio's own XNU patch series, applied after the arch and soc series.
+#
+# One entry: the GPU probe's start hook. It is a device-layer patch, so its
+# context is the state the arch and soc series leave behind.
+#
+# Paths without a prefix are relative to this file.
+gpu-probe-start.patch

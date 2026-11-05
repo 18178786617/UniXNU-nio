@@ -1,0 +1,3 @@
+[submodule "adreno650"]
+	path = package/adreno650
+	url = https://github.com/FFT-infra/Adreno650.git
