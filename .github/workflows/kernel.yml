@@ -394,12 +394,34 @@ jobs:
             echo
             # Every log the build wrote, newest name first, so the deepest
             # cause (the last recipe to run) is read first.
+            #
+            # A tail is not enough: the compiler puts the error at the point
+            # of the failure, and a file with twenty warnings around it
+            # pushes that line past the last eighty. So the errors come
+            # first, with the lines around them, and the tail is only the
+            # closing paragraph.
             for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
               name=$(basename "$log")
               echo "## $name"
               echo
+              if grep -qE '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error|Error [0-9]' "$log"; then
+                echo "### the errors"
+                echo
+                echo '```'
+                grep -nE '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error|Error [0-9]|ld: symbol' "$log" | head -40
+                echo '```'
+                echo
+                echo "### around them"
+                echo
+                echo '```'
+                grep -nE -B6 -A10 '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error' "$log" | head -120
+                echo '```'
+                echo
+              fi
+              echo "### the tail"
+              echo
               echo '```'
-              tail -n 80 "$log"
+              tail -n 40 "$log"
               echo '```'
               echo
             done
@@ -445,6 +467,18 @@ jobs:
           mkdir -p ci-diagnostics
           cp "$report" ci-diagnostics/report.md
           git add -f ci-diagnostics/report.md
+          # The complete log of every step, next to the report. The report
+          # quotes the interesting lines, but a quote can still be the wrong
+          # lines: a compiler error that sits above a wall of warnings is
+          # missed by a grep for "error:" when the message does not carry
+          # that word. The whole file does not have that problem.
+          rm -rf ci-diagnostics/logs
+          mkdir -p ci-diagnostics/logs
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            cp "$log" "ci-diagnostics/logs/$(basename "$log")" 2>/dev/null || true
+          done
+          [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" ci-diagnostics/logs/status.txt || true
+          git add -f ci-diagnostics/logs
           git commit -q -m "ci: the failure report for run $GITHUB_RUN_NUMBER" || true
           git push -f origin ci-diagnostics:ci-diagnostics || \
             echo "::warning::the diagnostics branch could not be pushed"
