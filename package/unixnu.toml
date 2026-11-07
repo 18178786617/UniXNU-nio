@@ -31,4 +31,4 @@ initrd = "Payloads/rootfs.img"
 # amfi_get_out_of_my_way=1: the standard AMFI bypass boot-arg (rmx1971 device
 # record uses it too); launchd has no code signature and AMFI would otherwise
 # refuse it.
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 rd=md0 amfi_get_out_of_my_way=1"
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1"

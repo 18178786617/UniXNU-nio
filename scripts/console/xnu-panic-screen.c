@@ -22,6 +22,357 @@ struct vc_info {
   u64 v_baseaddr;
 };
 
+/* ---- the GOP framebuffer DarwinBoot handed over ------------------------
+ *
+ * DarwinBoot passes the GOP framebuffer's *physical* address (0x9C000000 on
+ * nio) in boot_args.Video.v_baseAddr and XNU maps it in initialize_screen(),
+ * which only runs from PE_create_console() near the end of arm_init.  Until
+ * that happens vinfo.v_baseaddr is 0 and there is nothing to draw on, so a
+ * kernel that dies before that point leaves the phone showing DarwinBoot's
+ * picture with no explanation whatsoever.
+ *
+ * The blob therefore maps the buffer itself the first time it needs it.
+ * ml_io_map_unmappable() is exactly the call the kernel would have made; it
+ * is only safe once the VM exists, which is what the kernel_map test checks.
+ * The geometry is the one DarwinBoot printed:
+ *
+ *   video  base 0x9C000000  1080x2520  row 4320 bytes  32 bpp
+ *
+ * round_page(2520 * 4320) = 0xA62000 covers all 2520 rows of the panel, so
+ * nothing the blob draws can reach past the end of the mapping. */
+#define FB_PHYS        0x9C000000UL
+#define FB_COLS        1080u
+#define FB_ROWS        2520u
+#define FB_ROWBYTES    4320u
+#define FB_DEPTH       32u
+#define FB_MAPSIZE     0xA62000UL      /* round_page(2520 * 4320) */
+#define FB_PROT        0x7u           /* VM_WIMG_IO, osfmk/arm/memory_types.h */
+
+/* Defined further down, next to the R187 diagnostic ladder. */
+static u32 va_mapped (u64 a);
+
+static u64 fb_lazy_map (void)
+{
+  /* R222: the blob no longer maps the panel, and no longer writes vinfo.
+   *
+   * R221 mapped it with ml_io_map_unmappable() and stored the result in
+   * vinfo.v_baseaddr.  That address was wrong in a way that looks right:
+   * the mapping went into the bootstrap pmap while the live cpu_ttep was
+   * built out of a different one, so the page was reachable (its L1 entry
+   * was there) but had no L2 entry.  Every store into it raised a level-2
+   * translation fault, and the panic dump the blob happened to be drawing
+   * at the time died half-way through its own last line:
+   *
+   *   far = 0x0000000000000968   esr = 0x0000000096000004
+   *   pc  = 0xfffffff007a2245c   (cell(): str w17, [x18, w4, uxtw #2])
+   *
+   * Mapping the panel is the kernel's business: initialize_screen() does
+   * it with the live VM and publishes the result in vinfo.v_baseaddr.  The
+   * blob only reads that, and asks the hardware (at s1e1r) whether the
+   * address translates right now. */
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+
+  return (u64)v->v_baseaddr;
+}
+
+/* ---- where the pixels go -----------------------------------------------
+ *
+ * Up to 0x73e3100 the frame buffer is reachable at its physical address
+ * 0x9c000000: that low address is covered by the bootstrap tables' identity
+ * block.  At 0x73e3100 arm_vm_init() executes `msr ttbr1_el1, cpu_ttep` and
+ * from the very next instruction the identity block is gone -- the same
+ * store is now a data abort, which is why every panic raised from inside
+ * arm_vm_init() so far has produced a completely blank screen instead of the
+ * text this file is here to draw.
+ *
+ * The tables it switched to do carry the physmap, so the panel is still
+ * reachable at
+ *
+ *     gVirtBase + (0x9c000000 - gPhysBase)
+ *
+ * and phystokv() (arm_vm_init.c:387) is literally that expression.  Both
+ * globals are set near the top of arm_vm_init() (arm_vm_init.c:1836), long
+ * before anything here can run, so two loads is all it takes.  Before that
+ * they are zero, and then the plain physical address is the right answer.
+ *
+ * _gPhysBase = 0xfffffff007178100
+ * _gVirtBase = 0xfffffff007178110   (checked with llvm-nm on this build)
+ */
+#define GVPHYS_ADDR  0xFFFFFFF007178100UL
+
+#define KVA_ACTIVE_ADDR  0xFFFFFFF007178038UL   /* _kva_active */
+
+/* R210: always the identity address.
+ *
+ * The old rule was "if _kva_active is set, use the physmap alias", on the
+ * theory that the bootstrap tables (and with them the 0x9c000000 identity
+ * block) are gone once TTBR1 is switched to cpu_ttep.  Two rounds of
+ * measurements say otherwise:
+ *
+ *   - R205/R206 proved the physmap does *not* cover the frame buffer at all
+ *     (all four stamps drawn through gVirtBase + 0x9c000000 - gPhysBase came
+ *     back dark), so the alias is not a fallback, it is a hole.
+ *   - R208..R210 run with the TTBR0 gate at 0x73e3114 NOPed, so 0x9c000000
+ *     keeps its identity mapping for the whole of arm_vm_init.
+ *
+ * The consequence of the old rule: the moment 0x73e3128 set _kva_active = 1,
+ * every later byte the blob drew went into unmapped memory, which is why the
+ * R209 screen showed the diag ladder but never a panic message.  The panic we
+ * are chasing happens *at* that store, i.e. exactly where the old rule
+ * flipped the screen off.
+ *
+ * Restore the kva_active test if the TTBR0 gate is ever un-NOPed again; until
+ * then the identity address is the only one that is mapped. */
+
+/* R221: the base is picked at run time, because there are two of them.
+ *
+ * arm_init.c:555 says it outright:
+ *
+ *     // arm_vm_init removes TTBR0. Use the established kernel I/O mapping now.
+ *
+ * arm_vm_init() drops the bootstrap tables (pmap.c's set_mmu_ttb(invalid_ttep)
+ * and the TTBR0 switch it gates), and with them the identity block the entry
+ * probe installed over the panel.  From that moment on the panel's *physical*
+ * address 0x9c000000 is a hole: a load from it is a level-1 translation fault.
+ *
+ * R220 died exactly there.  It kept its state in the panel's row 0 and reached
+ * it through the physical address, and the first read after arm_vm_init()
+ * came back as
+ *
+ *     far=0x000000009c00001c  esr=0x0000000096000005  pc=0xfffffff007a22778
+ *
+ * -- an L1 translation fault (FSC 0x05) on the state word itself, with x20
+ * holding 0x9c00001c and the faulting instruction being "ldr w8, [x20]".
+ *
+ * After the switch there is exactly one way to reach the panel: the kernel's
+ * own mapping, which initialize_screen() publishes in vinfo.v_baseaddr.
+ * R220 never looked at it, even though panic_screen_main() drew the whole
+ * panic dump through it.
+ *
+ * So the base is chosen per call:
+ *
+ *   - the kernel's mapping, when it has published one;
+ *   - the physical address, while the identity block is still alive -- AT
+ *     S1E1R says the address still translates;
+ *   - nothing at all in the window between arm_vm_init() and
+ *     PE_create_console(), where neither route works.  Drawing is skipped
+ *     there rather than taking the kernel down for a panel.
+ */
+static u32 va_mapped (u64 a);
+
+static u64 fb_base (void){
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u64 m = (u64)v->v_baseaddr;
+
+  /* R222: the kernel's mapping is only usable if the hardware still
+   * translates it.  vinfo.v_baseaddr can name a page the live tables do
+   * not cover -- R221 proved exactly that (L1 entry present, L2 entry
+   * missing) -- and the first store into it then takes the kernel down
+   * over a panel.  at s1e1r is the hardware's own verdict, so ask it. */
+  if (m != 0 && va_mapped (m)) {
+    return m;
+  }
+  /* The identity block covers the panel's physical address for as long as
+   * the bootstrap tables are in place. */
+  if (va_mapped (FB_PHYS)) {
+    return FB_PHYS;
+  }
+  /* No writable panel right now.  Draw nothing rather than fault. */
+  return 0;
+}
+
+/* ---- where the blob keeps its state -------------------------------------
+ *
+ * R220: the blob is linked into __TEXT_EXEC, and the kernel maps that
+ * segment read-only (arm_vm_page_granular_ROX, arm_vm_init.c:1418).  So
+ * the moment arm_vm_init() switches TTBR1 to the new cpu_ttep, every store
+ * into the blob's own .data raises a level-3 permission fault.
+ *
+ * R219 died exactly there.  The blob's _kprintf hook routes every kernel
+ * printf through blob_printf(), and blob_vprintf() opens with
+ *
+ *     calls++;                       // .data
+ *     blob_xbase = (calls & 1) * 460;
+ *
+ * The first word is a store into the blob's own .data at
+ * 0xfffffff007a228dc (the symbol is blob_vprintf.calls, blob+6340), so the
+ * very first kprintf after the table switch took a permission fault on a
+ * read-only page.  XNU caught it, saw the fault address inside the kernel
+ * static region and printed "Unexpected fault in kernel static region" --
+ * which is why R219's screen showed a panic dump with no kernel log under
+ * it: the log stopped exactly at the switch.
+ *
+ * The blob was always written on the assumption that it keeps no writable
+ * state ("Zero-initialised on purpose ... 0 therefore means 'not started
+ * yet'"), and R193's calls/busy/blob_xbase/blob_first counters quietly broke
+ * that assumption.  The state therefore moved into the frame buffer's row 0.
+ *
+ * R221: the state stays there, but it is reached through fb_base() instead
+ * of through the panel's physical address.  Row 0 is at offset 0 of the
+ * panel, and both the identity mapping and the kernel's own mapping cover
+ * the same physical page, so the words are the same bytes before and after
+ * arm_vm_init() drops TTBR0 -- the state survives the switch.
+ *
+ * The magic word guards the reset: the frame buffer is not zeroed when the
+ * kernel boots, so the first access has to know whether the counters hold
+ * anything.  When there is no usable panel at all (the window between
+ * arm_vm_init() and PE_create_console()) the accessors return zero and
+ * store nothing: a counter that cannot be read is worth less than a
+ * kernel that keeps running. */
+#define STATE_ROW    0u
+#define ST_CALLS     0u
+#define ST_BUSY      1u
+#define ST_XBASE     2u
+#define ST_FIRST     3u
+#define ST_IDENT_X   4u
+#define ST_IDENT_Y   5u
+#define ST_MAGIC     7u
+#define ST_MAGIC_V   0xB10B0020u
+/* R233: the last fd 1 write, in two words.
+ *
+ * The early blob has about fifty spare bytes in __TEXT_EXEC's tail, and a
+ * plain text line about the fd 1 path costs three hundred and twenty eight:
+ * a second caller of tp_text() forces the compiler to stop inlining it and
+ * keep the whole body twice.  So the early blob only records the numbers
+ * here, in the frame buffer's state row, and the channel blob -- which has
+ * room to spare -- prints them as a line of text.
+ *
+ * The frame buffer's state row is the one piece of memory both blobs can
+ * agree on: it is the same bytes before and after arm_vm_init() drops
+ * TTBR0, and the touch bridge's own stash lives in the last row, not here.
+ * Slot 8 holds n and v packed together, slot 9 the number of bytes copied. */
+#define ST_FD1_N     8u
+#define ST_FD1_C     9u
+
+static volatile u32 *st_ptr (u32 i)
+{
+  u64 base = fb_base ();
+  volatile u32 *s;
+
+  if (base == 0) {
+    return 0;
+  }
+  s = (volatile u32 *)(base + (u64)STATE_ROW * FB_ROWBYTES);
+
+  if (s[ST_MAGIC] != ST_MAGIC_V) {
+    s[ST_CALLS] = 0u;
+    s[ST_BUSY] = 0u;
+    s[ST_XBASE] = 0u;
+    s[ST_FIRST] = 0u;
+    s[ST_IDENT_X] = 0u;
+    s[ST_IDENT_Y] = 0u;
+    s[ST_FD1_N] = 0u;
+    s[ST_FD1_C] = 0u;
+    s[ST_MAGIC] = ST_MAGIC_V;
+  }
+  return s + i;
+}
+
+static u32 st_get (u32 i)
+{
+  volatile u32 *s = st_ptr (i);
+
+  return s != 0 ? *s : 0u;
+}
+
+static void st_set (u32 i, u32 v)
+{
+  volatile u32 *s = st_ptr (i);
+
+  if (s != 0) {
+    *s = v;
+  }
+}
+
+#define BLOB_CALLS  (st_get (ST_CALLS))
+#define BLOB_BUSY   (st_get (ST_BUSY))
+#define BLOB_XBASE  (st_get (ST_XBASE))
+#define BLOB_FIRST  (st_get (ST_FIRST))
+#define IDENT_X     (st_get (ST_IDENT_X))
+#define IDENT_Y     (st_get (ST_IDENT_Y))
+
+/* ---- stage markers ------------------------------------------------------
+ *
+ * The kernel leaves nothing on the screen until it owns a framebuffer, so a
+ * failure before that point looks exactly like a success: the phone keeps
+ * showing DarwinBoot's picture.  These paint one coloured square per
+ * milestone, so a recording says exactly how far the boot got:
+ *
+ *   1 green -- arm_vm_init() has returned, the VM is up
+ *   2 blue  -- PE_create_console() ran but left no framebuffer mapping
+ *   3 magenta -- PE_create_console() ran and vinfo holds the kernel's own
+ *               mapping
+ *   4 cyan  -- PE_init_printf() has run, so every kprintf() from here on
+ *               reaches the screen through this blob
+ *
+ * R177: the squares used to sit at row 2400 of the 2520 row panel, and the
+ * recordings are filmed with a camera held over the top of the phone -- the
+ * bottom third of the panel never appears in frame.  A marker down there is
+ * indistinguishable from a marker that was never drawn, which is what
+ * happened for several rounds.  Row 1100 is in the middle of the panel and
+ * inside every frame we have.  The letter next to the square survives a
+ * camera that cannot tell green from magenta.
+ *
+ * R178: row 1100 is still below the frame.  The recordings only ever cover
+ * the top of the panel -- the enhanced crop of the R177 video shows the
+ * camera losing focus on the phone's own body below video row 680 -- so the
+ * marks now sit on row 170, right under the green band DarwinBoot paints
+ * (that band is rows 0..157), and the kernel log starts below them at row
+ * 336 so the two cannot overlap.  The entry probe writes its four colour
+ * bands into x 0..255 of the same row; the stage squares start at x 320,
+ * so the probe and the stages never share a pixel. */
+#define STAGE_ROW   170u
+#define STAGE_X0    320u
+#define STAGE_SIZE  96u
+#define STAGE_PITCH 128u
+
+static void cell (u8 *base, u32 rb, u32 x, u32 y, u8 c);
+
+__attribute__((used)) void stage_mark (u64 stage)
+{
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u8 *base;
+  u32 rb, w, x, y, i, c;
+  u32 colour;
+
+  fb_lazy_map ();
+  /* R222: fb_base() checks with at s1e1r that the address really translates
+   * now; vinfo.v_baseaddr on its own can name a page the live tables do not
+   * cover, and R221 proved that the store then faults. */
+  base = (u8 *)fb_base ();
+  rb   = v->v_rowbytes;
+  w    = v->v_width;
+  /* R222: before initialize_screen() the kernel has not published the
+   * geometry yet, but DarwinBoot printed it and it has not changed. */
+  if (rb == 0) {
+    rb = FB_ROWBYTES;
+  }
+  if (w == 0) {
+    w = FB_COLS;
+  }
+  if (base == 0 || rb == 0 || w == 0) {
+    return;
+  }
+  switch (stage) {
+  case 1:  colour = 0x0000ff00u; break;   /* green   */
+  case 2:  colour = 0x00ff0000u; break;   /* blue    */
+  case 3:  colour = 0x00ff00ffu; break;   /* magenta */
+  default: colour = 0x00ffff00u; break;   /* cyan    */
+  }
+  x = STAGE_X0 + STAGE_PITCH * ((u32)stage - 1u);
+  y = STAGE_ROW;
+  for (i = 0; i < STAGE_SIZE; i++) {
+    volatile u32 *row = (volatile u32 *)(base + (u64)(y + i) * rb + (u64)x * 4);
+    for (c = 0; c < STAGE_SIZE; c++) {
+      row[c] = colour;
+    }
+  }
+  /* "K1".."K4" in the block's own colour, so the stage is readable even in
+   * a photograph whose colours are off. */
+  cell (base, rb, x + 8u, y + 24u, 'K');
+  cell (base, rb, x + 40u, y + 24u, (u8)('0' + (u32)stage));
+}
+
 #define SCALE   3
 
 extern const u64 gFont[];
@@ -79,6 +430,41 @@ static u32 fb_rows (u8 *base, u32 rb, u32 h)
   }
 #endif
   return rows;
+}
+
+/* R227: how many rows of the panel the live tables actually reach.
+ *
+ * fb_rows() knows the extent of the kernel's own mapping, but that mapping
+ * only exists after PE_create_console().  Before that the panel is reached
+ * through the bootloader's identity block, which is two 2 MiB entries over
+ * the panel's physical address -- rows 0..969 -- and the kernel does not
+ * know that.  The panic screen believed the panel was 2520 rows tall and
+ * wiped rows 840..1176, which runs off the end of that block at row 970, so
+ * the panic handler faulted inside its own first line: the round ended with
+ * a silent screen and no far/esr/lv to read.
+ *
+ * Ask the hardware instead.  at s1e1r translates the address without raising
+ * an exception, so the last reachable row can be found by bisection. */
+static u32 fb_mapped_rows (u8 *base, u32 rb, u32 h)
+{
+  u32 lo = 0, hi = h;
+
+  if (base == 0 || rb == 0) {
+    return h;
+  }
+  while (lo < hi) {
+    u32 mid = lo + (hi - lo + 1) / 2;
+
+    /* The last address of the row, not its first: a row is 4320 bytes and
+     * the mapping ends on a page boundary, so the last row a mapping
+     * reaches is usually only partly covered. */
+    if (va_mapped ((u64)base + (u64)(mid + 1) * rb - 4u)) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
 }
 
 __attribute__((noreturn)) static void park (void)
@@ -187,14 +573,26 @@ static void cell (u8 *base, u32 rb, u32 x, u32 y, u8 c)
   u32 top = (u32)(glyph >> 32), bottom = (u32)glyph;
   u32 row, col, dy, dx;
 
+  /* R222: no panel, no drawing. */
+  if (base == 0 || rb == 0) {
+    return;
+  }
   for (row = 0; row < 12; row++) {
     u32 data = (row < 6) ? (top >> (row * 5)) : (bottom >> ((row - 6) * 5));
     for (col = 0; col < 5; col++) {
       u32 lit = (data >> col) & 1;
       for (dy = 0; dy < SCALE; dy++) {
         for (dx = 0; dx < SCALE; dx++) {
-          *(volatile u32 *)(base + (u64)(y + row * SCALE + dy) * rb
-                            + (u64)(x + col * SCALE + dx) * 4) = lit ? 0xFFFFFFFFu : 0;
+          u64 off = (u64)(y + row * SCALE + dy) * rb
+                  + (u64)(x + col * SCALE + dx) * 4;
+
+          /* R222: stay inside the mapping.  The panel's last rows are not
+           * always addressable, and a store past the end is a store into
+           * whatever the next mapping happens to be. */
+          if (off + 4u > FB_MAPSIZE) {
+            continue;
+          }
+          *(volatile u32 *)(base + off) = lit ? 0xFFFFFFFFu : 0;
         }
       }
     }
@@ -218,7 +616,7 @@ static u32 tp_text (u32 cx, u32 cy, const char *s)
   if (v == 0) {
     return 1;
   }
-  base = (u8 *)v->v_baseaddr;
+  base = (u8 *)fb_base ();
   rb = v->v_rowbytes;
   w = v->v_width;
   h = v->v_height;
@@ -274,11 +672,17 @@ static u32 zone_next (u32 y, u32 y0, u32 y1)
 static void cons_putc_zone (char ch, u32 zone)
 {
   volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
-  u8 *base = (u8 *)v->v_baseaddr;
-  u32 rb = v->v_rowbytes, w = v->v_width, h = v->v_height;
+  u8 *base;
+  u32 rb, w, h;
   u32 x, y, i, rows, split, y0, y1, magic, lim;
   u32 *st;
   u8 c = (u8)ch;
+
+  fb_lazy_map ();             /* map the GOP buffer ourselves if the kernel has not */
+  base = (u8 *)fb_base ();
+  rb = v->v_rowbytes;
+  w = v->v_width;
+  h = v->v_height;
 
   if (base == 0 || v->v_depth != 32 || w < 64 || h < 4 * CONS_LINE
       || (u64)rb < (u64)w * 4u) {
@@ -301,7 +705,23 @@ static void cons_putc_zone (char ch, u32 zone)
   rows = lim / CONS_LINE;
   split = (rows * CONS_SPLIT_PCT / 100) * CONS_LINE;
   if (zone == 0) {
-    y0 = 0;
+    /* R177: the top of the panel is behind the phone's notch and the punch
+     * hole, so the first few lines of the kernel log were never readable.
+     * R178: the log also has to start below the stage squares on row 170,
+     * or the first line of kernel output wipes out the marks that say how
+     * far the boot got.  Seven rows down clears both. */
+    /* R225: the top of zone 0 moves down.  `fastboot boot` does not clear
+     * the frame buffer, so every block an earlier round painted is still
+     * there: R219's regression sites sit on rows 378 and 518, and R220's
+     * on row 640, and they land in the middle of the log and cut every
+     * line in two.  Nothing can erase them -- they are baked into the
+     * panel -- so the log moves out of their way instead. */
+    /* R227: one row further down.  The diagnostic ladder moved to row 600
+     * (it has to stay inside the 2 x 2 MiB the bootloader's identity block
+     * covers over the panel), and the ladder is 40 rows tall, so zone 0 has
+     * to start below row 640 or the ladder paints over the first line of
+     * kernel output.  16 * CONS_LINE = 672. */
+    y0 = 16u * CONS_LINE;
     y1 = split;
     magic = CONS_MAGIC;
   } else {
@@ -363,12 +783,486 @@ static void cons_putc_zone (char ch, u32 zone)
   st[2] = y;
 }
 
+/* ---- entry points the kernel is redirected to ---------------------------
+ *
+ * The kernel's own call sites are patched to come here instead.  Each one
+ * paints its stage square and then does the original work, so the boot
+ * behaves exactly as before and only leaves a mark behind.
+ *
+ *   blob_stage1  wraps arm_vm_init(): after it returns the VM is up, so the
+ *                framebuffer can be mapped for the first time.
+ *   blob_stage2  wraps PE_create_console(): after it returns, vinfo either
+ *                holds the kernel's own mapping (stage 3, magenta) or not
+ *                (stage 2, blue) -- in which case the blob maps it itself.
+ *   blob_stage4  wraps PE_init_printf(): from here on the kernel's console
+ *                output goes through this blob, so a kprintf() is the
+ *                proof of life that the stage squares cannot give.
+ */
+#if defined(ARM_VM_INIT)
+__attribute__((used)) void blob_stage1 (u64 xmaxmem, void *args)
+{
+  ((void (*)(u64, void *))ARM_VM_INIT)(xmaxmem, args);
+  stage_mark (1);
+}
+#endif
+
+#if defined(PE_INIT_PRINTF)
+__attribute__((used)) void blob_stage4 (int foo)
+{
+  ((void (*)(int))PE_INIT_PRINTF)(foo);
+  stage_mark (4);
+}
+#endif
+
+#if defined(PE_CREATE_CONSOLE)
+__attribute__((used)) void blob_stage2 (void)
+{
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u64 mapped;
+
+  ((void (*)(void))PE_CREATE_CONSOLE)();
+  mapped = (u64)v->v_baseaddr;
+  stage_mark (mapped != 0 ? 3 : 2);
+}
+#endif
+
 /* Matches struct console_ops.putc: void (*)(char, bool). Kernel log goes to the
  * top zone. */
 __attribute__((used)) void console_putc (char ch, unsigned int poll)
 {
   (void)poll;
   cons_putc_zone (ch, 0);
+}
+
+/* ---- R187: a console that works before initialize_screen() --------------
+ *
+ * Everything the kernel printed before arm_vm_init() used to go nowhere:
+ * console_putc() draws through vinfo, and vinfo is only filled in by
+ * initialize_screen() near the end of arm_init().  But the entry probe leaves
+ * two 2 MiB identity blocks over the panel at 0x9C000000, so until
+ * arm_vm_init() swaps the translation tables the frame buffer is writable at
+ * its physical address with the geometry DarwinBoot reported.  That window is
+ * exactly where the boot dies now (cpu_init -> do_cacheid), so this variant
+ * draws there and never looks at vinfo.
+ *
+ * The zone is rows 250..690: below the version bars at row 170 and above the
+ * two ladders at rows 700/760.  Ten lines at SCALE 3.
+ *
+ * Once arm_vm_init() has run the identity blocks are gone and at s1e1r
+ * reports a translation fault for 0x9C000000, so this goes quiet again; the
+ * normal path takes over as soon as vinfo is filled in. */
+static u32 va_mapped (u64 a)
+{
+  u64 par;
+  __asm__ volatile ("at s1e1r, %1; isb; mrs %0, par_el1"
+                    : "=r" (par) : "r" (a) : "memory");
+  return (u32)(par & 1u) == 0u;
+}
+
+/* R229: can this address actually be read?
+ *
+ * PAR_EL1 says more than va_mapped() does:
+ *
+ *   bit 0   F   1 = the translation faulted
+ *   bit 10  AF  1 = the access is permitted and the page is really there
+ *   bit 11  nG  the address is in the lower (user) half
+ *   bits[51:12]  the output physical address
+ *   bits[63:56]  the attributes
+ *
+ * F == 0 alone is not enough.  A page whose mapping exists but whose
+ * physical page is not there translates perfectly well, so F is 0, and
+ * reading it is a data abort.  That is exactly what __bcopyin() does to the
+ * kernel when it copies a user buffer.
+ *
+ * The old test looked at bits[63:60], which are the memory type: 0xE is
+ * Device, and 0x0 is Normal.  The attributes of an ordinary kernel or user
+ * page are 0x00, so "the address is normal memory" was never true and the
+ * R228 fallback branch never ran -- which is why R228 behaved exactly like
+ * R227.
+ *
+ * R230: the query is gone.  arm_vm_init removes TTBR0, so at s1e1r can only
+ * see whatever table the kernel left there, and that table does not have the
+ * user half of the address space in it.  Every user address comes back
+ * faulting, which is what R229's 'U' was reporting.
+ */
+/* R230: readable() below now trusts the kernel's own map and does not need
+ * the query, so va_readable() has no callers left and is not built. */
+
+#define IDENT_Y0  250u
+#define IDENT_Y1  590u
+
+/* R189: the diagnostic ladder.  Five 40 x 40 squares on panel row 640, at
+ * x = 40, 130, 220, 310, 400, painted by the blob itself with raw stores and
+ * no guard of any kind.  R188 redirected _kprintf's first instruction to
+ * blob_printf and the panel stayed exactly as it was, so the question is no
+ * longer "does kprintf hang" but "how far into blob_printf did it get".
+ *
+ *   M0 magenta  blob_printf entered, and at s1e1r says 0x9C000000 translates
+ *   M0 red      blob_printf entered, and at s1e1r says it does not
+ *   M1 cyan     format pointer is not NULL
+ *   M2 yellow   recursion guard is clear
+ *   M3 green    ident_out reached its first cell (pixels actually written)
+ *   M4 blue     the whole format string was walked
+ *
+ * Row 640 sits below the text zone (which now wraps at 590) and above the two
+ * ladders at rows 700/760, so nothing overwrites it. */
+/* R223: the ladder was on row 640, which is inside the kernel log's zone 0
+ * (zone 0 runs from 7 * CONS_LINE = 294 down to split = 1386).  It painted
+ * 40-pixel colour blocks straight through the log text, and R222's screen
+ * came out with the log lines cut in half where the blocks landed -- the
+ * two halves read as if they were different lines.  Row 700 is below the
+ * part of the log a camera pointed at the top of the phone can see, so the
+ * ladder no longer sits on top of anything that matters. */
+/* R225: row 700 is inside zone 0 (the log runs from row 630 to row 1386
+ * now), so the ladder painted its colours straight through the text.
+ * Row 1400 is the first row of the lower half of the panel. */
+/* R227: row 1400 was fatal, and the way it was fatal is worth writing down.
+ * The ladder is painted by blob_vprintf(), and blob_vprintf() is the very
+ * first thing every kernel printf goes through -- it calls diag(0) before it
+ * looks at the format string.  So the ladder's row decides whether the
+ * kernel can print at all.
+ *
+ * The panel is 2520 rows tall, but until PE_create_console() publishes the
+ * kernel's own mapping there is only ONE route to it: the bootloader's
+ * identity block over the panel's physical address, and that block is two
+ * 2 MiB entries -- rows 0..969, nothing beyond.  A ladder on row 1400 is a
+ * store 6,048,000 bytes into a 4,194,304-byte window: a store into a hole.
+ * On ARM64 that is a data abort, and a data abort inside the first printf of
+ * the boot is a kernel that never gets past arm_vm_init.
+ *
+ * That is exactly what R225 and R226 did, and the screen proved it: the
+ * bootloader's own text was on the panel, the kernel had printed not one
+ * line, and the stage squares (K1/K3/K4) that mark arm_vm_init's return,
+ * PE_create_console and PE_init_printf were all dark.
+ *
+ * Row 600 is inside the identity window (600 * 4320 = 2,592,000), clear of
+ * the ident text (250..590) and clear of zone 0 (which starts at 672), and
+ * it is on the panel in the recordings -- the camera sees rows 0..1260.
+ */
+#define DIAG_ROW  600u
+#define DIAG_PITCH 90u
+
+/* R220: blob_xbase and blob_first used to be static variables here.  They
+ * are now frame buffer state -- see the st() block above: the blob lives in
+ * a read-only segment and cannot keep writable globals of its own. */
+
+static void diag (u32 slot, u32 colour)
+{
+  u64 base = fb_base ();
+  volatile u32 *p;
+  u32 r, c;
+
+  /* R221: no panel, no ladder. */
+  if (base == 0) {
+    return;
+  }
+  /* R227: the ladder is drawn from the first line of blob_vprintf(), so a
+   * ladder row the panel cannot reach takes the kernel down before it has
+   * printed anything.  The identity block that stands in for the panel until
+   * PE_create_console() runs covers 2 x 2 MiB -- rows 0..969 -- and nothing
+   * beyond, so ask the hardware whether the row is there before touching it.
+   * at s1e1r does not raise an exception, so this check is itself safe. */
+  if (!va_mapped (base + (u64)DIAG_ROW * FB_ROWBYTES
+                  + (u64)(BLOB_XBASE + slot * DIAG_PITCH) * 4u)) {
+    return;
+  }
+  p = (volatile u32 *)(base + (u64)DIAG_ROW * FB_ROWBYTES);
+  p += BLOB_XBASE + slot * DIAG_PITCH;
+  for (r = 0; r < 40u; r++) {
+    for (c = 0; c < 40u; c++) {
+      p[(u64)r * (FB_ROWBYTES / 4u) + c] = colour;
+    }
+  }
+}
+
+/* R191: a 40 x 40 square at an arbitrary panel row.  Same store sequence as
+ * diag(), but the row is a parameter, so the same code can prove that a given
+ * row accepts writes.  Used to bracket the cell() call at the text origin. */
+static void diag_at (u32 row, u32 x, u32 colour)
+{
+  u64 base = fb_base ();
+  volatile u32 *p;
+  u32 r, c;
+
+  if (base == 0) {
+    return;
+  }
+  /* R227: same guard as diag() -- an unmapped row is a store into a hole,
+   * and a store into a hole is an abort. */
+  if (!va_mapped (base + (u64)row * FB_ROWBYTES + (u64)x * 4u)) {
+    return;
+  }
+  p = (volatile u32 *)(base + (u64)row * FB_ROWBYTES) + x;
+  for (r = 0; r < 40u; r++) {
+    for (c = 0; c < 40u; c++) {
+      p[(u64)r * (FB_ROWBYTES / 4u) + c] = colour;
+    }
+  }
+}
+
+/* R220: IDENT_Y/IDENT_X used to be static variables zeroed by the loader.
+ * They are frame buffer state now (see st() above): 0 still means "not
+ * started yet", because st() clears them when the magic word is missing. */
+
+static void ident_out (char ch)
+{
+  u64 base = fb_base ();
+
+  /* R221: there is no panel to draw on in the window between arm_vm_init()
+   * and PE_create_console(): the identity block is gone and the kernel has
+   * not published its own mapping yet.  Say nothing rather than fault. */
+  if (base == 0) {
+    return;
+  }
+  /* R191: the vinfo test is gone.  The address the compiler emits for VINFO
+   * decodes to 0xfffff00707abbbb8 -- not _vinfo (0xfffffff007abbc10) -- so it
+   * lands in the physmap and the value it returns means nothing.  Worse, a
+   * stray non-zero there silently reroutes every byte into console_putc(),
+   * whose own gates drop it.  Blind writes are the reliable path: that is
+   * exactly how the row 640 ladder gets on screen. */
+  /* R189: the guard that called at s1e1r is gone.  R188 proved nothing gets
+   * drawn with it in the way, and the entry probe demonstrably still stores
+   * into 0x9C000000 at exactly this point in the boot, so blind writes are
+   * the honest test.  If this faults after arm_vm_init() swaps the tables the
+   * text printed before that point is still on the panel. */
+  if (IDENT_Y == 0u) {
+    st_set (ST_IDENT_Y, IDENT_Y0);
+    st_set (ST_IDENT_X, 0u);
+  }
+  if (ch == '\n') {
+    st_set (ST_IDENT_X, 0u);
+    st_set (ST_IDENT_Y, IDENT_Y + CONS_LINE);
+  } else if (ch == '\r') {
+    st_set (ST_IDENT_X, 0u);
+    return;
+  } else if (ch == '\t') {
+    st_set (ST_IDENT_X, (IDENT_X + 8u * (CONS_CELL + SCALE)) & ~31u);
+  } else if ((u8)ch >= 32u && (u8)ch < 127u) {
+    if (IDENT_X + CONS_CELL <= FB_COLS) {
+      /* R193: M3 now means "the first character of THIS call drew", not
+       * "the first character of the first line".  The R191 bracket is gone;
+       * it had served its purpose. */
+      if (BLOB_FIRST != 0u) {
+        diag (3, 0x0000FF00u);
+        st_set (ST_FIRST, 0u);
+      }
+      cell ((u8 *)base, FB_ROWBYTES, IDENT_X, IDENT_Y, (u8)ch);
+      st_set (ST_IDENT_X, IDENT_X + CONS_CELL + SCALE);
+    }
+    if (IDENT_X + CONS_CELL > FB_COLS) {
+      st_set (ST_IDENT_X, 0u);
+      st_set (ST_IDENT_Y, IDENT_Y + CONS_LINE);
+    }
+  } else {
+    return;
+  }
+  if (IDENT_Y + CONS_GLYPH > IDENT_Y1) {
+    st_set (ST_IDENT_Y, IDENT_Y0);
+  }
+}
+
+__attribute__((used)) void console_putc_ident (char ch, unsigned int poll)
+{
+  (void)poll;
+  ident_out (ch);
+}
+
+/* ---- R188: the kernel's own printf, replaced ----------------------------
+ *
+ * R187 hooked cons_ops[0]/[1].putc and the first kprintf() in the boot (from
+ * do_cacheid()) still never returned: the square planted on the `bl kprintf`
+ * lit up and the one behind it did not, and not one character reached the
+ * panel.  So the stall is inside kprintf() itself -- the simple-lock spin, the
+ * cpu_number() call, or _doprnt_log(), which in this build is instrumented
+ * with UBSAN handlers and a stack canary.  None of that is worth debugging
+ * from a photograph.
+ *
+ * Instead _kprintf's first instruction is redirected here, so the kernel's
+ * printf is replaced outright: no lock, no _doprnt_log, no console_ops.  The
+ * format string is walked here and painted through ident_out(), which needs
+ * nothing but the identity block the entry probe installs.
+ *
+ * The recursion guard is a zero-initialised static for the same reason as
+ * IDENT_Y: it lives in the tail of .text and is guaranteed to start at 0. */
+static void pr_uint (u64 v, u32 base, u32 upper)
+{
+  char tmp[24];
+  u32 n = 0;
+  const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+
+  if (v == 0u) {
+    ident_out ('0');
+    return;
+  }
+  while (v != 0u) {
+    tmp[n++] = digits[(u32)(v % base)];
+    v /= base;
+  }
+  while (n != 0u) {
+    ident_out (tmp[--n]);
+  }
+}
+
+/* R194: the ABI seam.  The base kernel calls kprintf with the Windows ARM64
+ * convention -- every vararg is an 8-byte stack slot starting at [sp] -- but
+ * this blob is compiled with a target whose va_list saves x1-x7 and reads
+ * them back, which is why R193 printed garbage.  A naked shim hands the C
+ * body the caller's sp directly: args[0] is the first stack slot, full stop. */
+__attribute__((naked, used)) void blob_printf (void)
+{
+  __asm__ volatile (
+    "mov x1, sp\n"
+    "b blob_vprintf\n"
+  );
+}
+
+__attribute__((used)) void blob_vprintf (const char *fmt, const u64 *args)
+{
+  /* R220: busy and calls used to be function-static variables.  They are
+   * frame buffer state now (see st() above) because the blob sits in a
+   * read-only segment: a store into the blob's own .data faults as soon as
+   * the kernel switches to the new TTBR1. */
+
+  /* R189: record how far this function gets even if it never draws a glyph.
+   * M0 doubles as the at s1e1r verdict: magenta when the walker still has
+   * 0x9C000000, red when it does not.
+   *
+   * R220: the counter updates come after diag(0) on purpose.  diag() reads
+   * the frame buffer state, so it is the first thing in this function that
+   * touches the panel; keeping the counter updates behind it means the
+   * earliest point at which the blob can fault is still exactly the same as
+   * it was before the counters moved out of .data. */
+  diag (0, va_mapped (FB_PHYS) ? 0x00FF00FFu : 0x00FF0000u);
+  st_set (ST_CALLS, BLOB_CALLS + 1u);
+  st_set (ST_XBASE, (BLOB_CALLS & 1u) * 460u);   /* R193: each call paints its own ladder */
+  if (fmt == 0) {
+    diag (1, 0x00FF0000u);
+    return;
+  }
+  if ((u64)fmt < 0xfffffff007004000ull || (u64)fmt > 0xfffffff007c00000ull) {
+    diag (1, 0x00FF0000u);
+    return;
+  }
+  diag (1, 0x0000FFFFu);
+  if (BLOB_BUSY != 0u) {
+    diag (2, 0x00FF0000u);
+    return;
+  }
+  diag (2, 0x00FFFF00u);
+  st_set (ST_BUSY, 1u);
+  st_set (ST_FIRST, 1u);
+  /* R194: for the "cache info:" call, dump the eight raw stack slots first.
+   * Whatever the layout really is, this line shows it verbatim. */
+  if (fmt[0] == 'c') {
+    u32 i;
+    for (i = 0; i < 8u; i++) {
+      ident_out ('S');
+      pr_uint (i, 10u, 0u);
+      ident_out ('=');
+      ident_out ('0');
+      ident_out ('x');
+      pr_uint (args[i], 16u, 0u);
+      ident_out (' ');
+    }
+    ident_out ('\n');
+  }
+  u32 n = 0;
+  while (*fmt != 0) {
+    char c = *fmt++;
+    u32 longs = 0;
+    long sv;
+    u64 uv;
+
+    if (c != '%') {
+      ident_out (c);
+      continue;
+    }
+    c = *fmt++;
+    while (c == '0' || c == '-' || c == '+' || c == ' ' || c == '#') {
+      c = *fmt++;
+    }
+    while (c >= '0' && c <= '9') {
+      c = *fmt++;
+    }
+    if (c == '.') {
+      c = *fmt++;
+      while (c >= '0' && c <= '9') {
+        c = *fmt++;
+      }
+    }
+    while (c == 'l') {
+      longs++;
+      c = *fmt++;
+    }
+    if (c == 'z' || c == 'j' || c == 't') {
+      longs = 2;
+      c = *fmt++;
+    }
+    switch (c) {
+    case 's': {
+      /* R193: read every argument as u64.  The caller pushes all varargs as
+       * 8-byte stack slots (Windows ARM64 convention -- proven by the stp
+       * chain in do_cacheid), so stepping ap by 8 per argument keeps it in
+       * lockstep no matter what va_arg(T) does for narrow T. */
+      const char *s = (const char *)args[n++];
+      if ((u64)s < 0xfffffff007004000ull || (u64)s > 0xfffffff007c00000ull) {
+        s = "(bad %s)";
+      }
+      {
+        u32 n = 0;
+        while (*s != 0 && n < 96u) {
+          ident_out (*s++);
+          n++;
+        }
+      }
+      break;
+    }
+    case 'c':
+      ident_out ((char)args[n++]);
+      break;
+    case 'd':
+    case 'i':
+      sv = (long)args[n++];
+      if (sv < 0) {
+        ident_out ('-');
+        pr_uint ((u64)(-sv), 10u, 0u);
+      } else {
+        pr_uint ((u64)sv, 10u, 0u);
+      }
+      break;
+    case 'u':
+      uv = args[n++];
+      pr_uint (uv, 10u, 0u);
+      break;
+    case 'x':
+      uv = args[n++];
+      pr_uint (uv, 16u, 0u);
+      break;
+    case 'X':
+      uv = args[n++];
+      pr_uint (uv, 16u, 1u);
+      break;
+    case 'p':
+      uv = args[n++];
+      ident_out ('0');
+      ident_out ('x');
+      pr_uint (uv, 16u, 0u);
+      break;
+    case '%':
+      ident_out ('%');
+      break;
+    case 0:
+      ident_out ('%');
+      st_set (ST_BUSY, 0u);
+      return;
+    default:
+      ident_out ('%');
+      ident_out (c);
+      break;
+    }
+  }
+  diag (4, 0x000000FFu);
+  st_set (ST_BUSY, 0u);
 }
 
 /* ---- userspace graphics --------------------------------------------------
@@ -397,7 +1291,8 @@ static u32 fb_fill (u8 *base, u32 rb, u32 w, u32 h,
   u64 end;
 
   /* Every bound is checked before the first store, and the row loop checks
-   * again: R72 faulted 638 rows past the panel, so a bad y0/rh pair has to be
+   * again: R72 faulted 638 rows past the panel, so a bad y0
+h pair has to be
    * stopped here rather than trusted to the clamp above it. */
   if (base == 0 || rb < w * 4u || x0 >= w || y0 >= h || rw == 0 || rh == 0) {
     return 0;
@@ -427,7 +1322,7 @@ static u32 fb_fill (u8 *base, u32 rb, u32 w, u32 h,
 static u32 fb_exec (const u32 *c, u32 words)
 {
   volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
-  u8 *base = (u8 *)v->v_baseaddr;
+  u8 *base = (u8 *)fb_base ();
   u32 rb = v->v_rowbytes, w = v->v_width, h = v->v_height, done = 0;
 
   if (base == 0 || v->v_depth != 32 || w < 64 || h < 16) {
@@ -478,9 +1373,17 @@ static u32 fb_exec (const u32 *c, u32 words)
  * so one call shows whether the identity repeats -- payload's rule, since
  * trim is static OTP and a live firmware would rewrite it.
  */
-#if defined(ML_IO_MAP) && defined(COPYOUT) && defined(ORIG_READ) && defined(COPYIN)
+#if defined(ML_IO_MAP) && defined(COPYOUT) && defined(ORIG_READ) && defined(COPYIN) \
+    && !defined(NO_TOUCH_BRIDGE)
 /* R78: the fd4 command channel needs copyin as well as copyout -- userspace
    hands the kernel a command and the kernel answers in the same buffer. */
+/* R224: NO_TOUCH_BRIDGE turns the bridge off without turning the console off.
+   The bridge is a large piece of code (the bit-banged SPI transport, the
+   trim reader, the SMMU window bookkeeping) and the blob has to fit in the
+   tail of one segment: the console half is a few hundred bytes, the bridge
+   is several thousand, and a kernel that cannot hold both has to choose
+   which one it wants to be able to reach.  The console half is the one
+   that lets a process in EL0 be heard at all, so it wins. */
 #define TP_CHANNEL   1
 #endif
 
@@ -529,7 +1432,13 @@ static u32 fb_exec (const u32 *c, u32 words)
 static volatile u32 *tp_row (void)
 {
   volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
-  return (volatile u32 *)((u8 *)v->v_baseaddr + (u64)(v->v_height - 1) * v->v_rowbytes);
+  u64 base = fb_base ();
+
+  /* R222: no panel, no touch stash. */
+  if (base == 0 || v->v_height == 0 || v->v_rowbytes == 0) {
+    return 0;
+  }
+  return (volatile u32 *)(base + (u64)(v->v_height - 1) * v->v_rowbytes);
 }
 
 /* stash layout, pixels of the last row from x=2:
@@ -537,12 +1446,24 @@ static volatile u32 *tp_row (void)
    | 7 irq level */
 static u32 tpx (u32 i)
 {
-  return (tp_row ()[2 + i] ^ 0x5A5A0000u);
+  volatile u32 *r = tp_row ();
+
+  /* R222: no panel means no stash. */
+  if (r == 0) {
+    return 0u;
+  }
+  return (r[2 + i] ^ 0x5A5A0000u);
 }
 
 static void tpx_set (u32 i, u32 v)
 {
-  tp_row ()[2 + i] = v ^ 0x5A5A0000u;
+  volatile u32 *r = tp_row ();
+
+  /* R222: no panel means no stash. */
+  if (r == 0) {
+    return;
+  }
+  r[2 + i] = v ^ 0x5A5A0000u;
 }
 
 static u64 tpx64 (u32 i)
@@ -1248,6 +2169,13 @@ static u32 tp_ensure_init (void)
    signature is {0x0C, ??, ??, 0x72, 0x66, 0x03}. */
 __attribute__((used)) int console_read (void *p, const u64 *uap, void *retval)
 {
+#if !defined(TP_CHANNEL)
+  /* R224: the touch bridge is not in this build (see NO_TOUCH_BRIDGE), so the
+     read syscall keeps its native behaviour and only exists here so that the
+     syscall table slot can be pointed at it without a second build. */
+  (void)p;
+  return ((int (*)(void *, void *, void *))ORIG_READ)(p, (void *)uap, retval);
+#else
   u8 rec[32];
   u32 fd = (u32)uap[0];
   u64 dst = uap[1], n = uap[2], len = n < 32 ? n : 32;
@@ -1290,6 +2218,7 @@ __attribute__((used)) int console_read (void *p, const u64 *uap, void *retval)
    * width<<32|height and userspace reads back dim=0x438000009D8.) */
   *(u64 *)retval = (u64)len;
   return 0;
+#endif
 }
 #endif  /* touch bridge */
 
@@ -1312,40 +2241,224 @@ __attribute__((used)) int console_read (void *p, const u64 *uap, void *retval)
  * write(3, 0, 0) returns the panel size. Any other descriptor still reaches
  * the real write(), so files keep working.
  */
+/* ---- R230: an absolute place for the progress marks --------------------
+ *
+ * The marks used to go into zone 0 through cons_putc_zone(), which shares
+ * its cursor with the text and inherits the cursor the previous boot left on
+ * the panel: fastboot boot does not clear the frame buffer, so the marks
+ * could land anywhere inside the zone, and the text that followed them was
+ * indistinguishable from the marks.
+ *
+ * They now go to bands that nothing else uses, one letter per slot:
+ *
+ *   row 630, x 480 + 18*k   A hook ran / B fd3 / C size / D pixels
+ *                           E fd1 / F about to copy / V the copy worked
+ *                           G bytes in hand / T text drawn / U the copy failed
+ *                           X copy_validate said EXDEV / P kernel ptr / Q user
+ *   row 630, x 700          the byte count the caller asked for, in hex
+ *   row 630, x 860          what copy_validate() said, in hex
+ *   row 588, x 480          the caller's buffer address, low 32 bits
+ *   row 588, x 660          how many bytes the blob copied, in hex
+ *
+ * R229 put the byte count at x 700 and the copied bytes at x 780, and a hex
+ * byte is 36 pixels wide, so the two fields overlapped and neither could be
+ * read.  Every field now has its own 144 pixel slot, and the second one moved
+ * to row 588 -- a glyph is 36 pixels tall, so row 630 (630..665) and row 636
+ * (636..671) would have drawn over each other.
+ *
+ * The text drawer's answer is not a field of its own: the 'T' mark only goes
+ * up when the drawer said it drew, so the letter says the same thing in two
+ * bytes instead of eight, and the blob still fits in the segment tail.
+ *
+ * Row 630 is between the kernel log (rows 250..590) and zone 0 (row 672),
+ * and to the right of the diagnostic ladder (rows 600..639 at x 0..400), so it
+ * is the only free space on the panel.
+ *
+ * R231: the text itself moved from row 210 to row 672.  Row 210 is inside
+ * the build stamp (rows 170..239), so the userspace text painted over the
+ * very tiles that say which round is on the screen.  Row 672 is the first
+ * row of console zone 0, which R230 measured to be completely empty.
+ */
+#define MARK_ROW 630u
+#define MARK_X0  480u
+#define MARK_DX  18u
+#define MARK_NX  700u
+#define MARK_VX  860u
+#define SRC_ROW  588u
+#define SRC_X    480u
+#define RC_X     660u
+/* The user's own text goes to a fixed place well below the log: row 672 is
+ * the first row of console zone 0, which R230 measured to be completely
+ * empty, and it is clear of the build stamp (rows 170..239), of the ident
+ * log (rows 250..590) and of the diagnostic ladder (rows 600..639).
+ * Row 210, which R230 used, sat inside the build stamp and would have
+ * painted over the very tiles that say which round is on the screen. */
+#define TXT_ROW  672u
+
+static void mark_at (u32 slot, char c)
+{
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u8 *base = (u8 *)fb_base ();
+  u32 rb = v->v_rowbytes;
+
+  if (base == 0 || rb == 0) {
+    return;
+  }
+  cell (base, rb, MARK_X0 + slot * MARK_DX, MARK_ROW, (u8)c);
+}
+
+static void mark_hex (u32 x, u32 row, const u8 *b, u32 n)
+{
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u8 *base = (u8 *)fb_base ();
+  u32 rb = v->v_rowbytes;
+  u32 i;
+
+  if (base == 0 || rb == 0) {
+    return;
+  }
+  for (i = 0; i < n; i++) {
+    cell (base, rb, x + i * 36u, row, (u8)"0123456789abcdef"[b[i] >> 4]);
+    cell (base, rb, x + i * 36u + MARK_DX, row,
+          (u8)"0123456789abcdef"[b[i] & 15u]);
+  }
+}
+
+static void mark_num (u32 x, u32 row, u32 v)
+{
+  u8 t[4];
+
+  t[0] = (u8)(v >> 24);
+  t[1] = (u8)(v >> 16);
+  t[2] = (u8)(v >> 8);
+  t[3] = (u8)v;
+  mark_hex (x, row, t, 4);
+}
+
+/* R232: a plain text summary of the two paths a process in EL0 reaches the
+ * panel through.  The marker band carries the same numbers as hex fields,
+ * and a hex field has to be read pixel by pixel; a sentence can be read off
+ * a photograph.  The two lines sit on the first two free text rows of the
+ * panel, row 42 and row 84 -- above the ident log (250..590), above the
+ * build stamp (170..239) and above the marker band (630).
+ *
+ * row 42: the fd 1 path, the text channel.
+ * row 84: the fd 3 path, the pixel channel.
+ */
+#define ROUND_TAG "R235"
+
+static char *put_hex8 (char *p, u32 v)
+{
+  u32 i;
+
+  for (i = 28u; i < 32u; i -= 4u) {
+    *p++ = (char)"0123456789abcdef"[(v >> i) & 15u];
+  }
+  return p;
+}
+
+/* R233: one helper for "label" plus eight hex digits.
+ *
+ * The early blob has about fifty bytes to spare in __TEXT_EXEC's tail, and
+ * the R232 version of this line -- four put_str calls and four put_hex8
+ * calls -- cost three hundred and twenty eight bytes.  Folding the two
+ * helpers into one and the strings into the labels is what makes the line
+ * fit at all. */
+static char *put_kv (char *p, const char *label, u32 v)
+{
+  while (*label != 0) {
+    *p++ = *label++;
+  }
+  return put_hex8 (p, v);
+}
+
+#if !defined(NO_FB_CHANNEL)
+#if defined(FB_CHANNEL_HOOK)
+/* The early blob.  The pixel path is not compiled here at all: it lives in
+ * the channel blob and is reached through this one call.  Keeping the two
+ * apart at the source level means the early blob cannot pick up the pixel
+ * path by accident, and the linker cannot decide on its own to keep it. */
+static int fb_channel_dispatch (u64 src, u64 n, void *retval)
+{
+  return ((int (*)(u64, u64, void *))FB_CHANNEL_HOOK)(src, n, retval);
+}
+#else
+/* The channel blob.  The pixel path itself. */
+__attribute__((used, section(".text.fb_channel")))
+int fb_channel_write (u64 src, u64 n, void *retval)
+{
+  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
+  u32 fb[FB_BAND / 4];
+  u64 done = 0, chunk, done_cmds = 0;
+
+  mark_at (1, 'B');
+  if (n == 0) {
+    *(u64 *)retval = ((u64)v->v_width << 32) | (v->v_height & 0xFFFFFFFFu);
+    mark_at (2, 'C');              /* the panel-size query answered */
+    return 0;
+  }
+  while (done < n) {
+    chunk = n - done;
+    if (chunk > FB_BAND) {
+      chunk = FB_BAND;
+    }
+    chunk -= chunk % 24;              /* whole commands only */
+    if (chunk == 0) {
+      break;
+    }
+    if (((int (*)(u64, void *, u64))COPYIN)(src + done, fb, chunk) != 0) {
+      *(int *)retval = (int)done_cmds;
+      return 14;
+    }
+    done_cmds += fb_exec (fb, (u32)chunk / 4);
+    done += chunk;
+  }
+  *(int *)retval = (int)done_cmds;
+  mark_at (3, 'D');                  /* the pixel path survived a copyin + draw */
+  {
+    char d[64];
+    char *p = d;
+
+    p = put_kv (p, ROUND_TAG " fd1 n=", st_get (ST_FD1_N) & 0xffffu);
+    p = put_kv (p, " v=", (st_get (ST_FD1_N) >> 16) & 0xffu);
+    p = put_kv (p, " c=", st_get (ST_FD1_C));
+    *p = 0;
+    tp_text (0, 1, d);              /* row 42: the fd 1 path, as text */
+  }
+  {
+    char d[64];
+    char *p = d;
+
+    p = put_kv (p, ROUND_TAG " fd3 n=", (u32)n);
+    p = put_kv (p, " cmds=", (u32)done_cmds);
+    *p = 0;
+    tp_text (0, 2, d);              /* row 84 */
+  }
+  return 0;
+}
+
+static int fb_channel_dispatch (u64 src, u64 n, void *retval)
+{
+  return fb_channel_write (src, n, retval);
+}
+#endif
+#endif
+
 #if defined(COPYIN) && defined(ORIG_WRITE)
 __attribute__((used)) int console_write (void *p, const u64 *uap, void *retval)
 {
   char buf[256];
-  u32 fb[FB_BAND / 4];
   u32 fd = (u32)uap[0];
-  u64 src = uap[1], n = uap[2], done = 0, chunk, done_cmds = 0;
+  u64 src = uap[1], n = uap[2], done = 0, chunk;
+  int vrc = 0;
+  u32 dr = 0;
 
+  mark_at (0, 'A');                  /* the hook ran; this store reached the panel */
+#if !defined(NO_FB_CHANNEL)
   if (fd == 3) {
-    volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
-
-    if (n == 0) {
-      *(u64 *)retval = ((u64)v->v_width << 32) | (v->v_height & 0xFFFFFFFFu);
-      return 0;
-    }
-    while (done < n) {
-      chunk = n - done;
-      if (chunk > FB_BAND) {
-        chunk = FB_BAND;
-      }
-      chunk -= chunk % 24;              /* whole commands only */
-      if (chunk == 0) {
-        break;
-      }
-      if (((int (*)(u64, void *, u64))COPYIN)(src + done, fb, chunk) != 0) {
-        *(int *)retval = (int)done_cmds;
-        return 14;
-      }
-      done_cmds += fb_exec (fb, (u32)chunk / 4);
-      done += chunk;
-    }
-    *(int *)retval = (int)done_cmds;
-    return 0;
+    return fb_channel_dispatch (src, n, retval);
   }
+#endif
 #if defined(TP_CHANNEL)
   /* fd 4 is the Novatek touch bridge. R77 used it to read the trim id back;
      R78 turns it into a command channel so userspace can push the 88 KB
@@ -1358,23 +2471,117 @@ __attribute__((used)) int console_write (void *p, const u64 *uap, void *retval)
   if (fd != 1 && fd != 2) {
     return ((int (*)(void *, void *, void *))ORIG_WRITE)(p, (void *)uap, retval);
   }
-  while (done < n) {
-    int err;
+  mark_at (4, 'E');                  /* fd 1/2 path reached */
+  mark_num (MARK_NX, MARK_ROW, (u32)n);   /* how many bytes the caller wants */
+  mark_num (SRC_X, SRC_ROW, (u32)src);     /* and from where */
+  mark_at (11, ((src >> 56) != 0u) ? 'P' : 'Q');   /* P kernel pointer, Q user */
 
+  /* R230: the copy is the kernel's own, and the kernel's own answer is the
+   * diagnosis.
+   *
+   * R227 and R228 stopped between the "about to copy" mark and the "copied"
+   * mark and could not say why.  R229 replaced the copy with a hand written
+   * byte loop guarded by at s1e1r, and the guard said the address could not
+   * be read.  That answer was meaningless: arm_vm_init removes TTBR0, so the
+   * address translation register cannot see the user half of the address
+   * space at all, and every user address comes back faulting.  The 'U' R229
+   * painted was the hardware agreeing that TTBR0 is empty, not that the page
+   * is missing.
+   *
+   * So the copy goes back to copyin(), and the question "can this address be
+   * read" is put to the code that actually answers it:
+   *
+   *   copy_validate(user_addr, kernel_addr, len, COPYIO_IN |
+   *                COPYIO_ALLOW_KERNEL_TO_KERNEL)
+   *     0   the address is inside the current thread's map: copy it
+   *     14  EFAULT, it is outside the map
+   *     18  EXDEV, the thread runs in the kernel context
+   *     22  EINVAL, the top byte of the address is set
+   *
+   * copy_validate() only looks at numbers, so it cannot fault.  copyin() is
+   * called only after it has said yes, and __bcopyin() is inside the copyio
+   * recovery table, so a page that is not there comes back as an error
+   * instead of taking the kernel down.
+   */
+  while (done < n) {
     chunk = n - done;
-    if (chunk > sizeof buf) {
-      chunk = sizeof buf;
+    if (chunk > sizeof buf - 1) {
+      chunk = sizeof buf - 1;
     }
-    err = ((int (*)(u64, void *, u64))COPYIN)(src + done, buf, chunk);
-    if (err) {
+    if (chunk == 0) {
+      break;
+    }
+    vrc = 0;
+#if defined(COPY_VALIDATE)
+    vrc = ((int (*)(u64, u64, u64, u32))COPY_VALIDATE)(src + done,
+                                                       (u64)(void *)buf,
+                                                       chunk, 5u);
+#endif
+    mark_num (MARK_VX, MARK_ROW, (u32)vrc);
+    if (vrc != 0) {
+      mark_at (9, 'U');              /* the kernel refused the address */
+      if (vrc == 18) {
+        mark_at (10, 'X');          /* EXDEV: the thread is in the kernel */
+      }
       *(int *)retval = (int)done;
-      return 14;                    /* EFAULT if copyin refused the buffer */
+      return 14;                     /* EFAULT */
     }
-    for (u32 i = 0; i < (u32)chunk; i++) {
-      cons_putc_zone (buf[i], 1);
+    mark_at (5, 'F');                /* about to copy */
+    /* R231: the copy is the blob's own.
+     *
+     * copyin() hung in R227..R230 and the reason is now known: the kernel
+     * runs with SCTLR_EL1.SPAN == 0, so an EL1 load of a user page raises a
+     * permission fault, and the copyio recovery path turns that into an
+     * endless retry loop instead of an error return (see
+     * tools/patch-xnu-span.py for the whole chain).
+     *
+     * The load below is NOT inside copyio_recover_table[], so if it faults
+     * the kernel panics instead of spinning, and the panic screen prints the
+     * fault address, the ESR and the PC.  That is the difference between
+     * "the phone hung" and "the phone told us why".
+     *
+     * If it does not fault, the bytes are in hand and the userspace text
+     * goes on the panel -- which is the whole point of the exercise.
+     */
+    {
+      u32 i, m = (u32)chunk;
+      const volatile u8 *s = (const volatile u8 *)(src + done);
+
+      for (i = 0; i < m; i++) {
+        buf[i] = (char)s[i];
+      }
+    }
+    mark_num (RC_X, SRC_ROW, (u32)(done + chunk));   /* how many bytes we got */
+    mark_at (6, 'V');                /* the bytes are in hand */
+    {
+      u32 i, m = (u32)chunk;
+
+      /* Only the first line, and only printable characters: cell() indexes
+       * the font with (c - 32) and a newline would take it off the end. */
+      for (i = 0; i < m; i++) {
+        u8 c = (u8)buf[i];
+
+        if (c == '\n') {
+          break;
+        }
+        buf[i] = (char)((c >= 32u && c <= 126u) ? c : '.');
+      }
+      buf[i] = 0;
+    }
+    mark_at (7, 'G');                /* and about to be drawn */
+    dr = tp_text (0, TXT_ROW / CONS_LINE, buf);
+    if (dr == 0) {
+      mark_at (8, 'T');              /* the text is on the panel */
     }
     done += chunk;
   }
+#if !defined(NO_FD1_DIAG)
+  /* R233: record the numbers for the channel blob, which prints them as a
+   * line of text (row 42).  Two words is what fits: n and v packed
+   * together, and the number of bytes copied. */
+  st_set (ST_FD1_N, (u32)((n & 0xffffu) | ((u64)vrc & 0xffu) << 16));
+  st_set (ST_FD1_C, (u32)done);
+#endif
   *(int *)retval = (int)done;
   return 0;
 }
@@ -1404,11 +2611,14 @@ static void number (struct ctx *g, u64 value, u32 base, u32 width, int zero)
  * Refuse user pointers, translation faults and device-memory attributes. */
 static int readable (const char *s, const u64 *args)
 {
-  u64 a = (u64)s, par;
+  u64 a = (u64)s;
   (void)args;
-  if (a < 0xffff000000000000UL) return 0;
-  __asm__ volatile ("at s1e1r, %1; isb; mrs %0, par_el1" : "=r" (par) : "r" (a) : "memory");
-  return !(par & 1) && ((par >> 60) != 0);
+  /* R230: the kernel's own map is live in TTBR1 and never changes, so a
+   * kernel address is readable without asking the MMU.  R229 asked the MMU
+   * and the MMU answered "no" for everything, because arm_vm_init removes
+   * TTBR0; the result was a panic screen with the message left out of it. */
+  if (a < 0xffff000000000000UL) return 0;   /* a user address: not ours to read */
+  return 1;
 }
 
 static void format (struct ctx *g, const char *fmt, const u64 *args)
@@ -1501,6 +2711,27 @@ static void hex (struct ctx *g, const char *label, u64 v)
   number (g, v, 16, 16, 1);
 }
 
+/* R167: the panic handler names the kind of fault ("kernel static region",
+ * "unaligned data abort", ...) but not the address that faulted, and the two
+ * cases need opposite fixes: a permission fault means the page is mapped
+ * read-only (fix the protection), a translation fault means it is not mapped
+ * at all (fix the mapping). FAR_EL1/ESR_EL1 still hold the last data abort
+ * when panic() runs, so printing them here turns every future panic into a
+ * readable verdict instead of another guess. */
+static u64 read_far (void)
+{
+  u64 v;
+  __asm__ volatile ("mrs %0, far_el1" : "=r" (v));
+  return v;
+}
+
+static u64 read_esr (void)
+{
+  u64 v;
+  __asm__ volatile ("mrs %0, esr_el1" : "=r" (v));
+  return v;
+}
+
 /* x0 = fmt as for panic(); x1 is set by the stub to the entry stack pointer. */
 __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main (const char *fmt, const u64 *args)
 {
@@ -1508,8 +2739,9 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
   struct ctx g;
   u32 row, col, lim;
 
+  fb_lazy_map ();             /* map the GOP buffer ourselves if the kernel has not */
   __asm__ volatile ("msr daifset, #15");
-  g.base = (u8 *)v->v_baseaddr;
+  g.base = (u8 *)fb_base ();
   g.rb   = v->v_rowbytes;
   g.w    = v->v_width;
   g.h    = v->v_height;
@@ -1526,6 +2758,18 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
   lim = fb_rows (g.base, g.rb, g.h);
   if (lim != 0) {
     g.h = lim;
+  }
+  /* R227: clamp to what the live tables really reach, not just to what the
+   * kernel says it mapped.  Before PE_create_console() the panel is reached
+   * through the bootloader's identity block, which ends at row 969, and a
+   * panic screen that believed in 2520 rows wiped straight through the end
+   * of it -- and died there, so the message never reached the panel. */
+  {
+    u32 mr = fb_mapped_rows (g.base, g.rb, g.h);
+
+    if (mr != 0 && mr < g.h) {
+      g.h = mr;
+    }
   }
   g.maxy = g.h;
 
@@ -1547,9 +2791,9 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
    * show, so the esr/far line was never visible and every round ended in a
    * guess.  Rows 30..45 are inside the panel and still below the fixture's
    * readings (rows 5..29), so the same text is visible now. */
-  g.y = 30u * CONS_LINE;
+  g.y = 20u * CONS_LINE;
   {
-    u32 ybot = 46u * CONS_LINE;
+    u32 ybot = 28u * CONS_LINE;
     if (ybot > g.h) {
       ybot = g.h;
     }
@@ -1562,6 +2806,22 @@ __attribute__((noreturn, used, section(".text.b_main"))) void panic_screen_main 
     }
   }
   g.y += 8;
+  /* R211: the window starts at row 840 now, which the recordings do cover
+   * (the camera only ever sees the top ~1260 rows of the panel).  far/esr
+   * goes on the very first line: the capture dump below can run to nine
+   * lines on its own and would otherwise push the only copy of the fault
+   * address off the bottom. */
+  hex (&g, "far=", read_far ());
+  hex (&g, " esr=", read_esr ());
+#if 1
+  /* R229: the userspace text is no longer captured into the frame buffer's
+   * last row.  That store sat at the very end of the kernel's mapping of the
+   * panel, and the read-back was one more way for the panic handler to die
+   * in its own second line.  The build tag takes its place: the mark band
+   * on row 630 survives the panic screen, which starts at row 840, so the
+   * state of the fd1 path is still on the panel when the kernel goes. */
+  text (&g, "R229 out:");
+#endif
   /* The board's live banner keeps showing this text after the next swap paints over the screen (BootProgress.c,
    * boot_progress_panic_text). The first panic's text is kept: a buffer that already holds one is left alone. */
   if (PANIC_TEXT && *(volatile u8 *)PANIC_TEXT == 0) {

@@ -1811,16 +1811,38 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	(void)pad;
 	(void)entry_sp;
 
+	/* R224: the panel has to say whether this process reached its own
+	 * first instruction before it says anything else.  Every other line
+	 * the fixture prints goes through fd 4, and fd 4 is the Novatek
+	 * bridge: when the bridge is not there the probe goes quiet exactly
+	 * when it matters.  fd 1 is the kernel's own console, so one line
+	 * through it settles the question on its own -- and it lands in the
+	 * same column as the kernel's own messages, so both read together. */
+	nio_puts("IPROBE: R234 up\n");
+
 	dim = nio_fb_size();
 	sw = (u32)((u64)dim >> 32);
 	sh = (u32)((u64)dim & 0xffffffffu);
 	if (sw < 64u || sw > 8192u || sh < 64u) {
-		goto park;
-	}
+		/* R226: the fd 3 pixel path is not in this build, so the panel size
+		 * query fails.  That used to be fatal -- the probe parked before it
+		 * had said anything, which is the one outcome a panel cannot show.
+		 * The size is only needed to clear the lower half of the panel, so
+		 * a missing size now costs the clear and nothing else: the probe
+		 * keeps going and every phase still reports itself. */
+		nio_puts("IPROBE: no panel size (fd3 off)\n");
+	} else {
 	/* One rectangle clears the panel: the kernel's own log would otherwise
-	 * sit under the readings. */
-	nio_fb_rect(cmd, 0x00103060u, 0u, 0u, sw, sh);
-	(void)nio_fb_send(cmd, 24u);
+	 * sit under the readings.  R224: only the lower band.  The kernel's
+	 * log lives in the top zone (rows 294..1386) and the build stamp sits
+	 * on row 170; both are worth keeping, because they are the only
+	 * record of how far the kernel itself got, and R223 showed what a
+	 * blank panel costs. */
+	if (sh > 1400u) {
+		nio_fb_rect(cmd, 0x00103060u, 0u, 1400u, sw, sh - 1400u);
+		(void)nio_fb_send(cmd, 24u);
+	}
+	}
 
 	txs(cmd, 6u, "R107 gmu mem + fault");
 
@@ -2244,12 +2266,16 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	}
 	mark(cmd, 7u);
 
+	nio_puts("IPROBE: phase 1 (reset)\n");
+
 	/* --- phase 1, read only: the GMU must be held in reset before a cold
 	 * start, the RSC sequencer must be idle, and no stale HFI readiness. --- */
 	v = rd(cmd, M_CM3_SYSRESET, &st);
 	rsc = rd(cmd, R_SEQ_BUSY, &st);
 	txv(cmd, 66u, "R0=", v, "R1=", rsc);
 	mark(cmd, 8u);
+
+	nio_puts("IPROBE: phase 2 (int clear)\n");
 
 	/* --- phase 2: the interrupt clear and mask, the RSC sequencer's
 	 * microcode and the PDC, then a6xx_rpmh_stop. --- */
@@ -2260,6 +2286,8 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	rsc = poll(cmd, R_SC_STATUS0, 0x00010000u, 0x00010000u, 200u, &st);
 	(void)wr(cmd, M_RSCC_REQ, 0u);
 	mark(cmd, 9u);
+
+	nio_puts("IPROBE: phase 3 (fw start)\n");
 
 	/* --- phase 3: a6xx_gmu_fw_start (cold): the FAL retention
 	 * interfaces, GENERAL_7, then the RSC wake request. --- */
@@ -2280,6 +2308,8 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	txv(cmd, 36u, "Z=", vt, "A=", ack);
 	txv(cmd, 56u, "SB=", seqb, "RS=", rd(cmd, R_SC_STATUS0, &st));
 	mark(cmd, 10u);
+
+	nio_puts("IPROBE: phase 4 (firmware)\n");
 
 	/* --- phase 4: the firmware. The two TCM blocks go through the GMU's
 	 * register windows; the icache and the debug block go into the
@@ -2402,6 +2432,8 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	txv(cmd, 3u, "A2=", bk[2], "A3=", bk[3]);
 	mark(cmd, 12u);
 
+	nio_puts("IPROBE: phase 5 (boot regs)\n");
+
 	/* --- phase 5: the boot registers, each one read back, and the RPMh
 	 * votes. --- */
 	for (i = 0; i < 24u; i += 2u) {
@@ -2447,6 +2479,8 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	 * 20 to 31 now carry the startup sequence's results, which is
 	 * what this round is about. */
 
+	nio_puts("IPROBE: phase 6 (gmu start)\n");
+
 	/* --- phase 6: a6xx_gmu_start. This is the step R99 stopped in, so it
 	 * is now the last thing that happens and everything that could be
 	 * learned has already been printed.
@@ -2479,6 +2513,8 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	ready = ((fw & mask) == want) ? 1u : 0u;
 	txv(cmd, 37u, "F=", fw, "R=", ready);
 	mark(cmd, 17u);
+
+	nio_puts("IPROBE: phase 7 (hfi)\n");
 
 	/* --- phase 7: a6xx_gmu_hfi_start. --- */
 	(void)wr(cmd, M_HFI_INIT, 1u);
@@ -3033,6 +3069,7 @@ __attribute__((used, noreturn)) void nio_main(u64 entry_sp)
 	(void)nio_fb_send(cmd, 24u);
 
 park:
+	nio_puts("IPROBE: R234 park\n");
 	for (;;) {
 		__asm__ volatile ("wfe");
 	}

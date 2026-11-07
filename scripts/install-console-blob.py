@@ -142,7 +142,22 @@ def find_caves(data):
             start -= 1
         if len(body) - start < 4096:
             continue
+        # R166: a cave is only usable if the loader maps it executable. The name
+        # list is not the rule -- __BOOTDATA has a 91 KB tail of zeros and the
+        # name looks like the boot console's home, but its initprot is RW, so a
+        # branch into it faults on the first instruction. The protection in the
+        # load command is the authority, and the name only sets the order.
+        if not (initprot & 4):
+            continue
         executable = name in order
+        # The blob's linker script places .text at the cave address and cannot
+        # honour an unaligned one: the tail of the previous blob ends at a byte
+        # offset that is not a multiple of four, and the link then lands a few
+        # bytes higher and the size check below rejects the segment. Aligning
+        # the cave up is free -- those bytes are zero padding either way.
+        start = (start + 3) & ~3
+        if len(body) - start < 4096:
+            continue
         out.append((0 if executable else 1, order.get(name, 9), name,
                     vmaddr + start, vmaddr + len(body)))
     out.sort()
