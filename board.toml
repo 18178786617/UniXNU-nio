@@ -145,6 +145,12 @@ archives = [
   "build-libpthread-kernel.py",
   "build-adreno650.py",
   "build-link-stubs.py",
+  # The board's UFS driver. build-arm-driver.py compiles it from the
+  # device repository's drivers/NioUfs and names the archive after the
+  # component id; the kernel link looks for a fixed path, so the second
+  # recipe lays the archive down under that name.
+  "component:NioUfs",
+  "build-nio-ufs-archive.py",
 ]
 
 # The prelink contract for the 16.5 kernelcache.
@@ -320,7 +326,7 @@ timeout = -1
 # "GPUROWnn <text>". Modes 9-11 add the first GPU command, the zap shader
 # with the GPU interrupt, and the user-client path; they are raised one at a
 # time, each with its own image, so a fault is attributable.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8"]
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
@@ -347,6 +353,16 @@ unique_chip_id = "required"
 # that R42/R43 proved loadable on this exact firmware.
 owned_memory_size = "0x10000000"
 packed_data_ramdisk = false
+# The APFS volume UUID of the OS window in the userdata image, read out of the
+# volume superblock of the image this build writes
+# (scripts/extract-root-volume-uuid.py, the copy in refs/UniXNU-nx769j).
+# The ADT generator writes it to /chosen/root-matching as an IOKit dictionary
+# with IOProviderClass = IOMedia, and the kernel mounts the IOMedia whose UUID
+# matches. A wrong value boots the firmware and then finds no root.
+#
+# The container UUID in the same superblock (nx_uuid) is NOT this one: it
+# matches the synthesized whole-disk IOMedia rather than a volume that mounts.
+root_match_volume_uuid = "97A3EB1A-5218-4936-BC85-9574EC2C8CC9"
 
 # Hardware device tree: compiled by the pipeline (real dtc on the cloud
 # runner, tools/dtc-mini.py locally) and merged into the ADT by

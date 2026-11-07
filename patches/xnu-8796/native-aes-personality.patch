@@ -2,7 +2,7 @@ diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 index 0dc07de..a556094 100644
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
-@@ -56,4 +56,48 @@ const char * gIOKernelConfigTables =
+@@ -56,4 +56,52 @@ const char * gIOKernelConfigTables =
      "     'IOProviderClass' = IOPlatformExpertDevice;"
      "     'IOProbeScore'    = 0:32;"
      "   }"
@@ -37,15 +37,19 @@ index 0dc07de..a556094 100644
 +    "     'IOProbeScore'    = 1000:32;"
 +    "   }"
 +#endif
++// nio: this board's UFS driver is drivers/NioUfs and its IOKit class is
++// NioUfs (its Info.plist declares IOClass = NioUfs). The upstream personality
++// names the sheng class NativeUfs. A mismatch here means the driver is never
++// matched to the platform device, so the names follow the board's own driver.
 +#if defined(XNU_NATIVE_UFS) && XNU_NATIVE_UFS
 +    "   ,{"
-+    "     'IOClass'         = NativeUfs;"
++    "     'IOClass'         = NioUfs;"
 +    "     'IOProviderClass' = IOPlatformDevice;"
 +    "     'IOProbeScore'    = 1000:32;"
 +    "   }"
 +    "   ,{"
-+    "     'IOClass'         = NativeUfs;"
-+    "     'IOMatchCategory' = NativeUfsRoot;"
++    "     'IOClass'         = NioUfs;"
++    "     'IOMatchCategory' = NioUfsRoot;"
 +    "     'IOProviderClass' = IOPlatformExpertDevice;"
 +    "     'IOProbeScore'    = 500:32;"
 +    "   }"

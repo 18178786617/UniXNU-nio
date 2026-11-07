@@ -401,6 +401,14 @@ jobs:
           outputs = ["build/nio-ufs/libNioUfs.a"]
           CATALOG
             echo "registered the board component NioUfs"
+            # The catalog entry names the source path relative to the UniXNU
+            # checkout root ("drivers/NioUfs"), and the source resolver looks
+            # for a board component in exactly that place. The driver lives in
+            # this repository, so it is placed there before the configuration
+            # is resolved.
+            mkdir -p drivers
+            cp -r device/drivers/NioUfs drivers/NioUfs
+            ls drivers/NioUfs
           fi
 
       - name: Resolve the configuration

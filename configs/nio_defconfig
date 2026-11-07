@@ -38,10 +38,18 @@ CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 CONFIG_XNU_SHENG_PMGR=n
 
-# Storage: nio's userdata is LUN 4 of a 6-LUN UFS and the inherited host driver
-# only speaks LUN 0. Keep this off until the selector exists; flipping it early
-# just moves the failure from "no disk" to "wrong disk".
-CONFIG_XNU_NATIVE_UFS=n
+# Storage: nio's userdata is LUN 4 of a 6-LUN UFS. The inherited host driver
+# only spoke LUN 0, but the board's own driver (drivers/NioUfs, ported from
+# the sheng SM8550 one) speaks any LUN and reads the GPT on LUN 4, so the
+# selector this comment used to wait for exists now (docs/UFS-PLAN.md, U5).
+#
+# With the switch on, the kernel links build/sheng-ufs/libShengUfs.a (the
+# name build-xnu-4k-baseline.sh hard-codes; scripts/build-nio-ufs-archive.py
+# lays the board archive down under it), publishes NioUfs as an IOKit
+# platform device and attaches the root window to IOPlatformExpertDevice.
+# The root volume is selected by UUID through payload.adt's
+# root_match_volume_uuid.
+CONFIG_XNU_NATIVE_UFS=y
 CONFIG_XNU_NATIVE_AES=n
 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
 CONFIG_XNU_NATIVE_RAM_BLOCK=n
@@ -51,7 +59,17 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=n
 # root. mockfs (bsd/miscfs/mockfs, in-tree source) mounts an N4KROOT image off
 # the RAMDisk memory device as the root filesystem, which is how fuxi and
 # gta4l reach userland on their boards.
-CONFIG_XNU_TRUST_CACHE_RUNTIME=n
+#
+# The trust cache runtime is the one that matters now: the build defines
+# XNU_NATIVE_TRUST_CACHE, and patches/xnu-8796/native-trust-cache-runtime.patch
+# turns the startup.c guard into
+#   #if !defined(BCM2837) || (defined(XNU_NATIVE_TRUST_CACHE) && XNU_NATIVE_TRUST_CACHE)
+# so trust_cache_runtime_init() runs on this board too. Without it the lock
+# that trust_cache_rt_lock names stays zero-filled, can_sleep is clear, and
+# the first query of the trust cache panics the kernel with "Taking
+# non-sleepable RW lock with preemption enabled" (R234). With it the runtime
+# is initialized and the 16.5 StaticTrustCache this board fetches is loaded.
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
 CONFIG_XNU_VERIFIED_ROOT_PROBE=n
