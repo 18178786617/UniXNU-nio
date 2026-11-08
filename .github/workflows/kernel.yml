@@ -88,6 +88,13 @@ on:
       - ".github/workflows/kernel.yml"
       - "board.toml"
       - "configs/**"
+      # drivers/ is the kernel's own source on this board. NioUfs is compiled
+      # into the kernel link (build-nio-ufs-archive.py copies libNioUfs.a to
+      # the path build-xnu-4k-baseline.sh force-loads as libShengUfs.a), so a
+      # driver change is a kernel change. R243 changed only NioUfs.cpp and no
+      # run started: the filter listed the scripts that build the kernel but
+      # not the directory the board's kernel code lives in.
+      - "drivers/**"
       - "donor/**"
       - "os-profiles/**"
       - "package/**"
