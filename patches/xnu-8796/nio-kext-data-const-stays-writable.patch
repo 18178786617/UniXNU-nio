@@ -1,0 +1,52 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1642,13 +1642,47 @@
+ 		/* If new segments not present, PRELINK_TEXT is not dynamically sized, free DRAM between it and xnu TEXT */
+ 		ml_static_mfree(segPRELINKTEXTB + segSizePRELINKTEXT, segTEXTB - (segPRELINKTEXTB + segSizePRELINKTEXT));
+ 	}
+ 
+ 	/* tighten permissions on kext read only data and code */
+ 	arm_vm_page_granular_RNX(segPRELINKTEXTB, segSizePRELINKTEXT, ARM64_GRANULE_ALLOW_BLOCK);
+-	arm_vm_page_granular_RNX(segPLKDATACONSTB, segSizePLKDATACONST, ARM64_GRANULE_ALLOW_BLOCK);
++
++	/* nio: the kext __DATA_CONST segment is left writable.
++	 *
++	 * run-48 booted one layer past the trust cache and died here:
++	 *
++	 *   Unexpected fault in kernel static region
++	 *   pc  0xfffffff0046e2d6c   CoreTrust __TEXT_EXEC+0x3d5c
++	 *   far 0xfffffff005caa220   CoreTrust __DATA_CONST+0x420
++	 *   esr 0x9600004f           write, permission fault, level 3
++	 *
++	 * The instruction there is "str x0, [x8, #0x220]" with x8 =
++	 * 0xfffffff005caa000, i.e. the page this call had just made read only,
++	 * and the stack shows how it was reached:
++	 *
++	 *   IOService::probeCandidates -> IOCatalogue::isModuleLoaded
++	 *     -> OSKext::load -> OSKext::start
++	 *       -> OSRuntimeInitializeCPP -> a CoreTrust constructor
++	 *
++	 * So a kext's C++ static initialiser stores into its own __DATA_CONST.
++	 * That is not a stray write: the address is inside the segment the kext's
++	 * own Mach-O header in __PRELINK_TEXT describes, at a fixed offset from
++	 * the code, so the constructor and the page agree with each other.
++	 *
++	 * What makes it fatal is the ordering. machine_lockdown() runs from
++	 * kernel_bootstrap(), which is long before the first kext is started, so
++	 * by the time OSRuntimeInitializeCPP() calls anything, this segment has
++	 * been read only for the whole boot. Whatever that tightening buys on a
++	 * device with KTRR, PPL or the SPTM, this kernel has none of the three
++	 * (CONFIG_SPTM, PMAP_CS_PPL_MONITOR and KERNEL_INTEGRITY are all off), so
++	 * nothing here depends on those pages being read only -- while the kext
++	 * initialisers do depend on them being writable. Only data is left open;
++	 * the text segment above is still tightened.
++	 */
++	printf("nio: kext __PLK_DATA_CONST left writable, %lu bytes\n",
++	    (unsigned long)segSizePLKDATACONST);
+ 
+ 	cpu_stack_alloc(&BootCpuData);
+ 	arm64_replace_bootstack(&BootCpuData);
+ 	ml_static_mfree(phystokv(segBOOTDATAB - gVirtBase + gPhysBase), segSizeBOOTDATA);
+ 
+ #if __ARM_KERNEL_PROTECT__
