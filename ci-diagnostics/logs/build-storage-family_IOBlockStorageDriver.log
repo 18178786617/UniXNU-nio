@@ -1,0 +1,37 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:510:56: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  510 |         _statistics[kStatisticsBytesWritten]->addValue(bytesTransferred);
+      |                                               ~~~~~~~~ ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:511:58: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  511 |         _statistics[kStatisticsTotalWriteTime]->addValue(totalTime);
+      |                                                 ~~~~~~~~ ^~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:512:59: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  512 |         _statistics[kStatisticsLatentWriteTime]->addValue(latentTime);
+      |                                                  ~~~~~~~~ ^~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:517:53: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  517 |         _statistics[kStatisticsBytesRead]->addValue(bytesTransferred);
+      |                                            ~~~~~~~~ ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:518:57: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  518 |         _statistics[kStatisticsTotalReadTime]->addValue(totalTime);
+      |                                                ~~~~~~~~ ^~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:519:58: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'long long' [-Wsign-conversion]
+  519 |         _statistics[kStatisticsLatentReadTime]->addValue(latentTime);
+      |                                                 ~~~~~~~~ ^~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:1176:53: warning: implicit conversion changes signedness: 'SInt64' (aka 'long long') to 'UInt64' (aka 'unsigned long long') [-Wsign-conversion]
+ 1176 |     attributes->adjustedOffset = ((SInt64)byteStart - (SInt64)context->request.byteStart);
+      |                                ~  ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:2267:30: warning: implicit conversion changes signedness: 'int' to 'IOOptionBits' (aka 'unsigned int') [-Wsign-conversion]
+ 2267 |     _flags       = (_flags & ~kIOMemoryDirectionMask) | kIODirectionNone;
+      |                            ~ ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:2280:44: warning: implicit conversion changes signedness: 'int' to 'IOOptionBits' (aka 'unsigned int') [-Wsign-conversion]
+ 2280 |                     _flags     = (_flags & ~kIOMemoryDirectionMask) | kIODirectionIn;
+      |                                          ~ ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:2327:48: warning: implicit conversion changes signedness: 'int' to 'IOOptionBits' (aka 'unsigned int') [-Wsign-conversion]
+ 2327 |                         _flags     = (_flags & ~kIOMemoryDirectionMask) | kIODirectionIn;
+      |                                              ~ ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:2350:52: warning: implicit conversion changes signedness: 'int' to 'IOOptionBits' (aka 'unsigned int') [-Wsign-conversion]
+ 2350 |                             _flags     = (_flags & ~kIOMemoryDirectionMask) | kIODirectionIn;
+      |                                                  ~ ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family/sources/IOBlockStorageDriver.cpp:2371:44: warning: implicit conversion changes signedness: 'int' to 'IOOptionBits' (aka 'unsigned int') [-Wsign-conversion]
+ 2371 |                     _flags     = (_flags & ~kIOMemoryDirectionMask) | kIODirectionOut;
+      |                                          ~ ^~~~~~~~~~~~~~~~~~~~~~~
+12 warnings generated.
