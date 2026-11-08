@@ -161,6 +161,13 @@ archives = [
   # recipe lays the archive down under that name.
   "component:NioUfs",
   "build-nio-ufs-archive.py",
+  # The storage base class the UFS driver publishes through. IOStorageFamily
+  # is a kext on a stock phone; this board links a standalone kernel.macho,
+  # so the family has to be compiled into it or the link stops at
+  # "vtable for IOBlockStorageDevice". The recipe compiles Apple's kernel
+  # target out of refer/IOStorageFamily, and the archive reaches the link
+  # through CONFIG_XNU_EXTRA_LD_ARCHIVES.
+  "build-storage-family.py",
 ]
 
 # The prelink contract for the 16.5 kernelcache.

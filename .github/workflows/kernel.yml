@@ -932,6 +932,10 @@ jobs:
             [ -f "$log" ] || continue
             cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
           done
+          for log in out/*/*/*/tree/build/storage-family/*.log; do
+            [ -f "$log" ] || continue
+            cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
           for command in out/*/*/*/tree/build/*/compile-command.json; do
             [ -f "$command" ] || continue
             cp "$command" "$stage/ci-diagnostics/logs/build-$(echo "$command" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
