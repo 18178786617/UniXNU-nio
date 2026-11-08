@@ -377,15 +377,18 @@ timeout = -1
 # with the GPU interrupt, and the user-client path; they are raised one at a
 # time, each with its own image, so a fault is attributable.
 # native-ufs-probe=12 is the storage discovery report and it is on for this
-# build on purpose. The two volume UUIDs the owner chain keys on --
-# root_match_volume_uuid here and XNU_OWNER_CACHE_VOLUME_UUID in the kernel
-# patches -- were carried over from the upstream 17.7.11 boards and have
-# never been read off this phone. iOS 16.5 ships its restore images
-# encrypted, so they cannot be read out of the IPSW either. The report
-# waits for IOStorageFamily to publish the root windows, prints every
-# IOMedia with its BSD name, size and UUID, and then panics; the panic
-# screen is how those two values get measured instead of guessed. Remove it
-# once the owner chain is configured with the real ones.
+# build on purpose. Both volume UUIDs the owner chain keys on are now measured
+# rather than carried over: tools/apfs-volumes.py walks the two windows of the
+# userdata image this build writes (8.4 GiB in ~14 s) and reads the APFS
+# volume superblocks, which is how 97A3EB1A.. here and 556915A0.. in
+# XNU_OWNER_CACHE_VOLUME_UUID were obtained in R257. The image is plaintext
+# even though the 16.5 IPSW is not, because it is the image this pipeline
+# builds; the IPSW was never the source. What the UUIDs cannot say is whether
+# the kernel ends up publishing the same UUIDs as IOMedia after NioUfs wraps
+# the windows, and that is what the report still answers: it waits for
+# IOStorageFamily to publish the root windows, prints every IOMedia with its
+# BSD name, size and UUID, and then panics. Remove it once the owner chain has
+# been seen to agree with these values on the device.
 kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1", "native-ufs-probe=12", "nio_skip_security_extensions=1"]
 
 ["adt"."defaults"."u32"]

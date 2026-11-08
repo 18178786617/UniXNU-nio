@@ -2076,18 +2076,62 @@ static void statsThread (void *argument, wait_result_t)
 // Storage discovery report (native-ufs-probe=12): a separate thread waits for the original
 // IOStorageFamily to publish IOMedia for the root windows, then shows what exists on the screen.
 // It must not run inside the matching thread that is starting NioUfs.
-static char gMediaReport[3000];
+/* The console blob that draws this panic keeps only PANIC_TEXT_BYTES (2048) of
+ * the message, and the panel holds about 40 text rows at SCALE 3, so a longer
+ * report is cut off by whichever limit comes first -- silently, which is the
+ * one thing a diagnostic must not do. The dump therefore bounds itself and
+ * says where it stopped. */
+#define MEDIA_REPORT_BYTES 2048
+static char gMediaReport[MEDIA_REPORT_BYTES];
+
+/* The two volumes the owner chain keys on, as measured off this board's own
+ * userdata image (R257, tools/apfs-volumes.py). Keep in step with
+ * board.toml root_match_volume_uuid and the patches' XNU_OWNER_CACHE_VOLUME_UUID:
+ * the report exists to say whether the kernel publishes the identity the image
+ * carries, so a stale copy here would answer a question nobody asked. */
+static const char *const kRootVolumeUuid  = "97A3EB1A-5218-4936-BC85-9574EC2C8CC9";
+static const char *const kCacheVolumeUuid = "556915A0-5005-4DE5-B3E4-6B489DBB4C1A";
+
+/* APFS writes UUIDs in upper case; the image scan printed them in lower case.
+ * Compare without regard to case or to the separators. */
+static bool uuidMatches (const char *a, const char *b)
+{
+  if (!a || !b) {
+    return false;
+  }
+  while (*a && *b) {
+    if (*a == '-') { a++; continue; }
+    if (*b == '-') { b++; continue; }
+    char ca = *a++, cb = *b++;
+    if (ca >= 'a' && ca <= 'z') ca = char (ca - 32);
+    if (cb >= 'a' && cb <= 'z') cb = char (cb - 32);
+    if (ca != cb) {
+      return false;
+    }
+  }
+  while (*a == '-') a++;
+  while (*b == '-') b++;
+  return *a == *b;
+}
 
 static void mediaReportThread (void *, wait_result_t)
 {
-  unsigned count = 0;
+  unsigned count = 0, rootSeen = 0, cacheSeen = 0;
   for (unsigned tick = 0; tick < 200; tick++) {      // up to 20 s
     OSDictionary *matching = IOService::serviceMatching ("IOMedia");
     OSIterator *iterator = matching ? IOService::getMatchingServices (matching) : nullptr;
-    count = 0;
+    count = rootSeen = cacheSeen = 0;
     if (iterator) {
-      while (iterator->getNextObject ()) {
+      while (OSObject *object = iterator->getNextObject ()) {
+        IOService *media = OSDynamicCast (IOService, object);
+        if (!media) {
+          continue;
+        }
         count++;
+        OSString *uuid = OSDynamicCast (OSString, media->getProperty ("UUID"));
+        const char *text = uuid ? uuid->getCStringNoCopy () : nullptr;
+        if (uuidMatches (text, kRootVolumeUuid)) rootSeen++;
+        if (uuidMatches (text, kCacheVolumeUuid)) cacheSeen++;
       }
       iterator->release ();
     }
@@ -2100,12 +2144,16 @@ static void mediaReportThread (void *, wait_result_t)
     IOSleep (100);
   }
   IOSleep (500);
+  /* Both answers go on the first line: whatever else the panel loses, whether
+   * the kernel published these two volumes has to survive. */
   int used = snprintf (gMediaReport, sizeof (gMediaReport),
-                       "NATIVE_UFS media report: published=%u reads=%llu failures=%llu media=%u\n",
-                       native_ufs_blocks_published, native_ufs_block_reads, native_ufs_block_failures, count);
+                       "NATIVE_UFS media report: published=%u reads=%llu failures=%llu media=%u root=%u cache=%u\n",
+                       native_ufs_blocks_published, native_ufs_block_reads, native_ufs_block_failures,
+                       count, rootSeen, cacheSeen);
   OSDictionary *matching = IOService::serviceMatching ("IOMedia");
   OSIterator *iterator = matching ? IOService::getMatchingServices (matching) : nullptr;
-  while (iterator && used < int (sizeof (gMediaReport)) - 200) {
+  unsigned listed = 0;
+  while (iterator && used < MEDIA_REPORT_BYTES - 180) {
     IOService *media = OSDynamicCast (IOService, iterator->getNextObject ());
     if (!media) {
       break;
@@ -2117,12 +2165,18 @@ static void mediaReportThread (void *, wait_result_t)
     used += snprintf (gMediaReport + used, sizeof (gMediaReport) - used, "%s %s size=%llx uuid=%s\n",
                       bsd ? bsd->getCStringNoCopy () : "-", content ? content->getCStringNoCopy () : "-",
                       size ? size->unsigned64BitValue () : 0ULL, uuid ? uuid->getCStringNoCopy () : "-");
+    listed++;
   }
   if (iterator) {
     iterator->release ();
   }
   if (matching) {
     matching->release ();
+  }
+  if (listed < count) {
+    snprintf (gMediaReport + used, sizeof (gMediaReport) - used,
+              "(stopped after %u of %u: the panic screen holds %u bytes)\n",
+              listed, count, (unsigned) MEDIA_REPORT_BYTES);
   }
   panic ("%s", gMediaReport);
 }
