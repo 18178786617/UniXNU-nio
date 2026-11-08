@@ -1,0 +1,15 @@
+patched IOBlockStorageDriver.cpp: dext path removed, 115668 bytes
+PASS IOAppleLabelScheme (2 warnings)
+PASS IOApplePartitionScheme (0 warnings)
+PASS IOBlockStorageDevice (0 warnings)
+PASS IOBlockStorageDriver (12 warnings)
+PASS IOFDiskPartitionScheme (0 warnings)
+PASS IOFilterScheme (0 warnings)
+PASS IOGUIDPartitionScheme (0 warnings)
+PASS IOMedia (0 warnings)
+PASS IOMediaBSDClient (96 warnings)
+PASS IOPartitionScheme (0 warnings)
+PASS IORequest (0 warnings)
+PASS IORequestsPool (0 warnings)
+PASS IOStorage (1 warnings)
+PASS: 13 members, 2804992 bytes -> build/storage-family/libIOStorageFamily.a
