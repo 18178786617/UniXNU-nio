@@ -1,0 +1,56 @@
+diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
+--- a/bsd/kern/kern_trustcache.c
++++ b/bsd/kern/kern_trustcache.c
+@@ -245,20 +245,24 @@
+ #endif
+ 
+ #ifdef XNU_PLATFORM_BridgeOS
+ 	allow_legacy_caches = true;
+ #endif
+ 
+-	/* Image4 interface needs to be available */
+-	if (img4if == NULL) {
+-		panic("image4 interface not available");
+-	}
+-
+-	/* AMFI interface needs to be available */
+-	if (amfi == NULL) {
+-		panic("amfi interface not available");
++	/* nio: img4if and amfi are registered by the security extensions, and this
++	 * boot deliberately did not load them (nio_skip_security_extensions=1, see
++	 * libsa/bootstrap.cpp). Both are NULL here, so there is no interface to ask
++	 * and no cache to load; panicking on that costs a boot cycle and says
++	 * nothing this build does not already know. The runtime and its lock are
++	 * still initialised below, because cs_blob and the vnode checks take that
++	 * lock whether or not a cache was ever loaded. load_static_trust_cache()
++	 * carries the matching check: without it the amfi dereference there would
++	 * fault immediately after this function returned.
++	 */
++	if (img4if == NULL || amfi == NULL) {
++		printf("trust_cache: no img4/amfi interface, runtime left empty\n");
+ 	} else if (amfi->TrustCache.version < 2) {
+ 		panic("amfi interface is stale: %u", amfi->TrustCache.version);
+ 	}
+ 
+ 	trustCacheInitializeRuntime(
+ 		trust_cache_rt,
+@@ -763,12 +767,19 @@
+ 	unsigned int tc_dt_prop_length = 0;
+ 	size_t tc_segment_length = 0;
+ 
+ 	/* Mark this function as having been called */
+ 	trust_cache_static_init = true;
+ 
++	/* nio: no amfi interface means no version to ask about and no cache to
++	 * load; trust_cache_runtime_init() left the runtime empty in that case
++	 * instead of panicking. */
++	if (amfi == NULL) {
++		return;
++	}
++
+ 	/* Nothing to do when the runtime isn't set */
+ 	if (trust_cache_rt == NULL) {
+ 		return;
+ 	}
+ 
+ 	if (amfi->TrustCache.version < 1) {

@@ -103,16 +103,18 @@ config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "
 # start hook, and the SM8250 two-cluster scheduler patch that NX769J (an
 # SM8550 board) does not carry.
 #
-# The 67 patches were applied, in this order, onto the real xnu-8796.101.5
-# tree: none failed, and the result touches 82 files. The check is
-# reproducible -- take the tag tarball from Apple's open source distribution,
-# git init the tree, and apply the series file in order:
+# Each patch in patches/xnu-8796/series was applied, in this order, onto the
+# real xnu-8796.101.5 tree: none failed. The check is reproducible -- take the
+# tag tarball from Apple's open source distribution, git init the tree, and
+# apply the series file in order:
 #
 #   codeload.github.com/apple-oss-distributions/xnu/tar.gz/refs/tags/xnu-8796.101.5
 #
-# Two of the 67 are this board's own rather than a rebase of an existing
-# patch: the GPU probe start hook (gpu-probe-start.patch) and the SM8250
-# two-cluster scheduler (native-smp-type-clusters.patch). One more is not a
+# Three of them are this board's own rather than a rebase of an existing
+# patch: the GPU probe start hook (gpu-probe-start.patch), the SM8250
+# two-cluster scheduler (native-smp-type-clusters.patch), and the trust cache
+# runtime's tolerance for a boot without the security extensions
+# (nio-trust-cache-without-security-extensions.patch). One more is not a
 # rebase at all but the piece xnu-10063 has and xnu-8796 does not: the
 # compile records (xnu-8796-compile-records.patch) the archive builders
 # replay. See that patch's own header.

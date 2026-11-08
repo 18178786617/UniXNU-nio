@@ -69,6 +69,19 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=n
 # the first query of the trust cache panics the kernel with "Taking
 # non-sleepable RW lock with preemption enabled" (R234). With it the runtime
 # is initialized and the 16.5 StaticTrustCache this board fetches is loaded.
+#
+# What the runtime cannot do is run without the security extensions. img4if and
+# amfi are registered by AMFI, and libsa/bootstrap.cpp skips loading AMFI on
+# this board (nio_skip_security_extensions=1, because img4's manifest-properties
+# node is absent from a hand-built device tree). R258 booted the run-46 kernel
+# and stopped at exactly that: the panic screen's message was
+#   "image4 interface not available" @bsd/kern/kern_trustcache.c:253
+# with the console's last lines still at firehose/log/kalloc init, because the
+# framebuffer tap stops echoing there and only the panic screen draws again.
+# patches/xnu-8796/nio-trust-cache-without-security-extensions.patch keeps the
+# runtime and its lock initialised and drops both panics; the static cache load
+# then has no version to ask about and returns. Nothing can consult the cache
+# while AMFI is not loaded, so the state it leaves behind is the honest one.
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
