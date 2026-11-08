@@ -1,0 +1,361 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:124:18: warning: implicit conversion changes signedness: 'dev_t' (aka 'int') to '__uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+  124 |     return minor(dev);
+      |            ~~~~~ ^~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:205:56: warning: implicit conversion changes signedness: 'const int' to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+  205 |             return (buckets[i >> kMinorsAddCountBits])[i & kMinorsAddCountMask];
+      |                                                        ^ ~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:733:33: warning: implicit conversion changes signedness: 'int' to 'IOStorageAccess' (aka 'unsigned int') [-Wsign-conversion]
+  733 |     return (table[a1][a2] << 1) + 1;
+      |     ~~~~~~ ~~~~~~~~~~~~~~~~~~~~~^~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:964:47: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+  964 |     minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                      ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:1058:66: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 1058 |                     gIOMediaBSDClientGlobals.getMinors()->remove(getminor(dev));
+      |                                                           ~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:1107:47: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 1107 |     minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                      ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:1148:58: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 1148 |             gIOMediaBSDClientGlobals.getMinors()->remove(getminor(dev));
+      |                                                   ~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:1174:58: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 1174 |             gIOMediaBSDClientGlobals.getMinors()->remove(getminor(dev));
+      |                                                   ~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:1258:59: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 1258 |     MinorSlot * minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                                  ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2110:48: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 2110 |                 strlcpy(p, strchr(p, ':') + 1, l);     // (strip the plane name)
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/string.h:273:75: note: expanded from macro 'strlcpy'
+  273 | #define strlcpy(dst, src, n)            __builtin___strlcpy_chk(dst, src, n, __xnu_bos_strict(dst))
+      |                                         ~~~~~~~~~~~~~~~~~~~~~~~           ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2442:59: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2442 |     MinorSlot * minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                                  ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2624:72: warning: implicit conversion loses integer precision: 'int' to 'IOStoragePriority' (aka 'unsigned char') [-Wimplicit-int-conversion]
+ 2621 |                 status = minor->media->setPriority( /* client       */ minor->client,
+      |                                        ~~~~~~~~~~~
+ 2622 |                                                     /* extents      */ extents,
+ 2623 |                                                     /* extentsCount */ request.extentsCount,
+ 2624 |                                                     /* priority     */ DK_TIER_TO_PRIORITY(request.tier) );
+      |                                                                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/bsd/sys/disk.h:244:74: note: expanded from macro 'DK_TIER_TO_PRIORITY'
+  244 | #define DK_TIER_TO_PRIORITY(tier)             (((tier) << DK_TIER_SHIFT) | ~DK_TIER_MASK)
+      |                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2655:59: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2655 |     MinorSlot * minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                                  ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2697:59: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2697 |     MinorSlot * minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                                  ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2736:14: warning: operand of ? changes signedness: 'user_ssize_t' (aka 'long long') to 'UInt64' (aka 'unsigned long long') [-Wsign-conversion]
+ 2734 |     return (dkrtype == DKRTYPE_BUF)
+      |     ~~~~~~
+ 2735 |            ? buf_count((buf_t)dkr)
+ 2736 |            : uio_resid(((dio_t)dkr)->uio);
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2746:51: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2746 |         minor = gIOMediaBSDClientGlobals.getMinor(getminor(buf_device(bp)));
+      |                                          ~~~~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2751:12: warning: implicit conversion changes signedness: 'off_t' (aka 'long long') to 'UInt64' (aka 'unsigned long long') [-Wsign-conversion]
+ 2751 |     return uio_offset(((dio_t)dkr)->uio);
+      |     ~~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2780:70: warning: implicit conversion changes signedness: 'UInt64' (aka 'unsigned long long') to 'user_ssize_t' (aka 'long long') [-Wsign-conversion]
+ 2780 |         uio_setresid(((dio_t)dkr)->uio, uio_resid(((dio_t)dkr)->uio) - bcount);
+      |         ~~~~~~~~~~~~                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2780:41: warning: implicit conversion changes signedness: 'user_ssize_t' (aka 'long long') to 'UInt64' (aka 'unsigned long long') [-Wsign-conversion]
+ 2780 |         uio_setresid(((dio_t)dkr)->uio, uio_resid(((dio_t)dkr)->uio) - bcount);
+      |                                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~ ~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2834:13: warning: implicit conversion changes signedness: 'int' to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2832 |         return IOMemoryDescriptor::withOptions(              // (multiple-range)
+      |                ~~~~~~~~~~~~~~~~~~
+ 2833 |             uio,
+ 2834 |             uio_iovcnt(uio),
+      |             ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2873:31: warning: implicit conversion loses integer precision: 'int' to 'IOStoragePriority' (aka 'unsigned char') [-Wimplicit-int-conversion]
+ 2873 |         attributes.priority = DK_TIER_TO_PRIORITY(bufattr_throttled(attributes.bufattr));
+      |                             ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/bsd/sys/disk.h:244:74: note: expanded from macro 'DK_TIER_TO_PRIORITY'
+  244 | #define DK_TIER_TO_PRIORITY(tier)             (((tier) << DK_TIER_SHIFT) | ~DK_TIER_MASK)
+      |                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2881:51: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2881 |         minor = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                          ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2908:5: error: ISO C++17 does not allow 'register' storage class specifier [-Wregister]
+ 2908 |     register UInt64      byteCount;
+      |     ^~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2909:5: error: ISO C++17 does not allow 'register' storage class specifier [-Wregister]
+ 2909 |     register UInt64      byteStart;
+      |     ^~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2916:47: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 2916 |     minor = gIOMediaBSDClientGlobals.getMinor(getminor(DKR_GET_DEV(dkr, dkrtype)));
+      |                                      ~~~~~~~~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3141:61: warning: implicit conversion changes signedness: 'int32_t' (aka 'int') to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 3141 |     MinorSlot * minor   = gIOMediaBSDClientGlobals.getMinor(getminor(dev));
+      |                                                    ~~~~~~~~ ^~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3502:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3502 |         if ( _table[minorID].isAssigned )  remove(minorID);
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3540:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3540 |         if ( _table[minorID].isAssigned == false )  break;
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3578:45: warning: implicit conversion changes signedness: 'unsigned int' to 'int' [-Wsign-conversion]
+ 3578 |         if (_num) owner_id_mode[i]  = _num->unsigned32BitValue();
+      |                                     ~ ~~~~~~^~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3584:50: warning: implicit conversion changes signedness: 'int' to 'gid_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3581 |     bdevNode = devfs_make_node( /* dev        */ makedev(majorID, minorID),
+      |                ~~~~~~~~~~~~~~~
+ 3582 |                                 /* type       */ DEVFS_BLOCK, 
+ 3583 |                                 /* owner      */ owner_id_mode[0],
+ 3584 |                                 /* group      */ owner_id_mode[1],
+      |                                                  ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3583:50: warning: implicit conversion changes signedness: 'int' to 'uid_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3581 |     bdevNode = devfs_make_node( /* dev        */ makedev(majorID, minorID),
+      |                ~~~~~~~~~~~~~~~
+ 3582 |                                 /* type       */ DEVFS_BLOCK, 
+ 3583 |                                 /* owner      */ owner_id_mode[0],
+      |                                                  ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3593:50: warning: implicit conversion changes signedness: 'int' to 'gid_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3590 |     cdevNode = devfs_make_node( /* dev        */ makedev(majorID, minorID),
+      |                ~~~~~~~~~~~~~~~
+ 3591 |                                 /* type       */ DEVFS_CHAR, 
+ 3592 |                                 /* owner      */ owner_id_mode[0],
+ 3593 |                                 /* group      */ owner_id_mode[1],
+      |                                                  ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3592:50: warning: implicit conversion changes signedness: 'int' to 'uid_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3590 |     cdevNode = devfs_make_node( /* dev        */ makedev(majorID, minorID),
+      |                ~~~~~~~~~~~~~~~
+ 3591 |                                 /* type       */ DEVFS_CHAR, 
+ 3592 |                                 /* owner      */ owner_id_mode[0],
+      |                                                  ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3615:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3615 |     bzero(&_table[minorID], sizeof(MinorSlot));    // (zero slot)
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/string.h:165:57: note: expanded from macro 'bzero'
+  165 | #define bzero(s, n)                     __builtin_bzero(s, n)
+      |                                                         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3617:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3617 |     _table[minorID].isAssigned    = true;          // (fill in slot)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3618:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3618 |     _table[minorID].isObsolete    = false;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3619:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3619 |     _table[minorID].isOrphaned    = false;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3620:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3620 |     _table[minorID].anchorID      = anchorID;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3621:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3621 |     _table[minorID].client        = client;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3622:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3622 |     _table[minorID].media         = media;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3623:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3623 |     _table[minorID].name          = minorName;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3624:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3624 |     _table[minorID].bdevBlockSize = media->getPreferredBlockSize();
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3625:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3625 |     _table[minorID].bdevNode      = bdevNode;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3626:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3626 |     _table[minorID].bdevOpen      = 0;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3627:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3627 |     _table[minorID].bdevOpenLevel = kIOStorageAccessNone;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3628:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3628 |     _table[minorID].cdevNode      = cdevNode;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3629:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3629 |     _table[minorID].cdevOpen      = 0;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3630:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3630 |     _table[minorID].cdevOpenLevel = kIOStorageAccessNone;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3632:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3632 |     _table[minorID].cdevOptions   = 0;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3635:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3635 |     _table[minorID].client->retain();              // (retain client)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3636:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3636 |     _table[minorID].media->retain();               // (retain media)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3640:40: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3640 |                    /* object */ _table[minorID].media->getProperty(
+      |                                 ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:413:46: note: expanded from macro 'OSDynamicCast'
+  413 |     ((type *) OSMetaClassBase::safeMetaCast((inst), OSTypeID(type)))
+      |                                              ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3644:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3644 |     _table[minorID].isVirtual = false;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3655:20: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3655 |             _table[minorID].isVirtual = true;
+      |             ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3671:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3671 |     assert(_table[minorID].isAssigned);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3673:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3673 |     assert(_table[minorID].isOrphaned == false);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3674:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3674 |     assert(_table[minorID].bdevOpen == 0);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3675:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3675 |     assert(_table[minorID].cdevOpen == 0);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3677:23: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3677 |     anchorID = _table[minorID].anchorID;
+      |                ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3681:25: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3681 |     devfs_remove(_table[minorID].cdevNode);
+      |                  ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3682:25: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3682 |     devfs_remove(_table[minorID].bdevNode);
+      |                  ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3683:82: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3683 |     IOFreeData(_table[minorID].name, sizeof(char) * (unsigned long)strlen(_table[minorID].name) + 1);
+      |                                                                           ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/string.h:214:58: note: expanded from macro 'strlen'
+  214 | #define strlen(s)                       __builtin_strlen(s)
+      |                                                          ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3683:23: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3683 |     IOFreeData(_table[minorID].name, sizeof(char) * (unsigned long)strlen(_table[minorID].name) + 1);
+      |                ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3684:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3684 |     _table[minorID].client->release();             // (release client)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3685:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3685 |     _table[minorID].media->release();              // (release media)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3687:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3687 |     bzero(&_table[minorID], sizeof(MinorSlot));    // (zero slot)
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/string.h:165:57: note: expanded from macro 'bzero'
+  165 | #define bzero(s, n)                     __builtin_bzero(s, n)
+      |                                                         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3748:28: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3748 |              strcmp(_table[minorID].name, minorName) == 0        )  break;
+      |                     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/string.h:226:58: note: expanded from macro 'strcmp'
+  226 | #define strcmp(s1, s2)                  __builtin_strcmp(s1, s2)
+      |                                                          ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3747:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3747 |              _table[minorID].anchorID                == anchorID &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3746:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3746 |              _table[minorID].isOrphaned              != false    &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3745:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3745 |              _table[minorID].isObsolete              != false    &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3744:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3744 |         if ( _table[minorID].isAssigned              != false    &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3757:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3757 |     _table[minorID].client->release();             // (release client)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3758:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3758 |     _table[minorID].media->release();              // (release media)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3760:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3760 |     _table[minorID].isObsolete = false;            // (update slot)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3761:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3761 |     _table[minorID].isOrphaned = false;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3762:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3762 |     _table[minorID].client     = client;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3763:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3763 |     _table[minorID].media      = media;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3765:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3765 |     _table[minorID].client->retain();              // (retain client)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3766:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3766 |     _table[minorID].media->retain();               // (retain media)
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3783:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3783 |              _table[minorID].media      == media )  return minorID;
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3782:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3782 |              _table[minorID].isObsolete == false &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3781:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3781 |         if ( _table[minorID].isAssigned != false &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3802:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3802 |              _table[minorID].anchorID   == anchorID )
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3801:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3801 |         if ( _table[minorID].isAssigned != false    &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3804:29: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3804 |             opens += _table[minorID].bdevOpen;
+      |                      ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3805:29: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3805 |             opens += _table[minorID].cdevOpen;
+      |                      ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3823:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3823 |              _table[minorID].anchorID   == anchorID )
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3822:21: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3822 |         if ( _table[minorID].isAssigned != false    &&
+      |              ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3826:25: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3826 |             if ( _table[minorID].isObsolete == false )  return true;
+      |                  ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3827:25: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3827 |             if ( _table[minorID].isOrphaned == false )  return true;
+      |                  ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3840:42: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3840 |     if ( minorID < _tableCount && _table[minorID].isAssigned )
+      |                                   ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3841:24: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3841 |         return &_table[minorID];
+      |                 ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3856:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3856 |     assert(_table[minorID].isAssigned);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3861:12: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3861 |     _table[minorID].isObsolete = true;
+      |     ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3871:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3871 |     assert(_table[minorID].isAssigned);
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/assert.h:97:24: note: expanded from macro 'assert'
+   97 |         (__builtin_expect(!!((ex)), 1L) ? (void)0 : Assert(__FILE_NAME__, __LINE__, # ex))
+      |                               ^~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3873:19: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3873 |     return _table[minorID].isObsolete ? true : false;
+      |            ~~~~~~ ^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3926:18: warning: implicit conversion changes signedness: 'int' to 'UInt32' (aka 'unsigned int') [-Wsign-conversion]
+ 3926 |     _majorID   = devsw_add(-1, &bdevswFunctions, &cdevswFunctions);
+      |                ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:3954:54: warning: implicit conversion changes signedness: 'UInt32' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+ 3954 |     if ( _majorID != kInvalidMajorID )  devsw_remove(_majorID, &bdevswFunctions, &cdevswFunctions);
+      |                                         ~~~~~~~~~~~~ ^~~~~~~~
+96 warnings and 2 errors generated.

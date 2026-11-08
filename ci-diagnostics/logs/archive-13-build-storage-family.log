@@ -1,0 +1,21 @@
+PASS IOAppleLabelScheme (2 warnings)
+PASS IOApplePartitionScheme (0 warnings)
+PASS IOBlockStorageDevice (1 warnings)
+FAIL IOBlockStorageDriver (5 lines of log, 1 errors)
+PASS IOFDiskPartitionScheme (0 warnings)
+PASS IOFilterScheme (0 warnings)
+PASS IOGUIDPartitionScheme (0 warnings)
+PASS IOMedia (0 warnings)
+FAIL IOMediaBSDClient (361 lines of log, 2 errors)
+PASS IOPartitionScheme (0 warnings)
+PASS IORequest (0 warnings)
+PASS IORequestsPool (0 warnings)
+PASS IOStorage (1 warnings)
+
+--- IOBlockStorageDriver ---
+    /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOUserBlockStorageDevice_kext.h:29:10: fatal error: 'IOUserBlockStorageDevice.h' file not found
+--- IOMediaBSDClient ---
+    /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2908:5: error: ISO C++17 does not allow 'register' storage class specifier [-Wregister]
+    /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOMediaBSDClient.cpp:2909:5: error: ISO C++17 does not allow 'register' storage class specifier [-Wregister]
+
+2 of 13 IOStorageFamily sources did not compile; full logs in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-family

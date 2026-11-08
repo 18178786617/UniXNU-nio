@@ -1,0 +1,7 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOBlockStorageDevice.cpp:209:12: warning: 'doSynchronizeCache' is deprecated [-Wdeprecated-declarations]
+  209 |     return(doSynchronizeCache());
+      |            ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-abi/include/IOKit/storage/IOBlockStorageDevice.h:234:63: note: 'doSynchronizeCache' has been explicitly marked deprecated here
+  234 |     virtual IOReturn    doSynchronizeCache(void) __attribute__ ((deprecated));
+      |                                                                  ^
+1 warning generated.
