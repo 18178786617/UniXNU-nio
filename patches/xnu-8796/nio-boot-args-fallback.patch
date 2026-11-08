@@ -75,3 +75,18 @@ diff --git a/pexpert/arm/pe_bootargs.c b/pexpert/arm/pe_bootargs.c
 +	}
 +	return (const char *)((boot_args *)PE_state.bootArgs)->CommandLine;
  }
+diff --git a/pexpert/pexpert/pexpert.h b/pexpert/pexpert/pexpert.h
+--- a/pexpert/pexpert/pexpert.h
++++ b/pexpert/pexpert/pexpert.h
+@@ -344,4 +344,11 @@
+ extern char * PE_boot_args(
+ 	void);
+ 
++/* nio: what the loader actually handed over (see pe_bootargs.c).  Declared
++ * here so C++ translation units that include this header inside an
++ * extern "C" block (libkern/c++/OSKext.cpp does) see the C symbol, not a
++ * mangled one. */
++extern const char * PE_boot_args_raw(
++	void);
++
+ extern boolean_t PE_parse_boot_argn(
