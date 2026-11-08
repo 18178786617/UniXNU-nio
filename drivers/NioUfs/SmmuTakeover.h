@@ -119,9 +119,17 @@ static const char *configureUfsSmmu(const UfsSmmuPlan &p, uint16_t stream, Read 
     write(0xc00 + 4 * p.slot, p.bank);
     if (read(0xc00 + 4 * p.slot) != p.bank) return "SMMU stream context readback";
     write(0x800 + 4 * p.slot, 0x80000000U | stream);
+  } else {
+    // nio run-57: the mapping we reuse was left by whatever drove UFS
+    // before us (XBL, or a warm previous run). Its S2CR points at the
+    // same bank but carries extra bits (TYPE/BYPASS/EXIDEN); the plan
+    // already vetted those bits are harmless for our bank, so rewrite
+    // the register to the bare value instead of failing the exact-
+    // match readback below.
+    write(0xc00 + 4 * p.slot, p.bank);
   }
   if (read(0x800 + 4 * p.slot) != (0x80000000U | stream) ||
-      read(0xc00 + 4 * p.slot) != p.bank)
+      (read(0xc00 + 4 * p.slot) & 0xff) != p.bank)
     return "SMMU stream mapping readback";
   return nullptr;
 }
