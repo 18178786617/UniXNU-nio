@@ -448,6 +448,41 @@ jobs:
           PY
           bash -n scripts/build-xnu-4k-baseline.sh
 
+      - name: Let the storage recipe see the IOStorageFamily headers
+        run: |
+          # build-arm-driver.py compiles a driver by replaying one of the XNU
+          # build's own compile records (IOPlatformExpert.cpo.json). That record
+          # carries the include paths the kernel build needs, and the kernel does
+          # not build IOStorageFamily: it is a separate Apple project, linked
+          # into the kernel as a kext, so <IOKit/storage/IOBlockStorageDevice.h>
+          # is in none of those paths. The script already knows this and adds
+          # build/storage-abi/include -- the public header set
+          # prepare-storage-headers.py just built out of the pinned
+          # IOStorageFamily checkout -- but only for the component ids it was
+          # written with. This board's transport is NioUfs, which is not one of
+          # them, so run 32 stopped at:
+          #
+          #   NioUfs.cpp:24:10: fatal error:
+          #   'IOKit/storage/IOBlockStorageDevice.h' file not found
+          #
+          # The id is added to that condition rather than to the tuple of
+          # components that also get -DNATIVE_VERIFIED_BLOCK: that define is
+          # gated on --verified-root, needs kits/VerifiedRoot/include, and this
+          # board does not use it yet.
+          python3 - <<'PY'
+          import pathlib
+          path = pathlib.Path('scripts/build-arm-driver.py')
+          text = path.read_text()
+          old = "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):"
+          new = "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs', 'NioUfs'):"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit('the storage-include condition matched %d times, expected exactly 1' % count)
+          path.write_text(text.replace(old, new))
+          compile(path.read_text(), str(path), 'exec')
+          print('storage headers: NioUfs is given build/storage-abi/include')
+          PY
+
       - name: Resolve the configuration
         run: |
           ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
