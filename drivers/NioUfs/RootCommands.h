@@ -57,7 +57,11 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   gRootDiagnostic.sense = 0;
   uint8_t *utrd = gHost.virt;
   uint64_t ucdPhys = gHost.phys + kUcdOffset;
-  uint32_t *words = reinterpret_cast<uint32_t *> (utrd);
+  // nio run-62: the kernel runs with SCTLR.A=1, and the compiler merged
+  // the adjacent 32-bit UTRD stores into a 64-bit stur at +4, which is
+  // only 4-byte aligned in the device-mapped list region -- alignment
+  // fault. volatile keeps every store 32-bit and in order.
+  volatile uint32_t *words = reinterpret_cast<volatile uint32_t *> (utrd);
   for (unsigned index = 0; index < 8; index++) {
     words[index] = 0;
   }
@@ -69,7 +73,7 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   words[7] = (dataBytes ? 1U : 0U) | ((kPrdtOffset >> 2) << 16);
   if (dataBytes) {
     uint64_t dataPhys = gHost.phys + kDataOffset;
-    uint32_t *prd = reinterpret_cast<uint32_t *> (gHost.virt + kUcdOffset + kPrdtOffset);
+    volatile uint32_t *prd = reinterpret_cast<volatile uint32_t *> (gHost.virt + kUcdOffset + kPrdtOffset);
     prd[0] = static_cast<uint32_t> (dataPhys);
     prd[1] = static_cast<uint32_t> (dataPhys >> 32);
     prd[2] = 0;
@@ -114,7 +118,7 @@ static bool hostClearUcd (void)
     recordTransport (kIOReturnIOError, 15);
     return false;
   }
-  uint32_t *words = reinterpret_cast<uint32_t *> (gHost.virt + kUcdOffset);
+  volatile uint32_t *words = reinterpret_cast<volatile uint32_t *> (gHost.virt + kUcdOffset);
   for (unsigned index = 0; index < (kPrdtOffset + 16) / 4; index++) {
     words[index] = 0;
   }
