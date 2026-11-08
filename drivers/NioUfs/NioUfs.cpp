@@ -928,7 +928,7 @@ static IOReturn recordTransport (IOReturn result, uint32_t ocs)
   return result;
 }
 
-static void cacheCivac (const void *start, size_t length)
+__attribute__((unused)) static void cacheCivac (const void *start, size_t length)
 {
   uintptr_t address = reinterpret_cast<uintptr_t> (start) & ~uintptr_t (63);
   uintptr_t end = reinterpret_cast<uintptr_t> (start) + length;
@@ -940,7 +940,7 @@ static void cacheCivac (const void *start, size_t length)
 
 // Device-owned cache lines must not be written back over DMA results. All
 // callers use complete 64-byte lines from the dedicated page-aligned buffer.
-static void cacheInvalidate (const void *start, size_t length)
+__attribute__((unused)) static void cacheInvalidate (const void *start, size_t length)
 {
   __asm__ volatile ("dsb sy" ::: "memory");
   uintptr_t address = reinterpret_cast<uintptr_t> (start);
