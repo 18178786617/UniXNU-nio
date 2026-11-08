@@ -55,8 +55,11 @@ POLICY_SOURCE = '''/* SPDX-License-Identifier: BSD-2-Clause-Patent */
  * has internal linkage without it, and NativeUfs references the key by name. */
 extern const uint8_t verified_root_key[VR_KEY_BYTES] = {0};
 
+/* {0, 0} rather than {nullptr, 0}: the kernel's own compile record for this
+ * recipe is a C record (-x c), so the generated table is C even though
+ * VerifiedBlockPolicy.h is written to be usable from both. */
 const NativeVerifiedBlockPolicy verified_root_policies[1] = {
-    {nullptr, 0},
+    {0, 0},
 };
 
 const uint64_t verified_root_policy_count = 0;
