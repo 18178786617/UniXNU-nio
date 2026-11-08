@@ -26,41 +26,28 @@ IOStorageFamily kernel target, from the same pinned checkout
 prepare-storage-headers.py takes its public headers from
 (refer/IOStorageFamily, commit e45fbe30a7879e0b16e26dddb78538f1b00e0bff).
 
-Two files from upstream's target are handled differently:
+One file from upstream's target is missing from this checkout:
 
-  IOStorageFeatures.cpp            does not exist in this checkout
+  IOStorageFeatures.cpp
 
-IOUserBlockStorageDevice, the DriverKit-backed storage device class, needs
-two different halves and only one of them belongs in a kernel:
+IOUserBlockStorageDevice, the DriverKit-backed storage device class, is not
+compiled at all.
 
-  the generated header             `xcrun iig --header` produces it from
-                                   BlockStorageDeviceDriverKit/
-                                   IOUserBlockStorageDevice.iig, and
-                                   IOUserBlockStorageDevice_kext.h includes
-                                   it. It is generated here.
+  IOBlockStorageDriver.cpp is the only file in the family that refers to it:
+  it casts its provider with OSDynamicCast(IOUserBlockStorageDevice, provider)
+  and asks it for a perf-control client. On a phone that class is the kernel
+  half of a dext -- its methods are forwarded through an iig-generated
+  _Dispatch to seven _Impl functions the dext implements. A kext can be linked
+  with those undefined because the dext arrives later; a kernel cannot. Run 40
+  named all seven, run 41 then named the generated dispatch that the kext half
+  needs in turn.
 
-  IOUserBlockStorageDevice_kext.cpp
-                                   the kernel-side class: metaClass,
-                                   init/free/start/stop, getPerfControlClient,
-                                   doAsyncReadWrite and the rest. This is what
-                                   IOBlockStorageDriver's OSDynamicCast and
-                                   getPerfControlClient() call need, and it is
-                                   compiled here.
-
-  the generated implementation     `xcrun iig --impl`. Not compiled. It is the
-                                   DriverKit side of the class: its _Dispatch
-                                   calls Start_Impl, Stop_Impl, StartDev_Impl,
-                                   Complete_Impl, CompleteIO_Impl,
-                                   DoAsyncUnmap_Impl and RegisterDext_Impl,
-                                   which on a phone are implemented by the
-                                   dext. There is no dext on this board and
-                                   never will be, so every one of those names
-                                   is undefined, and a kernel link cannot
-                                   leave a name undefined the way a kext can.
-                                   Run 40 named all seven, plus metaClass --
-                                   metaClass is in the kext file, which is
-                                   why compiling that file and not this one
-                                   is the whole of the fix.
+  There is no dext on this board, and nothing the family does with the class
+  beyond testing it for NULL: the member is read at three places to pick which
+  service to attribute work to. So the driver is compiled from a copy with the
+  cast and the include removed, the member stays NULL, and the driver takes
+  the path it takes for a device that is not dext-backed -- which is what
+  NioUfs is. driver_source() below performs that edit against exact text.
 
 How the objects are built
 -------------------------
@@ -101,8 +88,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Apple's IOStorageFamily kernel target, in the order upstream builds it.
-# IOUserBlockStorageDevice_kext.cpp is appended to this list below, after the
-# header it includes has been generated.
+# IOBlockStorageDriver is compiled from a copy with the DriverKit class taken
+# out -- see driver_source() below.
 FAMILY = [
     'IOAppleLabelScheme',
     'IOApplePartitionScheme',
@@ -135,8 +122,7 @@ if switch('XNU_NATIVE_IOSTORAGE') != '1':
     raise SystemExit(0)
 
 source_dir = (ROOT / 'refer/IOStorageFamily').resolve()
-missing = [name for name in FAMILY + ['IOUserBlockStorageDevice_kext']
-           if not (source_dir / (name + '.cpp')).is_file()]
+missing = [name for name in FAMILY if not (source_dir / (name + '.cpp')).is_file()]
 if missing:
     sys.exit('refer/IOStorageFamily does not carry: %s\n'
              'run "unixnu tree" so the pinned checkout is present' % ', '.join(missing))
@@ -188,53 +174,75 @@ def command_for(source, destination, extra=()):
     return command
 
 
-def generate_user_block_device():
-    """Generate IOUserBlockStorageDevice.h with `xcrun iig`, as upstream's target does.
+DEXT_INCLUDE = '#include "IOUserBlockStorageDevice_kext.h"'
+DEXT_CAST = """    _userBlockStorageDevice = OSDynamicCast(IOUserBlockStorageDevice, provider);
 
-    IOUserBlockStorageDevice_kext.h includes this header, so it has to exist
-    before the kext-side class compiles. The DriverKit implementation iig also
-    emits is generated and kept in the log but not compiled: its _Dispatch is
-    the boundary a dext answers, and there is no dext here.
+    if (_userBlockStorageDevice) {
+        _perfControlClient = _userBlockStorageDevice->getPerfControlClient();
+        assert(_perfControlClient != NULL);
+    }
+    else {
+        _perfControlClient = IOPerfControlClient::copyClient(this, 0);
+"""
+DEXT_CAST_REPLACEMENT = """    _userBlockStorageDevice = NULL;
+    {
+        _perfControlClient = IOPerfControlClient::copyClient(this, 0);
+"""
+
+
+def driver_source():
+    """IOBlockStorageDriver.cpp without its reference to the DriverKit class.
+
+    The class is IOUserBlockStorageDevice, and on a phone it is the kernel half
+    of a dext: its methods are forwarded to a DriverKit driver through the
+    generated _Dispatch, and the seven _Impl functions that dispatch calls are
+    written by that dext. A kext may be linked with those undefined, because
+    the dext arrives later; a kernel may not -- run 40 named all seven, and run
+    41 then named the generated dispatch that the kext half needs in turn.
+
+    There is no dext on this board and there cannot be one, so the class is not
+    in the kernel at all here. Everything that refers to it is in this one file,
+    and every reference is a test for NULL: line 302 decides whether the perf
+    control client is the driver's own, and lines 730 and 3513 pick which
+    service to attribute work to. None of them calls a method on it, so with
+    the member left NULL the file compiles with a forward declaration and the
+    driver takes the path it takes for a device that is not dext-backed --
+    which is what NioUfs is.
+
+    The edit is made against exact text and fails loudly if the text moves, so
+    a future checkout cannot silently compile something else.
     """
-    definition = source_dir / 'BlockStorageDeviceDriverKit/IOUserBlockStorageDevice.iig'
-    if not definition.is_file():
-        sys.exit('%s is missing; the checkout is not the pinned IOStorageFamily' % definition)
-    generated = out / 'generated'
-    generated.mkdir(exist_ok=True)
-    header, implementation = generated / 'IOUserBlockStorageDevice.h', generated / 'IOUserBlockStorageDevice.iig.cpp'
-    driver_sdk = Path(subprocess.check_output(
-        ['xcrun', '--sdk', 'driverkit', '--show-sdk-path'], text=True).strip())
-    command = ['xcrun', 'iig', '--def', str(definition), '--header', str(header),
-               '--impl', str(implementation), '--', '-x', 'c++', '-std=gnu++17',
-               '-fno-exceptions', '-fno-rtti', '-D__IIG=1', '-DPLATFORM_DriverKit=1',
-               '-isysroot', str(driver_sdk), '-iframework',
-               str(driver_sdk / 'System/DriverKit/System/Library/Frameworks'),
-               '-idirafter', str(driver_sdk / 'System/DriverKit/usr/include')]
-    (generated / 'command.json').write_text(json.dumps(command, indent=2) + '\n')
-    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    (generated / 'generate.log').write_text(result.stdout)
-    if result.returncode:
-        sys.exit('xcrun iig failed:\n' + result.stdout[-3000:])
-    if not header.is_file() or not implementation.is_file():
-        sys.exit('xcrun iig reported success but wrote no header or implementation')
-    print('PASS iig generated %s (%d bytes) and its implementation (%d bytes)'
-          % (header.name, header.stat().st_size, implementation.stat().st_size))
-    return generated, implementation
+    original = (source_dir / 'IOBlockStorageDriver.cpp').read_text()
+    if DEXT_INCLUDE not in original:
+        sys.exit('IOBlockStorageDriver.cpp no longer includes IOUserBlockStorageDevice_kext.h; '
+                 'the dext removal in scripts/build-storage-family.py needs another look')
+    if DEXT_CAST not in original:
+        sys.exit('IOBlockStorageDriver.cpp no longer casts its provider to IOUserBlockStorageDevice '
+                 'in the shape this recipe removes; see scripts/build-storage-family.py')
+    patched = original.replace(DEXT_INCLUDE,
+                               '// no dext on this board: IOUserBlockStorageDevice is not in this kernel.')
+    patched = patched.replace(DEXT_CAST, DEXT_CAST_REPLACEMENT)
+    directory = out / 'sources'
+    directory.mkdir(exist_ok=True)
+    destination = directory / 'IOBlockStorageDriver.cpp'
+    destination.write_text(patched)
+    print('patched %s: dext path removed, %d bytes'
+          % (destination.name, len(patched)))
+    return destination
 
-
-generated, iig_implementation = generate_user_block_device()
-iig_flags = ['-I', str(generated)]
 
 objects = []
 failures = []
-work = [(name, source_dir / (name + '.cpp')) for name in FAMILY]
-# The kernel side of IOUserBlockStorageDevice. It is compiled instead of the
-# generated DriverKit implementation -- see the note at the top of this file.
-work.append(('IOUserBlockStorageDevice_kext', source_dir / 'IOUserBlockStorageDevice_kext.cpp'))
+work = []
+for name in FAMILY:
+    source = source_dir / (name + '.cpp')
+    if name == 'IOBlockStorageDriver':
+        source = driver_source()
+    work.append((name, source))
 for name, source in work:
     destination = out / (Path(name).stem + '.o')
     destination.unlink(missing_ok=True)
-    command = command_for(source, destination, iig_flags)
+    command = command_for(source, destination)
     (out / (name + '.command.json')).write_text(json.dumps(command, indent=2) + '\n')
     result = subprocess.run(command, cwd=record['directory'], text=True,
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
