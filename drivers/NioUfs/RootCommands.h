@@ -86,6 +86,26 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
   hostWrite (0x58, 1);
+  /* nio run-65: the kernel hung with no panic screen somewhere around the
+   * first doorbell. Ring it, read everything back and stop on the panic
+   * screen for one round: if this message shows, the doorbell write and
+   * the following reads survived and the hang is in the poll loop (the
+   * controller's own DMA over the region); if it never shows, the
+   * doorbell MMIO write itself hung the fabric. */
+  panic ("NATIVE_UFS submit: doorbell rung\n"
+         "phys=%llx db=%08x hcs=%08x is=%08x\n"
+         "utrd0=%08x %08x %08x %08x\n"
+         "utrd4=%08x %08x %08x %08x",
+         gHost.phys, read32 (gHost.hc, 0x58), read32 (gHost.hc, 0x30),
+         read32 (gHost.hc, 0x20),
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[0],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[1],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[2],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[3],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[4],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[5],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[6],
+         reinterpret_cast<volatile uint32_t *> (gHost.virt)[7]);
   UfsTransferPoll state;
   UfsTransferEnd end = pollUfsTransfer (port, state);
   gRootDiagnostic.polls = state.polls;
