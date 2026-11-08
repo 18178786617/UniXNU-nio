@@ -78,7 +78,7 @@ kit = "nio"
 # build stops at that line, before a single file is compiled. Runs 29 and 30
 # ended exactly there: "component:NioUfs" had been added to the archives list
 # when the UFS path was turned on, and this list was not.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs"]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VerifiedRoot"]
 
 [kernel]
 defconfig = "nio_defconfig"
@@ -161,13 +161,30 @@ archives = [
   # recipe lays the archive down under that name.
   "component:NioUfs",
   "build-nio-ufs-archive.py",
-  # The storage base class the UFS driver publishes through. IOStorageFamily
-  # is a kext on a stock phone; this board links a standalone kernel.macho,
-  # so the family has to be compiled into it or the link stops at
-  # "vtable for IOBlockStorageDevice". The recipe compiles Apple's kernel
-  # target out of refer/IOStorageFamily, and the archive reaches the link
-  # through CONFIG_XNU_EXTRA_LD_ARCHIVES.
-  "build-storage-family.py",
+  # The storage base class the UFS driver publishes through. IOBlockStorageDevice
+  # is not part of XNU: it ships inside the prelinked IOStorageFamily kext, whose
+  # segments the kernel image already carries. Compiling Apple's sources in as
+  # well links, and then panics while the kext starts ("class
+  # IOApplePartitionScheme is a duplicate; kext __kernel__ already has a class by
+  # that name"), because two classes with one name cannot coexist and the kext's
+  # copy is the one IOKit instantiates. Runs 40-44 were spent on that detour,
+  # including a kernel patch that turned the panic into a log; the patch is gone
+  # and the class is not compiled any more.
+  #
+  # What the driver needs instead is the *original* prelinked code, reached with
+  # absolute symbols: scripts/build-storage-bindings.py compiles only
+  # IOBlockStorageDevice.cpp (to read the order of its 190 dispatch slots) and
+  # writes one .set per slot that lives in the kext, at the address recorded in
+  # scripts/prelink-storage-bindings.json. That pin is measured from the donor
+  # kernelcache by scripts/pin-prelink-storage.py; see the recipe for why the
+  # addresses are stable.
+  "build-storage-bindings.py",
+  # VerifiedRoot: NioUfs authenticates every root window against an owner-signed
+  # bundle, so the link needs the real vr_open, this board's policy table and the
+  # trusted key. No bundle has been signed for this phone yet, so the table is
+  # generated empty and root verification is disabled rather than approximated
+  # (the driver logs which of the two it is doing).
+  "build-verified-root.py",
 ]
 
 # The prelink contract for the 16.5 kernelcache.
@@ -199,17 +216,19 @@ archives = [
 # actually carries. The 17.7.11 list also kept com.apple.iokit.IOHIDEventDriver,
 # which this kernelcache does not contain.
 #
-# com.apple.iokit.IOStorageFamily stays on this list even though the kernel
-# links the family's own compilation units (scripts/build-storage-family.py)
-# and so already owns every class it declares. The entry is not here for the
-# classes -- it is here for the Info.plist. IOBlockStorageDriver, the partition
-# schemes and IOMediaBSDClient reach a new device only through the
-# personalities in that plist, which name their IOClass by bundle and are what
-# IOService matches a provider against; a kernel-side class cannot carry them.
-# So the kext loads for its personalities and the kernel's registration stays
-# the one OSDynamicCast compares against -- patches/xnu-8796/
-# kext-class-duplicate-keeps-kernel.patch is the half that makes that possible
-# without the duplicate-class panic.
+# com.apple.iokit.IOStorageFamily has to stay on this list, and for one reason:
+# its Info.plist. IOBlockStorageDriver, the partition schemes and
+# IOMediaBSDClient reach a new device only through the personalities in it, which
+# name their IOClass by bundle; IOService matches a provider against those, and a
+# class linked into the kernel cannot carry them. What the kext must *not* do is
+# register the classes again -- see scripts/build-storage-bindings.py and the
+# [kernel] archives comment above, where the driver's inherited slots are bound
+# to this kext's own prelinked code instead of duplicating it.
+#
+# The `slide` below is what makes that binding portable: it moves the whole
+# prelink closure by a fixed amount and leaves the kernel's own text where the
+# link put it, which is precisely the rule scripts/pin-prelink-storage.py uses
+# when it re-bases the measured pin onto a new image.
 [kernel.prelink]
 tool = "scripts/emit-prelink-nio.py"
 kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped"

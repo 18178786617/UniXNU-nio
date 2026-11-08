@@ -152,13 +152,31 @@ IOService *NioUfs::probe (IOService *provider, SInt32 *score)
   OSObject *property = provider->getProperty ("compatible");
   OSData *data = OSDynamicCast (OSData, property);
   OSString *string = OSDynamicCast (OSString, property);
+  // The board's own node (dts/sm8250*.dtsi) is "qcom,sm8250-ufshc", "qcom,ufshc".
+  // The sheng board this driver was ported from names its controller
+  // "qcom,sm8550-ufshc"; that string is kept only so the ported probe can still be
+  // exercised against a sheng-style tree. Matching on the SoC's own name is what
+  // makes the driver start here: without a match nothing publishes, and the media
+  // report then has nothing to report -- which is exactly how every boot up to
+  // run 44 ended, because the board's UFS node was never enabled in the ADT.
+  static const char *const compatibles[] = { "qcom,sm8250-ufshc", "qcom,ufshc", "qcom,sm8550-ufshc" };
   bool match = false;
   if (data) {
     const char *text = static_cast<const char *> (data->getBytesNoCopy ());
-    match = text && contains (text, data->getLength (), "qcom,sm8550-ufshc");
+    for (unsigned i = 0; text && i < sizeof (compatibles) / sizeof (compatibles[0]); ++i) {
+      if (contains (text, data->getLength (), compatibles[i])) {
+        match = true;
+        break;
+      }
+    }
   } else if (string) {
     const char *text = string->getCStringNoCopy ();
-    match = text && contains (text, string->getLength (), "qcom,sm8550-ufshc");
+    for (unsigned i = 0; text && i < sizeof (compatibles) / sizeof (compatibles[0]); ++i) {
+      if (contains (text, string->getLength (), compatibles[i])) {
+        match = true;
+        break;
+      }
+    }
   }
   if (!match) {
     return nullptr;
@@ -1646,7 +1664,27 @@ bool NioUfsBlock::configureVerification ()
   // Select the one policy whose signed image size equals this window; two matches are refused.
   const uint8_t *manifest = nullptr;
   uint64_t manifestBytes = 0;
-  if (!verified_root_policy_count || verified_root_policy_count > 16) {
+  if (!verified_root_policy_count) {
+    // nio: this board has no owner-signed bundle. A policy is signed over the exact
+    // root windows that get flashed, so it cannot be derived offline or borrowed
+    // from another phone, and no key ceremony has happened here yet.
+    //
+    // Refusing to publish in that state is what a verified build is for, but it
+    // also means the storage path can never be brought up: the windows are the
+    // only way to read the image back, so "verify first, then look" deadlocks on
+    // the one artefact that cannot exist before the first look. This board
+    // therefore publishes the windows with an identity read out of the media
+    // itself (validate(), below) and says so on the console. Nothing is claimed
+    // about authenticity: configureVerification returns without reading the key
+    // or calling vr_open, verifiedStorage stays null, and every caller of
+    // authenticatesVolume()/native_verified_block_root_authorized() keeps
+    // answering 0, so the owner-trust chain stays closed.
+    gRootDiagnostic.stage = "no owner bundle; identity comes from the media";
+    IOLog ("NioUfs: no owner policy bundle; %s window publishes with its own APFS identity\n",
+           label);
+    return true;
+  }
+  if (verified_root_policy_count > 16) {
     gRootDiagnostic.stage = "policy count invalid";
     return false;
   }
@@ -1822,6 +1860,18 @@ IOReturn NioUfsBlock::doAsyncReadWrite (IOMemoryDescriptor *buffer, UInt64 block
     }
     IOReturn verify (uint64_t index, const void *data, size_t length) {
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
+      if (!view || !view->hashes) {
+        // No owner bundle was selected for this window (configureVerification
+        // returned before vr_open), so there is no hash table to check a block
+        // against. Serving the read unverified is the only alternative to
+        // failing every read: a failing read path cannot mount anything, and the
+        // windows are the only way to read this phone's image back. The state is
+        // reported once, where the policy was looked for, and
+        // native_ufs_integrity_failures stays 0 because nothing was checked and
+        // nothing failed a check.
+        (void) index; (void) data; (void) length;
+        return kIOReturnSuccess;
+      }
       uint64_t t0 = timerTicks ();
       int status = vr_verify_block (view, index, data, length, &vr_xnu_crypto);
       __atomic_fetch_add (&native_ufs_verify_ticks, timerTicks () - t0, __ATOMIC_RELAXED);
@@ -2196,6 +2246,81 @@ bool NioUfs::start (IOService *provider)
   return false;
 }
 
+// The identity of the window's primary APFS volume, read out of the window itself.
+//
+// Publication has to name the volume it is publishing and then wait for the APFS
+// media that carries that name; when there is no owner-signed bundle the name can
+// still be read from the media, because an APFS volume superblock records its own
+// UUID (apfs_vol_uuid, +0xF0) and, one field on, the volume name (+0x2C0).
+//
+// A window's container holds more than one volume on this phone: the OS window
+// carries the system volume and the restore ramdisk, the SystemOS window carries
+// the cryptex. The root is the large one in both, so the winner is the volume
+// with the most allocated blocks. Candidate blocks are checked before they count
+// -- 4 KiB block size, allocation inside the window, printable volume name --
+// because a raw byte scan for "APSB" also matches data blocks that happen to
+// contain the four bytes.
+//
+// This is an identity, not an authentication. Nothing here is signed and no
+// caller of authenticatesVolume() is satisfied by it.
+static bool windowVolumeIdentity (uint64_t absolute, uint64_t windowBytes,
+                                  char out[37], char nameOut[40])
+{
+  static const char hex[] = "0123456789ABCDEF";
+  const uint32_t chunk = kDataMax / 4096;
+  uint64_t limit = windowBytes < (256ULL << 20) ? windowBytes : (256ULL << 20);
+  uint64_t bestAlloc = 0;
+  uint32_t blocksSeen = 0;
+  out[0] = 0;
+  if (nameOut) nameOut[0] = 0;
+  for (uint64_t at = 0; at + 4096 <= limit; at += uint64_t (chunk) * 4096) {
+    uint32_t blocks = chunk;
+    if (at + uint64_t (blocks) * 4096 > limit) {
+      blocks = static_cast<uint32_t> ((limit - at) / 4096);
+    }
+    if (!blocks) break;
+    if (hostRead4k (NIO_UFS_USERDATA_LUN, (absolute + at) / 4096, blocks, gScratch) != kIOReturnSuccess) {
+      return false;
+    }
+    for (uint32_t index = 0; index < blocks; ++index) {
+      const uint8_t *block = gScratch + uint64_t (index) * 4096;
+      if (block[0x20] != 'A' || block[0x21] != 'P' || block[0x22] != 'S' || block[0x23] != 'B') continue;
+      const uint32_t blockSize = uint32_t (block[0x24]) | (uint32_t (block[0x25]) << 8);
+      if (blockSize != 4096) continue;
+      uint64_t alloc = le64 (block + 0x58);
+      if (!alloc || alloc > windowBytes / 4096 || alloc <= bestAlloc) continue;
+      bool printable = true;
+      unsigned length = 0;
+      while (length < 39 && block[0x2C0 + length]) {
+        if (block[0x2C0 + length] < 0x20 || block[0x2C0 + length] >= 0x7f) {
+          printable = false;
+          break;
+        }
+        length++;
+      }
+      if (!printable || !length) continue;
+      bestAlloc = alloc;
+      blocksSeen++;
+      unsigned write = 0;
+      for (unsigned byte = 0; byte < 16; ++byte) {
+        if (byte == 4 || byte == 6 || byte == 8 || byte == 10) out[write++] = '-';
+        out[write++] = hex[block[0xF0 + byte] >> 4];
+        out[write++] = hex[block[0xF0 + byte] & 15];
+      }
+      out[write] = 0;
+      if (nameOut) {
+        memcpy (nameOut, block + 0x2C0, length);
+        nameOut[length] = 0;
+      }
+    }
+  }
+  if (blocksSeen) {
+    IOLog ("NioUfs: window %llx identity %s (%s), %u volume superblocks read\n",
+           absolute, out, nameOut ? nameOut : "-", blocksSeen);
+  }
+  return out[0] != 0;
+}
+
 // Boot the root image's windows as block devices. Soft-fails (logs, publishes nothing).
 bool NioUfs::startRoot (IOService *provider)
 {
@@ -2267,16 +2392,29 @@ bool NioUfs::startRoot (IOService *provider)
     bool validate () {
       gRootDiagnostic.stage = "signed window identities";
       gRootDiagnostic.publicationPhase = static_cast<unsigned> (UfsRootPhase::Identity);
-#if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
       for (unsigned i = 0; i < gPending; ++i) {
         gRootDiagnostic.publicationWindow = i;
-        if (!gPendingDevice[i]->signedVolumeUuid (gPendingUuid[i])) return false;
-        for (unsigned j = 0; j < i; ++j) if (!strcmp (gPendingUuid[i], gPendingUuid[j])) return false;
+        bool identified = false;
+#if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
+        identified = gPendingDevice[i]->signedVolumeUuid (gPendingUuid[i]);
+#endif
+        if (!identified) {
+          // No owner bundle (configureVerification said so): name the window after
+          // the volume it actually contains. See windowVolumeIdentity().
+          uint64_t absolute = layout->userdataFirst * 4096ULL + layout->window[i].offset;
+          char volume[40] = {0};
+          if (!windowVolumeIdentity (absolute, layout->window[i].size, gPendingUuid[i], volume)) {
+            IOLog ("NioUfs: %s window has no usable APFS volume identity\n", layout->window[i].name);
+            return false;
+          }
+          IOLog ("NioUfs: %s window is volume %s, identity from the media (unverified)\n",
+                 layout->window[i].name, gPendingUuid[i]);
+        }
+        for (unsigned j = 0; j < i; ++j) {
+          if (!strcmp (gPendingUuid[i], gPendingUuid[j])) return false;
+        }
       }
       return true;
-#else
-      return false; // Root publication requires owner verification in every build.
-#endif
     }
     bool schedule () {
       gRootDiagnostic.stage = "root publisher thread";

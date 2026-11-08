@@ -155,20 +155,23 @@ CONFIG_XNU_BUILD_ARCHIVES=y
 #
 # {tree} is substituted by xnu_env() with the absolute path of the assembled tree,
 # which is what the build script and the kernel's own link both need.
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/storage-family/libIOStorageFamily.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/io-storage-family/libStorageBindings.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a"
 
-# The storage base class. drivers/NioUfs publishes the boot volumes through a
-# subclass of IOBlockStorageDevice, and on a stock phone that base class lives
-# in the IOStorageFamily kext, not in the kernel. This board links a standalone
-# kernel.macho, so run 35 stopped at
+# The storage base class. drivers/NioUfs subclasses IOBlockStorageDevice, which
+# is not in XNU: it lives in the prelinked IOStorageFamily kext. Run 35 stopped at
 #
 #   "vtable for IOBlockStorageDevice", referenced from:
-#       vtable for NioUfsBlock in libShengUfs.a[2](NioUfs.o)
+#       vtable for NioUfsBlock in libNioUfs.a[2](NioUfs.o)
 #
-# scripts/build-storage-family.py compiles Apple's IOStorageFamily kernel target
-# out of the pinned refer/IOStorageFamily checkout into an archive, and the
-# value above force-loads it into the kernel link. Force-load rather than a
-# plain argument: IOMedia, the partition schemes and IOBlockStorageDriver are
-# reached through the class registry at run time, so no other object references
-# them and a plain archive argument would drop them.
+# and compiling the class in is not the answer -- runs 40-44 did that and the
+# boot panicked on a duplicate OSMetaClass instead. scripts/build-storage-bindings.py
+# emits the original prelinked entry points as absolute symbols, one per dispatch
+# slot the class owns, so the subclass keeps its own vtable while every inherited
+# slot resolves to the code IOKit is actually running.
+#
+# Both archives are force-loaded for the same reason: the kernel link has no
+# ordinary reference to them. libStorageBindings.a is pure absolute aliases (an
+# archive argument would drop every member), and libVerifiedRoot.a satisfies
+# NioUfs's vr_open/vr_verify_block references, which the linker can only reach by
+# force-loading the members that define them.
 CONFIG_XNU_NATIVE_IOSTORAGE=y

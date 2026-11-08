@@ -107,6 +107,17 @@ on:
       - "scripts/build-*.py"
       - "scripts/emit-prelink-nio.py"
       - "scripts/reference/**"
+      # The device tree is compiled into the ADT the kernel boots from, so a node
+      # that is enabled there changes the kernel image. It was missing from this
+      # list: R257 enabled UFS in dts/nio.dts, which is what makes the storage
+      # driver probe at all.
+      - "dts/**"
+      # Measured tables the archives are built from -- the prelink pin the
+      # storage bindings write their absolute symbols from, and the recipe that
+      # measures it. A pin change is a kernel change; a .json under scripts/ was
+      # not covered by any pattern here.
+      - "scripts/*.json"
+      - "scripts/pin-*.py"
 
 permissions:
   # read is enough for the build itself. The one write is for the
@@ -475,22 +486,35 @@ jobs:
           #   NioUfs.cpp:24:10: fatal error:
           #   'IOKit/storage/IOBlockStorageDevice.h' file not found
           #
-          # The id is added to that condition rather than to the tuple of
-          # components that also get -DNATIVE_VERIFIED_BLOCK: that define is
-          # gated on --verified-root, needs kits/VerifiedRoot/include, and this
-          # board does not use it yet.
+          # The second condition is the one that turns owner verification on for
+          # the transport. NioUfs authenticates every root window against a
+          # signed bundle (vr_open, SHA-384, the trusted key), so it needs
+          # kits/VerifiedRoot/include and -DNATIVE_VERIFIED_BLOCK=1 exactly as
+          # the transports the pipeline knows about do. Run 45 would stop at
+          #   'verified_root.h' file not found
+          # without it. The policy table itself comes from
+          # scripts/build-verified-root.py; this board has no signed bundle, so
+          # that table is empty and the driver says so instead of pretending.
           python3 - <<'PY'
           import pathlib
           path = pathlib.Path('scripts/build-arm-driver.py')
           text = path.read_text()
-          old = "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):"
-          new = "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs', 'NioUfs'):"
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit('the storage-include condition matched %d times, expected exactly 1' % count)
-          path.write_text(text.replace(old, new))
+          edits = [
+              ("if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):",
+               "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs', 'NioUfs'):"),
+              ("if component == 'NativeUfs':",
+               "if component in ('NativeUfs', 'NioUfs'):"),
+          ]
+          for old, new in edits:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('the condition %r matched %d times, expected exactly 1'
+                                   % (old[:50], count))
+              text = text.replace(old, new)
+          path.write_text(text)
           compile(path.read_text(), str(path), 'exec')
           print('storage headers: NioUfs is given build/storage-abi/include')
+          print('owner verification: NioUfs compiles with -DNATIVE_VERIFIED_BLOCK=1')
           PY
 
       - name: Resolve the configuration
@@ -935,7 +959,7 @@ jobs:
             [ -f "$log" ] || continue
             cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
           done
-          for log in out/*/*/*/tree/build/storage-family/*.log out/*/*/*/tree/build/storage-family/generated/*.log; do
+          for log in out/*/*/*/tree/build/io-storage-family/*.log out/*/*/*/tree/build/verified-root/*.log; do
             [ -f "$log" ] || continue
             cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
           done
