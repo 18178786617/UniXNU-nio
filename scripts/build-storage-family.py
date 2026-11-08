@@ -255,10 +255,14 @@ subprocess.run(['xcrun', 'ar', 'rcs', str(archive), *map(str, objects)], check=T
 # is the step right after this one.
 if not archive.is_file() or archive.stat().st_size == 0:
     sys.exit('ar produced no archive at %s' % archive)
-members = subprocess.run(['xcrun', 'ar', 't', str(archive)], text=True,
-                         stdout=subprocess.PIPE, check=True).stdout.split()
+# ar t also prints the archive's symbol table, as "__.SYMDEF SORTED" -- two
+# words that made run 39 read 16 members for 14 objects. Only the .o names
+# are members.
+listing = subprocess.run(['xcrun', 'ar', 't', str(archive)], text=True,
+                         stdout=subprocess.PIPE, check=True).stdout
+members = [line.strip() for line in listing.splitlines() if line.strip().endswith('.o')]
 if len(members) != len(objects):
-    sys.exit('the archive holds %d members for %d objects: %s'
+    sys.exit('the archive holds %d objects for %d compiled: %s'
              % (len(members), len(objects), ' '.join(members)))
 print('PASS: %d members, %d bytes -> %s'
       % (len(members), archive.stat().st_size, archive.relative_to(ROOT)))
