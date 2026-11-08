@@ -352,6 +352,23 @@ static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, u
   if (!smmu) {
     panic ("NATIVE_UFS smmu: map failed");
   }
+  /* nio run-58: sCR0 reads back 0x002f0406 (SMMUEN=0) and sCR0 writes are
+   * ignored (2026-10-17 note), so the SMMU is in global bypass: every
+   * transaction uses physical addresses and SMR/S2CR entries are never
+   * consulted. Writing an SMR in this state drops the VALID bit on the
+   * floor -- run-58 wrote 0x80000060 to slot 86 and read back smr=0 while
+   * the S2CR at the same offset scheme stuck. There is nothing to take
+   * over while the SMMU is disabled: skip the whole entry program and
+   * leave the registers as the firmware left them. */
+  uint32_t scr0 = read32 (smmu, 0x0);
+  if (!(scr0 & 1)) {
+    printf ("nio: SMMU sCR0=%x globally bypassed, stream %x needs no entry\n",
+            scr0, stream);
+    report[0] = 0;
+    report[1] = 0;
+    report[2] = 0;
+    return;
+  }
   UfsSmmuPlan plan = planUfsSmmu (stream, dma, bytes, [smmu](unsigned offset) { return read32 (smmu, offset); });
   gRootDiagnostic.smmuId1 = read32 (smmu, 0x24);
   gRootDiagnostic.smmuId2 = read32 (smmu, 0x28);
