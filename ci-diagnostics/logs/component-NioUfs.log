@@ -1,0 +1,5 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:24:10: fatal error: 'IOKit/storage/IOBlockStorageDevice.h' file not found
+   24 | #include <IOKit/storage/IOBlockStorageDevice.h>
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+
