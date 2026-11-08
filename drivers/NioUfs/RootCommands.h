@@ -6,7 +6,8 @@ struct HardwareTransferPort {
   uint32_t doorbell () { return read32 (gHost.hc, 0x58); }
   uint32_t interrupt () { return read32 (gHost.hc, 0x20); }
   uint32_t completedOcs () {
-    cacheInvalidate (gHost.virt, 64);
+    // Device mapping (kIOMapInhibitCache): DC maintenance traps on it
+    // (run-63 hung here). Volatile reads already bypass the caches.
     return *reinterpret_cast<volatile uint32_t *> (gHost.virt + 8) & 0xff;
   }
   bool expired () { return mach_absolute_time () >= deadline; }
@@ -79,7 +80,8 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
     prd[2] = 0;
     prd[3] = dataBytes - 1;
   }
-  cacheCivac (gHost.virt, kDataOffset + dataBytes);
+  // No cache clean before the doorbell: the region is uncached for
+  // the CPU, so every store above already reached memory.
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
@@ -97,7 +99,6 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
     gHost.ready = false;
     return recordTransport (end == UfsTransferEnd::Timeout ? kIOReturnTimeout : kIOReturnIOError, *ocs);
   }
-  cacheInvalidate (gHost.virt, kDataOffset + dataBytes);
   gRootDiagnostic.response = loadBe32 (gHost.virt + kUcdOffset + kRspOffset);
   return recordTransport (*ocs == 0 ? kIOReturnSuccess : kIOReturnIOError, *ocs);
 }
