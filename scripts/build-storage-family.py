@@ -78,6 +78,26 @@ CONFIG_XNU_EXTRA_LD_ARCHIVES in configs/nio_defconfig.  Force-load, not a
 plain archive argument: IOMedia, the partition schemes and the storage driver
 are reached through the class registry at run time, not through a reference
 in another object, and a plain archive would leave them out.
+
+One consequence, and it is not obvious from here
+------------------------------------------------
+Every class in this archive is registered as belonging to `__kernel__`, which
+is exactly what the kernel's own copy of the family has to be: OSDynamicCast
+compares the meta class *pointer* (`OSTypeID(type)` is `type::metaClass`), so
+the registration that happens first is the only one objects in this image can
+be cast to, and it must be this one.
+
+Apple's IOStorageFamily is also in [kernel].prelink.roots, and it cannot come
+out: its Info.plist personalities (`IOClass` by bundle) are what make
+IOBlockStorageDriver attach to an IOBlockStorageDevice provider, the partition
+schemes attach to IOMedia, and IOMediaBSDClient publish the BSD nodes -- a
+class linked into the kernel carries no personalities.  On iOS the two
+registrations therefore meet in OSMetaClass::postModLoad(), which panics on
+the second one; the machine was gone at that panic in run 42 (R254), before
+the driver had read a block.  patches/xnu-8796/
+kext-class-duplicate-keeps-kernel.patch keeps the kernel's registration and
+lets the kext load without its own class table, which is the only combination
+that leaves both the pointers and the personalities intact.
 """
 import json
 import os

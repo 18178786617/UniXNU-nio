@@ -198,6 +198,18 @@ archives = [
 # The roots are the bundle identifiers this kernelcache's __PRELINK_INFO
 # actually carries. The 17.7.11 list also kept com.apple.iokit.IOHIDEventDriver,
 # which this kernelcache does not contain.
+#
+# com.apple.iokit.IOStorageFamily stays on this list even though the kernel
+# links the family's own compilation units (scripts/build-storage-family.py)
+# and so already owns every class it declares. The entry is not here for the
+# classes -- it is here for the Info.plist. IOBlockStorageDriver, the partition
+# schemes and IOMediaBSDClient reach a new device only through the
+# personalities in that plist, which name their IOClass by bundle and are what
+# IOService matches a provider against; a kernel-side class cannot carry them.
+# So the kext loads for its personalities and the kernel's registration stays
+# the one OSDynamicCast compares against -- patches/xnu-8796/
+# kext-class-duplicate-keeps-kernel.patch is the half that makes that possible
+# without the duplicate-class panic.
 [kernel.prelink]
 tool = "scripts/emit-prelink-nio.py"
 kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped"
