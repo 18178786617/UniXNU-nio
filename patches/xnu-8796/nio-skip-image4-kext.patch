@@ -1,0 +1,46 @@
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -6090,6 +6090,42 @@
+ 		goto finish;
+ 	}
+ 
++	/* nio: AppleImage4 cannot start without /chosen/manifest-properties.
++	 *
++	 * run-50 got one whole layer further: with the kernel's __DATA_CONST
++	 * left writable (R264) CoreTrust's constructor and its os_log counter
++	 * store both went through, and the boot then reached the next kext
++	 * IOKit asked for. That one dies inside its own start():
++	 *
++	 *   IOService::probeCandidates -> OSKext::loadKextWithIdentifier
++	 *   -> OSKext::load -> OSKext::start
++	 *   -> com.apple.security.AppleImage4 __TEXT_EXEC+0xd420
++	 *   panic: failed to get mix-n-match policy: 2
++	 *
++	 * AppleImage4 reads the img4 manifest properties that iBoot writes to
++	 * /chosen/manifest-properties. This board boots from a device tree of
++	 * our own making (tools/make-nio-adt.py), so the node is absent, the
++	 * property lookup returns 2 and the kext panics on the way in. It is
++	 * the same wall the security-extension loader already avoids for AMFI
++	 * (see nio-skip-security-extensions.patch), just reached through IOKit
++	 * matching instead of the explicit mac_policy_initmach() load.
++	 *
++	 * With no manifest there is nothing this kext could enforce, and
++	 * nio_skip_security_extensions already says this boot runs without the
++	 * security extensions, so AppleImage4 has no consumer left. Skip the
++	 * load under the same boot arg and let IOKit move on to the next
++	 * candidate; without this every boot stops here and nothing below this
++	 * point (the UFS probe included) ever runs.
++	 */
++	if (PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0) &&
++	    strcmp(kextIdentifier->getCStringNoCopy(),
++	    "com.apple.security.AppleImage4") == 0) {
++		printf("nio: not loading com.apple.security.AppleImage4, "
++		    "its start needs /chosen/manifest-properties\n");
++		result = kOSKextReturnNotFound;
++		goto finish;
++	}
++
+ 	OSKext::recordIdentifierRequest(kextIdentifier);
+ 
+ 	theKext = OSDynamicCast(OSKext, sKextsByID->getObject(kextIdentifier));

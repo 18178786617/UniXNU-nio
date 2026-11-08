@@ -69,3 +69,4 @@ nio-skip-security-extensions.patch
 nio-trust-cache-without-security-extensions.patch
 nio-kext-data-const-stays-writable.patch
 nio-kernel-data-const-stays-writable.patch
+nio-skip-image4-kext.patch
