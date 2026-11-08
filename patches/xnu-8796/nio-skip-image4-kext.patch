@@ -1,7 +1,7 @@
 diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
-@@ -6090,6 +6090,59 @@
+@@ -6090,6 +6090,60 @@
  		goto finish;
  	}
  
@@ -39,7 +39,8 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * been dead from the start.
 +	 */
 +	{
-+		extern const char *PE_boot_args_raw(void);
++		/* extern "C": this file is C++, the definition is in C. */
++		extern "C" const char *PE_boot_args_raw(void);
 +		const char *nio_id = kextIdentifier ?
 +		    kextIdentifier->getCStringNoCopy() : "(null)";
 +
