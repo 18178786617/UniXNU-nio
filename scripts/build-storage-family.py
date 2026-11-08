@@ -242,42 +242,23 @@ archive = out / 'libIOStorageFamily.a'
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', str(archive), *map(str, objects)], check=True)
 
-# The kernel link force-loads this archive, so it has to carry the class
-# objects and not just the compiled code. Two things are read off nm here:
+# The kernel link force-loads this archive. The only thing asserted here is
+# that ar put every object in it: an archive that lost a member links with a
+# pile of undefined C++ symbols that say nothing about which step dropped it.
 #
-#   - that the archive has C++ definitions at all, which is fatal if false,
-#     because an empty archive links cleanly and puts the failure somewhere
-#     else entirely;
-#   - which classes have a vtable or metaclass, as a note only. The link is
-#     the authority, and it names a missing vtable in one line. Runs 37 and
-#     38 both died in this block instead -- the parse read field 2 as the
-#     symbol name, which in POSIX format is the value, so every class looked
-#     absent while all fourteen objects had in fact compiled. The fields are
-#     now found by shape, not by position.
-table = subprocess.run(['xcrun', 'nm', '-gP', str(archive)], text=True,
-                       stdout=subprocess.PIPE, check=True).stdout
-defined = set()
-for line in table.splitlines():
-    parts = line.split()
-    if not parts:
-        continue
-    symbol = next((part for part in parts if part.startswith('_Z')), None)
-    kind = next((part for part in parts if len(part) == 1 and part.isalpha()), None)
-    if symbol and kind in 'TSDBRC':
-        defined.add(symbol)
-required = ['IOBlockStorageDevice', 'IOMedia', 'IOBlockStorageDriver', 'IOGUIDPartitionScheme',
-            'IOApplePartitionScheme', 'IOFDiskPartitionScheme', 'IOMediaBSDClient']
-absent = [name for name in required
-          if not any(symbol.endswith('ZTV%d%s' % (len(name), name)) for symbol in defined)
-          and not any(symbol.endswith('ZN%d%s9metaClassE' % (len(name), name)) for symbol in defined)]
-if not defined:
-    sys.exit('the archive defines no C++ symbols at all; %d objects, %d bytes'
-             % (len(objects), archive.stat().st_size))
-if absent:
-    # Not fatal. The kernel link is the authority on whether a class is
-    # missing, and it names the missing vtable in one line. This check has
-    # already been wrong twice for reasons that had nothing to do with the
-    # archive, and a diagnostic must not be the thing that stops a build.
-    print('NOTE: nm shows no vtable or metaclass for: %s' % ', '.join(absent))
-print('PASS: %d objects, %d defined symbols, %d bytes -> %s'
-      % (len(objects), len(defined), archive.stat().st_size, archive.relative_to(ROOT)))
+# Nothing is asserted about the symbols themselves. Runs 37 and 38 both died
+# in a class-name check written over `nm -gP`, and both times the archive was
+# fine -- the portable format does not lay its fields out the way the parse
+# assumed, and the second attempt at the same parse found no C++ names at all
+# in an archive holding fourteen of them. The kernel link is the authority on
+# whether a class is defined; it names the missing vtable in one line, and it
+# is the step right after this one.
+if not archive.is_file() or archive.stat().st_size == 0:
+    sys.exit('ar produced no archive at %s' % archive)
+members = subprocess.run(['xcrun', 'ar', 't', str(archive)], text=True,
+                         stdout=subprocess.PIPE, check=True).stdout.split()
+if len(members) != len(objects):
+    sys.exit('the archive holds %d members for %d objects: %s'
+             % (len(members), len(objects), ' '.join(members)))
+print('PASS: %d members, %d bytes -> %s'
+      % (len(members), archive.stat().st_size, archive.relative_to(ROOT)))
