@@ -1591,6 +1591,23 @@ static RootWindow gRootObject[4];
 static uint32_t gRootObjects;
 static uint64_t gRootObjectBase;
 
+// Time spent reading from the UFS transport and hashing what came back, in
+// generic-timer ticks. Diagnostic only, but it cannot live with the verified
+// block below: the read path times itself whether or not verification is
+// compiled in, and it did so while the counter and the timer were inside
+// `#if NATIVE_VERIFIED_BLOCK`. On this board that switch is off, so the three
+// names were undeclared at the point of use -- run 34:
+//
+//   NioUfs.cpp:1802:21: error: use of undeclared identifier 'timerTicks'
+//   NioUfs.cpp:1804:51: error: use of undeclared identifier 'timerTicks'
+//   NioUfs.cpp:1804:28: error: use of undeclared identifier 'native_ufs_read_ticks'
+//
+// The generic timer is read directly rather than through mach_absolute_time():
+// CNTPCT_EL0 is the counter the rest of this driver already reasons about, and
+// it needs no clock subsystem to be up.
+static inline uint64_t timerTicks (void) {uint64_t v; __asm__ volatile ("isb\n\tmrs %0, cntpct_el0" : "=r" (v)); return v;}
+volatile uint64_t native_ufs_verify_ticks = 0, native_ufs_read_ticks = 0;
+
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
 volatile uint64_t native_ufs_verified_blocks = 0;
 
@@ -1616,9 +1633,8 @@ static bool readPolicyTable (const char *window, uint8_t *table, uint64_t tableB
   }
   return true;
 }
-// Time spent hashing/verifying and reading from the UFS transport, in generic-timer ticks (diagnostic only).
-volatile uint64_t native_ufs_verify_ticks = 0, native_ufs_read_ticks = 0;
-static inline uint64_t timerTicks (void) {uint64_t v; __asm__ volatile ("isb\n\tmrs %0, cntpct_el0" : "=r" (v)); return v;}
+// Time spent hashing and verifying is counted by the counters above, which are
+// defined outside this block because the read path times itself either way.
 volatile uint32_t native_ufs_integrity_failures = 0;
 
 bool NioUfsBlock::configureVerification ()
