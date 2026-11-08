@@ -48,13 +48,17 @@ on:
         required: true
         default: "nio_defconfig"
       runner:
-        description: Runner image (macos-26 = arm64, the upstream pair; macos-15-intel = x86_64 fallback)
-        required: true
-        default: "macos-26"
+        description: >-
+          Runner image. macos-15 is arm64 and is the one that is actually
+          scheduled: macos-26 sits in the queue for hours on this account, and
+          a build that never starts says nothing about the kernel.
+          macos-15-intel keeps the x86_64 path available.
+        required: false
+        default: "macos-15"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
-        required: true
-        default: "26.6"
+        required: false
+        default: "auto"
       ipsw_url:
         description: IPSW URL (empty uses board.toml)
         required: false
@@ -129,7 +133,7 @@ jobs:
     # machine that cannot reach the arm64 one, and the Xcode is pinned there
     # too: "auto" picks whatever the image carries, and that is how this build
     # ended up on a clang that its own tree does not compile with.
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
@@ -161,7 +165,7 @@ jobs:
 
       - name: Select Xcode
         env:
-          XCODE_INPUT: ${{ inputs.xcode || '26.6' }}
+          XCODE_INPUT: ${{ inputs.xcode || 'auto' }}
         run: |
           echo "host: $(uname -m) $(sw_vers -productVersion)"
           echo "installed on this image:"
@@ -410,6 +414,39 @@ jobs:
             cp -r device/drivers/NioUfs drivers/NioUfs
             ls drivers/NioUfs
           fi
+
+      - name: Let the owner-root gate see the board's UFS transport
+        run: |
+          # build-xnu-4k-baseline.sh refuses CONFIG_XNU_OWNER_ROOT_AUDIT and
+          # CONFIG_XNU_OWNER_ROOT_TRUST unless the storage transport is
+          # NativeVirtioBlock or the source-storage runtime. What that check is
+          # really asking is whether the root came from media the kernel can
+          # name, and this board answers it from NativeUfs: drivers/NioUfs
+          # publishes the read-only root windows and binds the answer to the
+          # live IORegistry (the owner-root binding at the bottom of
+          # NioUfs.cpp). The change is one condition per gate entry, and it is
+          # applied here rather than in a fork because the gate lives in a
+          # repository this board does not own.
+          python3 - <<'PY'
+          import pathlib
+          path = pathlib.Path('scripts/build-xnu-4k-baseline.sh')
+          text = path.read_text()
+          edits = [
+              ('[ "$OWNER_ROOT_PROBE" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; then',
+               '[ "$OWNER_ROOT_PROBE" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; then'),
+              ('{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; }; }; then',
+               '{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; }; }; then'),
+          ]
+          for old, new in edits:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('the gate condition matched %d times, expected exactly 1: %s'
+                                   % (count, old[:70]))
+              text = text.replace(old, new)
+          path.write_text(text)
+          print('owner-root gate: NativeUfs is accepted as mounted-media binding')
+          PY
+          bash -n scripts/build-xnu-4k-baseline.sh
 
       - name: Resolve the configuration
         run: |

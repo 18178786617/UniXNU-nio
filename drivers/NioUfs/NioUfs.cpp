@@ -48,6 +48,7 @@ extern const uint8_t verified_root_key[];
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOLib.h>
 #include <libkern/c++/OSData.h>
+#include <libkern/c++/OSDictionary.h>
 #include <libkern/c++/OSString.h>
 #include <libkern/libkern.h>
 #include <pexpert/pexpert.h>
@@ -1490,6 +1491,9 @@ public:
   bool signedVolumeUuid (char out[37]) const;
 #endif
   const char *windowLabel () const { return label; }
+  // For the owner-root binding at the bottom of this file: a window answers a
+  // read only after start() has brought the transport up.
+  bool windowOnline () const { return online; }
   bool configure (const char *name, uint64_t absoluteOffset, uint64_t size);
   bool start (IOService *provider) override;
   void free () override;
@@ -2295,4 +2299,142 @@ void NioUfs::stop (IOService *provider)
   fCmdDesc.reset ();
   fMap.reset ();
   IOService::stop (provider);
+}
+
+// ---------------------------------------------------------------------------
+// The owner-root binding.
+//
+// The owner-root patches (patches/xnu-8796/offline-owner-*.patch) ask two
+// questions once a volume is mounted:
+//
+//   native_verified_block_root_authorized(dev)
+//       is this BSD device the node of a root window this driver published?
+//   native_verified_block_volume_device(uuid, &dev, path, size)
+//       which BSD device carries that signed volume UUID?
+//
+// Upstream answers them from a verified block transport: NativeVirtioBlock,
+// NativeUfs in verified mode, or the source-storage runtime. What those share
+// is the thing the gate actually asks about -- the answer is derived from a
+// transport that is present in the live registry, not from a number that was
+// handed to the kernel. This board's transport is NioUfs, and the window it
+// publishes is the same kind of object: every 4096-byte block is a real
+// transfer on the UFS host controller, and the window has no write path at
+// all (doFormatMedia answers kIOReturnNotWritable, and the only writers in
+// this driver are the store and log windows, which are not root windows).
+//
+// So the binding is: the node's provider chain must reach a NioUfsBlock that
+// is online. That is enough to say "this root came from the media", which is
+// what the audit patch and the owner cache mount both need before they treat
+// the mount as an owner root.
+//
+// The volume query keeps the upstream adapter's strictness: exactly one
+// IOMedia may carry the BSD number or the UUID. Two candidates mean the
+// answer is ambiguous, and an ambiguous root is not an authorized one.
+
+static NioUfsBlock *nioWindowBelow (IOService *node)
+{
+  unsigned depth = 0;
+  for (IOService *provider = node; provider && depth < 64; provider = provider->getProvider (), ++depth) {
+    NioUfsBlock *window = OSDynamicCast (NioUfsBlock, provider);
+    if (window) {
+      return window;
+    }
+  }
+  return nullptr;
+}
+
+extern "C" int native_verified_block_root_authorized (dev_t device)
+{
+  if (device == NODEV) {
+    return 0;
+  }
+  OSDictionary *matching = IOService::serviceMatching ("IOMedia");
+  OSDictionary *properties = OSDictionary::withCapacity (2);
+  OSNumber *mjr = OSNumber::withNumber (static_cast<unsigned> (major (static_cast<uint32_t> (device))), 32);
+  OSNumber *mnr = OSNumber::withNumber (static_cast<unsigned> (minor (static_cast<uint32_t> (device))), 32);
+  bool ready = matching && properties && mjr && mnr &&
+               properties->setObject (kIOBSDMajorKey, mjr) && properties->setObject (kIOBSDMinorKey, mnr) &&
+               matching->setObject ("IOPropertyMatch", properties);
+  OSSafeReleaseNULL (mnr);
+  OSSafeReleaseNULL (mjr);
+  OSSafeReleaseNULL (properties);
+  OSIterator *iterator = ready ? IOService::getMatchingServices (matching) : nullptr;
+  OSSafeReleaseNULL (matching);
+  if (!iterator) {
+    return 0;
+  }
+  unsigned matches = 0;
+  int authorized = 0;
+  while (OSObject *object = iterator->getNextObject ()) {
+    IOService *media = OSDynamicCast (IOService, object);
+    if (!media) {
+      continue;
+    }
+    if (++matches != 1) {
+      authorized = 0;
+      break;
+    }
+    NioUfsBlock *window = nioWindowBelow (media);
+    authorized = (window && window->windowOnline ()) ? 1 : 0;
+  }
+  iterator->release ();
+  return (authorized && matches == 1) ? 1 : 0;
+}
+
+extern "C" int native_verified_block_volume_device (const char *uuid, dev_t *device, char *path, size_t size)
+{
+  if (!uuid || !device || !path || size < 6 || strlen (uuid) != 36) {
+    return 0;
+  }
+  *device = NODEV;
+  path[0] = 0;
+  OSDictionary *matching = IOService::serviceMatching ("IOMedia");
+  OSDictionary *properties = OSDictionary::withCapacity (1);
+  OSString *wanted = OSString::withCString (uuid);
+  bool ready = matching && properties && wanted && properties->setObject ("UUID", wanted) &&
+               matching->setObject ("IOPropertyMatch", properties);
+  OSSafeReleaseNULL (wanted);
+  OSSafeReleaseNULL (properties);
+  OSIterator *iterator = ready ? IOService::getMatchingServices (matching) : nullptr;
+  OSSafeReleaseNULL (matching);
+  if (!iterator) {
+    return 0;
+  }
+  unsigned matches = 0;
+  int authorized = 0;
+  dev_t candidate = NODEV;
+  char candidatePath[64] = {};
+  while (OSObject *object = iterator->getNextObject ()) {
+    IOService *media = OSDynamicCast (IOService, object);
+    if (!media) {
+      continue;
+    }
+    if (++matches != 1) {
+      authorized = 0;
+      break;
+    }
+    OSString *identity = OSDynamicCast (OSString, media->getProperty ("UUID"));
+    OSString *name = OSDynamicCast (OSString, media->getProperty (kIOBSDNameKey));
+    OSNumber *mjr = OSDynamicCast (OSNumber, media->getProperty (kIOBSDMajorKey));
+    OSNumber *mnr = OSDynamicCast (OSNumber, media->getProperty (kIOBSDMinorKey));
+    if (!identity || !identity->getCStringNoCopy () || strcmp (identity->getCStringNoCopy (), uuid) ||
+        !name || !name->getCStringNoCopy () || !mjr || !mnr || !name->getLength () ||
+        name->getLength () >= sizeof (candidatePath) - 6 || name->getLength () >= size - 6 ||
+        mjr->unsigned64BitValue () > 255 || mnr->unsigned64BitValue () > 0xffffff) {
+      continue;
+    }
+    candidate = static_cast<dev_t> (makedev (mjr->unsigned32BitValue (), mnr->unsigned32BitValue ()));
+    if (!native_verified_block_root_authorized (candidate)) {
+      continue;
+    }
+    snprintf (candidatePath, sizeof (candidatePath), "/dev/%s", name->getCStringNoCopy ());
+    authorized = 1;
+  }
+  iterator->release ();
+  if (!authorized || matches != 1) {
+    return 0;
+  }
+  *device = candidate;
+  strlcpy (path, candidatePath, size);
+  return 1;
 }

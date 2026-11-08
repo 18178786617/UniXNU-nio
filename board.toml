@@ -326,7 +326,17 @@ timeout = -1
 # "GPUROWnn <text>". Modes 9-11 add the first GPU command, the zap shader
 # with the GPU interrupt, and the user-client path; they are raised one at a
 # time, each with its own image, so a fault is attributable.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1"]
+# native-ufs-probe=12 is the storage discovery report and it is on for this
+# build on purpose. The two volume UUIDs the owner chain keys on --
+# root_match_volume_uuid here and XNU_OWNER_CACHE_VOLUME_UUID in the kernel
+# patches -- were carried over from the upstream 17.7.11 boards and have
+# never been read off this phone. iOS 16.5 ships its restore images
+# encrypted, so they cannot be read out of the IPSW either. The report
+# waits for IOStorageFamily to publish the root windows, prints every
+# IOMedia with its BSD name, size and UUID, and then panics; the panic
+# screen is how those two values get measured instead of guessed. Remove it
+# once the owner chain is configured with the real ones.
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1", "native-ufs-probe=12"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
