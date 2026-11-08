@@ -1,0 +1,10 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOAppleLabelScheme.cpp:170:18: warning: implicit conversion loses integer precision: 'UInt64' (aka 'unsigned long long') to 'UInt32' (aka 'unsigned int') [-Wshorten-64-to-32]
+  170 |     bufferSize = IORound(sizeof(applelabel), mediaBlockSize);
+      |                ~ ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:697:45: note: expanded from macro 'IORound'
+  697 |         ((((value) + (multiple) - 1) / (multiple)) * (multiple))
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOAppleLabelScheme.cpp:223:65: warning: implicit conversion loses integer precision: 'UInt64' (aka 'unsigned long long') to 'UInt32' (aka 'unsigned int') [-Wshorten-64-to-32]
+  223 |     bufferSize = IORound(labelBase + labelSize, mediaBlockSize) - bufferBase;
+      |                ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+2 warnings generated.

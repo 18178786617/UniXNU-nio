@@ -1,0 +1,9 @@
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOStorage.cpp:27:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:53:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLocks.h:59:9: warning: 'IOLOCKS_INLINE' macro redefined [-Wmacro-redefined]
+   59 | #define IOLOCKS_INLINE  1
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c/IOStorage.cpp:24:9: note: previous definition is here
+   24 | #define IOLOCKS_INLINE
+      |         ^
+1 warning generated.
