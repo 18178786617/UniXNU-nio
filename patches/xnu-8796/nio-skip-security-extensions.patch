@@ -1,0 +1,43 @@
+diff --git a/libsa/bootstrap.cpp b/libsa/bootstrap.cpp
+--- a/libsa/bootstrap.cpp
++++ b/libsa/bootstrap.cpp
+@@ -42,6 +42,7 @@
+ #include <IOKit/IOService.h>
+ #include <IOKit/IODeviceTreeSupport.h>
+ #include <IOKit/IOCatalogue.h>
++#include <pexpert/pexpert.h>
+ 
+ #if __x86_64__
+ #define KASLR_KEXT_DEBUG 0
+@@ -514,6 +515,31 @@
+ 	    kOSKextLogLoadFlag,
+ 	    "Loading security extensions.");
+ 
++	/* nio: the security extensions reach their policy through img4, and
++	 * img4 reads /chosen/manifest-properties -- a node iBoot writes at
++	 * boot. This board is started from a hand-built device tree
++	 * (tools/make-nio-adt.py), so the property is not there, AMFI's
++	 * start() cannot instantiate the ap chip and panics with
++	 * "failed to get mix-n-match policy: 2". That panic is fatal long
++	 * before userspace exists: the machine stops inside
++	 * mac_policy_initmach, which sits above the storage driver in the
++	 * bootstrap thread, so nothing ever reaches the UFS probe.
++	 *
++	 * With no manifest to evaluate there is nothing AMFI could enforce
++	 * on this boot either; the boot args already ask it to stay out of
++	 * the way (amfi_get_out_of_my_way=1). Loading it only to die in its
++	 * first few instructions costs a boot cycle per attempt, so make the
++	 * load skippable and keep the rest of the bootstrap running.
++	 */
++	if (PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0)) {
++		OSKextLog(/* kext */ NULL,
++		    kOSKextLogStepLevel |
++		    kOSKextLogLoadFlag,
++		    "nio: nio_skip_security_extensions=1, "
++		    "not loading the security extensions this boot.");
++		return;
++	}
++
+ 	extensionsDict = OSKext::copyKexts();
+ 	if (!extensionsDict) {
+ 		return;

@@ -365,7 +365,7 @@ timeout = -1
 # IOMedia with its BSD name, size and UUID, and then panics; the panic
 # screen is how those two values get measured instead of guessed. Remove it
 # once the owner chain is configured with the real ones.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1", "native-ufs-probe=12"]
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1", "native-ufs-probe=12", "nio_skip_security_extensions=1"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not

@@ -66,3 +66,4 @@ linux-clang-kalloc-pointee-type.patch
 linux-clang-iorpc-kernel-content.patch
 xnu-8796-arm64-kpc-backend.patch
 kext-class-duplicate-keeps-kernel.patch
+nio-skip-security-extensions.patch

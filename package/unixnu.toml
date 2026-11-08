@@ -39,4 +39,12 @@ initrd = "Payloads/rootfs.img"
 # amfi_get_out_of_my_way=1: the standard AMFI bypass boot-arg (rmx1971 device
 # record uses it too); launchd has no code signature and AMFI would otherwise
 # refuse it.
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 native-ufs-root=1 native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1"
+#
+# nio_skip_security_extensions=1: run 43's kernel panicked inside
+# KLDBootstrap::loadSecurityExtensions, i.e. while loading AMFI, with
+# "failed to get mix-n-match policy: 2". AMFI's start() asks img4 for that
+# policy and img4 reads /chosen/manifest-properties, a node iBoot writes and
+# that a hand-built ADT does not have. amfi_get_out_of_my_way cannot help:
+# the panic happens before AMFI reads that argument. The kernel patch of the
+# same name makes the bootstrap skip the load when this is present.
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 native-ufs-root=1 native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1"
