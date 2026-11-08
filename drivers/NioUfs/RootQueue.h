@@ -52,19 +52,6 @@ static bool hostStartQueue (const char **why)
   }
   gRootDiagnostic.isBefore = read32 (gHost.hc, 0x20);
   hostWrite (0x20, gRootDiagnostic.isBefore);
-  /* nio run-59: the kernel hung for 10 s (watchdog reset) with no panic
-   * screen somewhere past the request-list restart. Ringing the doorbell
-   * is the first thing the controller does with a kernel-allocated DMA
-   * buffer, and the adoptAndRead note already records a kernel buffer
-   * resetting the system on the first command. Nothing past this point
-   * reaches the panel console either, so stop here for one round and
-   * print the buffer's physical address before the first doorbell. */
-  panic ("NATIVE_UFS startQueue: before doorbell\n"
-         "phys=%llx hcs=%08x is=%08x\n"
-         "utrlba=%08x%08x hce=%08x",
-         gHost.phys, read32 (gHost.hc, 0x30), gRootDiagnostic.isBefore,
-         read32 (gHost.hc, 0x54), read32 (gHost.hc, 0x50),
-         read32 (gHost.hc, 0x34));
   hostWrite (0x60, 1);
   if (!hostWaitRegister (0x60, 1, 1) || !hostWaitRegister (0x30, 3, 3)) {
     recordTransport (kIOReturnTimeout, 15);

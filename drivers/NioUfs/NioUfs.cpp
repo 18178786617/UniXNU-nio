@@ -890,9 +890,8 @@ namespace {
 #include "RootTransportLayout.h"
 
 struct UfsHost {
-  OSSharedPtr<IOMemoryMap> hcMap, smmuMap;
+  OSSharedPtr<IOMemoryMap> hcMap, smmuMap, dmaMap;
   uintptr_t hc;
-  IOBufferMemoryDescriptor *dma;
   uint8_t *virt;
   uint64_t phys;
   IOLock *lock;
@@ -900,7 +899,7 @@ struct UfsHost {
   bool poisoned = false;
   uintptr_t smmu = 0, cb = 0;
 };
-UfsHost gHost = { OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), 0, nullptr, nullptr, 0, nullptr, false };
+UfsHost gHost = { OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), 0, nullptr, 0, nullptr, false };
 
 static IOReturn recordTransport (IOReturn result, uint32_t ocs)
 {
@@ -987,27 +986,33 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.hce = read32 (gHost.hc, 0x34);
   }
   gRootDiagnostic.stage = "DMA allocation";
-  gHost.dma = IOBufferMemoryDescriptor::inTaskWithOptions (
-    kernel_task, static_cast<IOOptionBits> (kIODirectionInOut) | static_cast<IOOptionBits> (kIOMemoryPhysicallyContiguous) |
-    static_cast<IOOptionBits> (kIOMemoryMapperNone),
-    kDmaBytes, 4096);
-  gHost.lock = IOLockAlloc ();
-  if (!gHost.dma || !gHost.lock) {
-    *why = "dma buffer";
+  // nio run-60: the kernel allocator put the DMA buffer at 0xc51e4000 --
+  // below the 0xc8000000 line adoptAndRead already measured as unusable --
+  // and the first doorbell hung the fabric until the watchdog reset the
+  // board 10 s later, with no panic screen. The one region the
+  // controller's DMA is known to reach is its own request list: the
+  // firmware zeroed those 16 KiB and the controller reads them every
+  // command it runs. Take that over as the transfer region, exactly as
+  // adoptAndRead does (kDmaBytes is 16 KiB now: the request list, the
+  // command UPIU and two 4 KiB data blocks fit; larger reads go through
+  // the chunking loops).
+  uint64_t fwList = (uint64_t (read32 (gHost.hc, 0x54)) << 32) | read32 (gHost.hc, 0x50);
+  if (!fwList || (fwList & 0xfff)) {
+    *why = "no usable firmware list base";
     return false;
   }
-  gHost.virt = static_cast<uint8_t *> (gHost.dma->getBytesNoCopy ());
-  IOByteCount contiguous = 0;
-  gHost.phys = gHost.dma->getPhysicalSegment (0, &contiguous, kIOMemoryMapperNone);
+  gHost.phys = fwList;
+  gHost.virt = reinterpret_cast<uint8_t *> (mapPhys (fwList, kDmaBytes, gHost.dmaMap));
   gRootDiagnostic.dma = gHost.phys;
-  gRootDiagnostic.contiguous = contiguous;
-  if (!gHost.virt || !gHost.phys || (gHost.phys & 4095) || contiguous < kDmaBytes ||
-      (!(read32 (gHost.hc, 0) & 0x01000000) && gHost.phys + kDmaBytes > 0x100000000ULL)) {
-    *why = "DMA address/contiguity";
+  gRootDiagnostic.contiguous = kDmaBytes;
+  gHost.lock = IOLockAlloc ();
+  if (!gHost.virt || !gHost.lock) {
+    *why = "firmware list map";
     return false;
   }
+  // mapPhys maps uncached (kIOMapInhibitCache), so no cache maintenance is
+  // needed or safe here -- the region is device-ordered for the CPU.
   bzero (gHost.virt, kDmaBytes);
-  cacheCivac (gHost.virt, kDmaBytes);
   uint32_t report[3] = { 0, 0, 0 };
   gRootDiagnostic.stage = "SMMU and request list";
   if (!hostStopQueue (why)) return false;

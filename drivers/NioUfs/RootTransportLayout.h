@@ -4,6 +4,6 @@ enum : uint32_t {
   kRspOffset = 512,
   kPrdtOffset = 1024,
   kDataOffset = 8192,
-  kDataMax = 131072,
+  kDataMax = 8192,
   kDmaBytes = kDataOffset + kDataMax,
 };
