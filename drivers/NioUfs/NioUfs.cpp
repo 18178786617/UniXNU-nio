@@ -1011,8 +1011,14 @@ static bool hostBringUp (const char **why)
     return false;
   }
   // mapPhys maps uncached (kIOMapInhibitCache), so no cache maintenance is
-  // needed or safe here -- the region is device-ordered for the CPU.
-  bzero (gHost.virt, kDmaBytes);
+  // needed or safe here. bzero's DC ZVA aborts on device memory (run-61:
+  // "Unaligned kernel data abort" at _bzero+0x44, dc zva), so clear the
+  // region with plain stores instead.
+  for (volatile uint32_t *word = reinterpret_cast<volatile uint32_t *> (gHost.virt);
+       word < reinterpret_cast<volatile uint32_t *> (gHost.virt + kDmaBytes); ++word) {
+    *word = 0;
+  }
+  __asm__ volatile ("dsb sy" ::: "memory");
   uint32_t report[3] = { 0, 0, 0 };
   gRootDiagnostic.stage = "SMMU and request list";
   if (!hostStopQueue (why)) return false;
