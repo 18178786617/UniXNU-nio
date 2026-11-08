@@ -68,7 +68,17 @@ kit = "nio"
 # selecting them adds no archive and no second copy: it only makes the tree
 # carry their sources at kits/<name>, where scripts/build-adreno650.py compiles
 # them into the board's GPU archive. Without them the recipe has no input.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware"]
+#
+# NioUfs is the board's UFS transport, and it has to be named here as well as
+# in [kernel].archives below. The two lists do different jobs: this one is what
+# the configuration selects (scripts/unixnu/components.py:selected walks it),
+# and the archives list is what gets built. An archive entry naming a component
+# that was never selected is not ignored -- archive_plan raises
+# "[kernel] archives: component NioUfs is not selected" and the whole kernel
+# build stops at that line, before a single file is compiled. Runs 29 and 30
+# ended exactly there: "component:NioUfs" had been added to the archives list
+# when the UFS path was turned on, and this list was not.
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs"]
 
 [kernel]
 defconfig = "nio_defconfig"
