@@ -99,9 +99,12 @@ on:
       - "os-profiles/**"
       - "package/**"
       - "patches/**"
-      - "scripts/build-adreno650.py"
-      - "scripts/build-libpthread-kernel.py"
-      - "scripts/build-link-stubs.py"
+      # Every recipe that compiles something into the kernel or its archives,
+      # by pattern rather than by name. The names were listed one at a time and
+      # the list kept falling behind: R247 and R248 fixed
+      # build-storage-family.py and neither started a run, so two fixes sat on
+      # main while the last visible run was still the one before them.
+      - "scripts/build-*.py"
       - "scripts/emit-prelink-nio.py"
       - "scripts/reference/**"
 
