@@ -1,0 +1,46 @@
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -371,6 +371,42 @@
+ 	const_boot_args = *args;
+ 	BootArgs = args = &const_boot_args;
+ 
++	/* nio: the command line this port runs with, installed here.
++	 *
++	 * Every `nio:` decision below boot is taken from a boot argument --
++	 * the security-extension skip, the AppleImage4 skip, the UFS probe,
++	 * the GPU probe, -v -- and on this board none of them were ever
++	 * parsed. Run-51 is the measurement: its kernel carries a patch that
++	 * prints a line and skips AppleImage4 when
++	 * `nio_skip_security_extensions` is present, /EFI/UniXNU/unixnu.toml
++	 * passes that argument, and the boot still died in AppleImage4's
++	 * start() with the same "failed to get mix-n-match policy: 2".
++	 *
++	 * The loader hands its command line over as UTF-16 (UniXNULoader.h:
++	 * `CONST CHAR16 *BootArgs`) and boot_args.CommandLine is a char
++	 * array, so what arrives is either empty or a string whose every
++	 * other byte is NUL. PE_parse_boot_argn() stops at the first NUL, so
++	 * `*args == '\0'` is true and every lookup returns FALSE. That also
++	 * explains the console: without -v the kernel's log tap stops at
++	 * firehose init, which is why the screen has never shown a single
++	 * `nio:` line even though those printfs run.
++	 *
++	 * const_boot_args is a private copy in __DATA_CONST, made after the
++	 * loader's struct is read and before anything parses it (and this
++	 * port already keeps __DATA_CONST writable, R264), so replacing its
++	 * CommandLine here is safe and is the earliest point that reaches
++	 * every consumer.
++	 *
++	 * The list is unixnu.toml's, minus -enable_kprintf_spam and
++	 * startup_debug=1: those two bury the 15-line panel ring in noise,
++	 * and what this round needs to see is where the boot stops.
++	 */
++	strlcpy(const_boot_args.CommandLine,
++	    "-v keepsyms=1 kt_fixed_zones=120 native-ufs-root=1 "
++	    "native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 "
++	    "amfi_allow_any_signature=1 nio_skip_security_extensions=1",
++	    sizeof(const_boot_args.CommandLine));
++
+ 	cpu_data_init(&BootCpuData);
+ #if defined(HAS_APPLE_PAC)
+ 	/* bootstrap cpu process dependent key for kernel has been loaded by start.s */
