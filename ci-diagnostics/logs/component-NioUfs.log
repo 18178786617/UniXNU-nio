@@ -1,0 +1,36 @@
+6:34: note: expanded from macro 'kIOReturnNotPrivileged'
+  146 | #define kIOReturnNotPrivileged   iokit_common_err(0x2c1) // privilege violation
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2521:48: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 2520 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
+      |                            ~
+ 2521 |       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
+      |                                                ^~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:143:34: note: expanded from macro 'kIOReturnNoResources'
+  143 | #define kIOReturnNoResources     iokit_common_err(0x2be) // resource shortage
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2521:71: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 2520 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
+      |                            ~
+ 2521 |       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
+      |                                                                       ^~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:141:34: note: expanded from macro 'kIOReturnError'
+  141 | #define kIOReturnError           iokit_common_err(0x2bc) // general error
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:931:13: error: unused function 'cacheCivac' [-Werror,-Wunused-function]
+  931 | static void cacheCivac (const void *start, size_t length)
+      |             ^~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:943:13: error: unused function 'cacheInvalidate' [-Werror,-Wunused-function]
+  943 | static void cacheInvalidate (const void *start, size_t length)
+      |             ^~~~~~~~~~~~~~~
+13 warnings and 2 errors generated.
+
