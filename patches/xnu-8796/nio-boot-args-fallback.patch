@@ -1,0 +1,77 @@
+diff --git a/pexpert/arm/pe_bootargs.c b/pexpert/arm/pe_bootargs.c
+--- a/pexpert/arm/pe_bootargs.c
++++ b/pexpert/arm/pe_bootargs.c
+@@ -4,9 +4,72 @@
+ #include <pexpert/pexpert.h>
+ #include <pexpert/boot.h>
+ 
++/* nio: the command line this port is built for.
++ *
++ * The loader hands its command line over as UTF-16 (the DarwinBoot
++ * driver copies Request->BootArgs, a CHAR16 *, into the boot args
++ * byte by byte until it meets the first NUL byte). For a UTF-16
++ * string that NUL is the high byte of the very first character, so
++ * what reaches boot_args.CommandLine is "-" and nothing else. Every
++ * PE_parse_boot_argn() call then fails on the first character, which
++ * is why -v, nio_skip_security_extensions, native-ufs-root and
++ * native-ufs-probe have never had any effect on this port: the whole
++ * boot-arg mechanism was dead from the first boot.
++ *
++ * Use the loader's line when it looks like a real command line (eight
++ * or more printable ASCII characters in a row), otherwise use the line
++ * this port is actually built for. Nothing writes through the returned
++ * pointer.
++ */
++static char nio_port_cmdline[] =
++    "-v keepsyms=1 kt_fixed_zones=120 native-ufs-root=1 native-ufs-probe=12 "
++    "rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 "
++    "nio_skip_security_extensions=1";
++
++static int
++nio_cmdline_usable(
++	const char *s)
++{
++	int i;
++
++	if (s == NULL) {
++		return 0;
++	}
++	for (i = 0; i < 16; i++) {
++		unsigned char c = (unsigned char)s[i];
++		if (c == '\0') {
++			return (i >= 8);
++		}
++		if (c < 0x20 || c > 0x7e) {
++			return 0;
++		}
++	}
++	return 1;
++}
++
+ char *
+ PE_boot_args(
+ 	void)
+ {
+-	return (char *)((boot_args *)PE_state.bootArgs)->CommandLine;
++	char *cmd;
++
++	if (PE_state.bootArgs == NULL) {
++		return nio_port_cmdline;
++	}
++	cmd = (char *)((boot_args *)PE_state.bootArgs)->CommandLine;
++	if (nio_cmdline_usable(cmd)) {
++		return cmd;
++	}
++	return nio_port_cmdline;
++}
++
++/* nio: what the loader actually handed over, for the boot log. */
++const char *
++PE_boot_args_raw(
++	void)
++{
++	if (PE_state.bootArgs == NULL) {
++		return "";
++	}
++	return (const char *)((boot_args *)PE_state.bootArgs)->CommandLine;
+ }

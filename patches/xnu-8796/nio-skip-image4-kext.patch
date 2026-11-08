@@ -1,7 +1,7 @@
 diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
-@@ -6090,6 +6090,42 @@
+@@ -6090,6 +6090,53 @@
  		goto finish;
  	}
  
@@ -25,14 +25,25 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * (see nio-skip-security-extensions.patch), just reached through IOKit
 +	 * matching instead of the explicit mac_policy_initmach() load.
 +	 *
-+	 * With no manifest there is nothing this kext could enforce, and
-+	 * nio_skip_security_extensions already says this boot runs without the
-+	 * security extensions, so AppleImage4 has no consumer left. Skip the
-+	 * load under the same boot arg and let IOKit move on to the next
-+	 * candidate; without this every boot stops here and nothing below this
-+	 * point (the UFS probe included) ever runs.
++	 * With no manifest there is nothing this kext could enforce, so it is
++	 * skipped unconditionally on this port. The skip used to be gated on
++	 * the nio_skip_security_extensions boot arg, which never worked: the
++	 * loader hands the command line over as UTF-16 and the kernel saw a
++	 * single "-" (see nio-boot-args-fallback.patch), so every boot arg on
++	 * this port has been dead from the start.
 +	 */
-+	if (PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0) &&
++	{
++		extern const char *PE_boot_args_raw(void);
++		const char *nio_id = kextIdentifier ?
++		    kextIdentifier->getCStringNoCopy() : "(null)";
++
++		printf("nio: kext load id=[%s] cmd=[%s] raw=[%s] parsed=%d\n",
++		    nio_id,
++		    PE_boot_args(),
++		    PE_boot_args_raw(),
++		    PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0));
++	}
++	if (kextIdentifier != NULL &&
 +	    strcmp(kextIdentifier->getCStringNoCopy(),
 +	    "com.apple.security.AppleImage4") == 0) {
 +		printf("nio: not loading com.apple.security.AppleImage4, "
