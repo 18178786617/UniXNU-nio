@@ -1,0 +1,9 @@
+build-verified-root: verified-root-policies.cpp did not compile:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/verified-root/verified-root-policies.cpp:11:22: warning: 'extern' variable has an initializer [-Wextern-initializer]
+   11 | extern const uint8_t verified_root_key[VR_KEY_BYTES] = {0};
+      |                      ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/verified-root/verified-root-policies.cpp:14:6: error: use of undeclared identifier 'nullptr'
+   14 |     {nullptr, 0},
+      |      ^
+1 warning and 1 error generated.
+
