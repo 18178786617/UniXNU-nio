@@ -1,7 +1,7 @@
 diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
 --- a/bsd/kern/kern_trustcache.c
 +++ b/bsd/kern/kern_trustcache.c
-@@ -245,20 +245,24 @@
+@@ -245,21 +245,42 @@
  #endif
  
  #ifdef XNU_PLATFORM_BridgeOS
@@ -16,25 +16,44 @@ diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
 -	/* AMFI interface needs to be available */
 -	if (amfi == NULL) {
 -		panic("amfi interface not available");
+-	} else if (amfi->TrustCache.version < 2) {
 +	/* nio: img4if and amfi are registered by the security extensions, and this
-+	 * boot deliberately did not load them (nio_skip_security_extensions=1, see
-+	 * libsa/bootstrap.cpp). Both are NULL here, so there is no interface to ask
-+	 * and no cache to load; panicking on that costs a boot cycle and says
-+	 * nothing this build does not already know. The runtime and its lock are
-+	 * still initialised below, because cs_blob and the vnode checks take that
-+	 * lock whether or not a cache was ever loaded. load_static_trust_cache()
-+	 * carries the matching check: without it the amfi dereference there would
-+	 * fault immediately after this function returned.
++	 * boot deliberately does not load them (nio_skip_security_extensions=1, see
++	 * libsa/bootstrap.cpp), so both are NULL. The two panics state a fact this
++	 * build already knows.
++	 *
++	 * Dropping the panics alone is not enough, and R260 measured why: the
++	 * initialisation below is passed IMG4_RUNTIME_DEFAULT, which is not a constant
++	 * but a field of the img4 interface (i4if_v7.runtime_default), so the compiler
++	 * emits a load from offset 0x190 of img4if. With img4if NULL that faults --
++	 * run-47 booted into a data abort in this function, far=0x190, at exactly
++	 * that ldr ("Kernel data abort. at pc ...trust_cache_runtime_init+0x60").
++	 *
++	 * So the whole initialisation is skipped, not just the panics: the runtime
++	 * stays zeroed in its SECURITY_READ_ONLY_LATE storage and
++	 * trust_cache_rt still points at it, which is the state this kernel ran in
++	 * before the runtime was wired up at all. Its two readers,
++	 * allowSecondStaticTC and allowEngineeringTC, then read false -- and
++	 * load_static_trust_cache() cannot reach the cache without amfi anyway.
++	 *
++	 * The lock is not optional: cs_blob and the vnode checks take it whether or
++	 * not a cache was ever loaded, which is why the runtime was wired up here in
++	 * the first place. LCK_GRP_DECLARE gives the group a static initialiser, so
++	 * initialising the rw lock needs nothing from img4.
 +	 */
 +	if (img4if == NULL || amfi == NULL) {
 +		printf("trust_cache: no img4/amfi interface, runtime left empty\n");
- 	} else if (amfi->TrustCache.version < 2) {
++		lck_rw_init(&trust_cache_rt_lock, &trust_cache_lck_grp, 0);
++		return;
++	}
++	if (amfi->TrustCache.version < 2) {
  		panic("amfi interface is stale: %u", amfi->TrustCache.version);
  	}
  
  	trustCacheInitializeRuntime(
  		trust_cache_rt,
-@@ -763,12 +767,19 @@
+ 		trust_cache_mut_rt,
+@@ -763,12 +784,20 @@
  	unsigned int tc_dt_prop_length = 0;
  	size_t tc_segment_length = 0;
  
@@ -43,7 +62,8 @@ diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
  
 +	/* nio: no amfi interface means no version to ask about and no cache to
 +	 * load; trust_cache_runtime_init() left the runtime empty in that case
-+	 * instead of panicking. */
++	 * instead of panicking. Reaching the dereference below with amfi NULL was
++	 * the next fault after that panic, one line further on. */
 +	if (amfi == NULL) {
 +		return;
 +	}
