@@ -916,6 +916,19 @@ jobs:
           for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
             cp "$log" "$stage/ci-diagnostics/logs/$(basename "$log")" 2>/dev/null
           done
+          # The archive and component recipes keep the compiler's whole output
+          # next to the object (tree/build/<component>/compile.log), and that is
+          # the only copy of it: a recipe that fails raises with the last 3500
+          # characters of it, so run 33 said "12 warnings and 3 errors generated"
+          # and showed none of the three. This is where the rest of them live.
+          for log in out/*/*/*/tree/build/*/compile.log; do
+            [ -f "$log" ] || continue
+            cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
+          for command in out/*/*/*/tree/build/*/compile-command.json; do
+            [ -f "$command" ] || continue
+            cp "$command" "$stage/ci-diagnostics/logs/build-$(echo "$command" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
           [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$stage/ci-diagnostics/logs/status.txt"
           [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$stage/ci-diagnostics/logs/build-console.log"
           [ -f "$RUNNER_TEMP/failure-report.md" ] && cp "$RUNNER_TEMP/failure-report.md" "$stage/ci-diagnostics/report.md"
