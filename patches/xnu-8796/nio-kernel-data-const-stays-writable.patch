@@ -1,0 +1,43 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1754,7 +1754,36 @@
+ 	 */
+ #endif
+ 
+-	arm_vm_page_granular_RNX(segDATACONSTB, segSizeDATACONST, ARM64_GRANULE_ALLOW_BLOCK);
++	/* nio: the kernel's own __DATA_CONST is left writable.
++	 *
++	 * run-50 booted one layer past the kext fix: the constructor that run-49
++	 * stopped from faulting now returns, and the first thing it does after
++	 * storing its two globals dies on the same kind of write, one segment
++	 * closer to home:
++	 *
++	 *   Unexpected fault in kernel static region
++	 *   far 0xfffffff0071c7490   __DATA_CONST/__const
++	 *   esr 0x9600004f           write, permission fault, level 3
++	 *   lr  0xfffffff0046e2d88   CoreTrust __TEXT_EXEC+0x3d88, the call
++	 *                            right after the two stores
++	 *
++	 * The faulting store is inside os_log_context_encode: an "ldrb / add /
++	 * strb" triple that bumps a byte counter in a static descriptor. os_log
++	 * keeps that state in __DATA_CONST, so the first message logged through a
++	 * site writes to a page this function had just made read only. That is a
++	 * write the kernel makes to itself on purpose, and it happens long after
++	 * machine_lockdown() has run.
++	 *
++	 * Apple's reason for tightening this segment is hardware integrity: the
++	 * comment above notes the static page tables live here on KTRR systems.
++	 * This kernel has none of KTRR, CTRR, PPL or SPTM (CONFIG_SPTM,
++	 * PMAP_CS_PPL_MONITOR and KERNEL_INTEGRITY are all off), nothing in the
++	 * boot path tests that these pages are read only, and os_log needs them
++	 * writable. Only the kernel's own segment is left open here; the kext
++	 * __PRELINK_TEXT above stays tightened.
++	 */
++	printf("nio: kernel __DATA_CONST left writable, %lu bytes\n",
++	    (unsigned long)segSizeDATACONST);
+ 
+ 	__builtin_arm_dsb(DSB_ISH);
+ 	flush_mmu_tlb();

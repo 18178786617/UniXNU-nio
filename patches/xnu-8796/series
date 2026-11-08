@@ -68,3 +68,4 @@ xnu-8796-arm64-kpc-backend.patch
 nio-skip-security-extensions.patch
 nio-trust-cache-without-security-extensions.patch
 nio-kext-data-const-stays-writable.patch
+nio-kernel-data-const-stays-writable.patch
