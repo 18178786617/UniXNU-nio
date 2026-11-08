@@ -1,11 +1,11 @@
 diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
-@@ -6090,6 +6090,53 @@
+@@ -6090,6 +6090,59 @@
  		goto finish;
  	}
  
-+	/* nio: AppleImage4 cannot start without /chosen/manifest-properties.
++	/* nio: the com.apple.security.* kexts cannot start on this port.
 +	 *
 +	 * run-50 got one whole layer further: with the kernel's __DATA_CONST
 +	 * left writable (R264) CoreTrust's constructor and its os_log counter
@@ -20,17 +20,23 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * AppleImage4 reads the img4 manifest properties that iBoot writes to
 +	 * /chosen/manifest-properties. This board boots from a device tree of
 +	 * our own making (tools/make-nio-adt.py), so the node is absent, the
-+	 * property lookup returns 2 and the kext panics on the way in. It is
-+	 * the same wall the security-extension loader already avoids for AMFI
-+	 * (see nio-skip-security-extensions.patch), just reached through IOKit
-+	 * matching instead of the explicit mac_policy_initmach() load.
++	 * property lookup returns 2 and the kext panics on the way in. The
++	 * same is true of com.apple.security.sandbox, and of the img4 based
++	 * trust path in general. It is the same wall the security-extension
++	 * loader already avoids for AMFI (see nio-skip-security-extensions.patch),
++	 * just reached through IOKit matching instead of the explicit
++	 * mac_policy_initmach() load.
 +	 *
-+	 * With no manifest there is nothing this kext could enforce, so it is
-+	 * skipped unconditionally on this port. The skip used to be gated on
-+	 * the nio_skip_security_extensions boot arg, which never worked: the
-+	 * loader hands the command line over as UTF-16 and the kernel saw a
-+	 * single "-" (see nio-boot-args-fallback.patch), so every boot arg on
-+	 * this port has been dead from the start.
++	 * With no manifest there is nothing any of them could enforce, so the
++	 * whole com.apple.security.* family is skipped here and IOKit moves on
++	 * to the next candidate. Without this every boot stops here and
++	 * nothing below this point (the UFS probe included) ever runs.
++	 *
++	 * The skip used to be gated on the nio_skip_security_extensions boot
++	 * arg, which never worked: the loader hands the command line over as
++	 * UTF-16 and the kernel saw a single "-" (see
++	 * nio-boot-args-fallback.patch), so every boot arg on this port has
++	 * been dead from the start.
 +	 */
 +	{
 +		extern const char *PE_boot_args_raw(void);
@@ -44,10 +50,10 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +		    PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0));
 +	}
 +	if (kextIdentifier != NULL &&
-+	    strcmp(kextIdentifier->getCStringNoCopy(),
-+	    "com.apple.security.AppleImage4") == 0) {
-+		printf("nio: not loading com.apple.security.AppleImage4, "
-+		    "its start needs /chosen/manifest-properties\n");
++	    strncmp(kextIdentifier->getCStringNoCopy(),
++	    "com.apple.security.", 19) == 0) {
++		printf("nio: not loading %s, it needs /chosen/manifest-properties\n",
++		    kextIdentifier->getCStringNoCopy());
 +		result = kOSKextReturnNotFound;
 +		goto finish;
 +	}
