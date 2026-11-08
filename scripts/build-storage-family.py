@@ -245,14 +245,25 @@ subprocess.run(['xcrun', 'ar', 'rcs', str(archive), *map(str, objects)], check=T
 # The kernel link force-loads this archive. A definition count is the one thing
 # worth asserting here: an empty or partial archive would report success and
 # move the failure to a linker message far away from its cause.
+#
+# The check is on each class's own objects, by their Itanium ABI names --
+# __ZTV<len><Class> for the vtable and __ZN<len><Class>9metaClassE for the
+# metaclass -- rather than on a substring. "IOMedia" is a substring of
+# "IOMediaBSDClient", so a substring test would pass for a class that is
+# missing.
 table = subprocess.run(['xcrun', 'nm', '-gP', str(archive)], text=True,
                        stdout=subprocess.PIPE, check=True).stdout
-defined = [line.split() for line in table.splitlines() if len(line.split()) >= 3 and line.split()[1] in 'TSDBRC']
-names = {entry[2].lstrip('_') for entry in defined}
+defined = set()
+for line in table.splitlines():
+    parts = line.split()
+    if len(parts) >= 3 and parts[1] in 'TSDBRC':
+        defined.add(parts[2])
 required = ['IOBlockStorageDevice', 'IOMedia', 'IOBlockStorageDriver', 'IOGUIDPartitionScheme',
             'IOApplePartitionScheme', 'IOFDiskPartitionScheme', 'IOMediaBSDClient']
-absent = [name for name in required if not any(entry.startswith(name) for entry in names)]
+absent = [name for name in required
+          if '__ZTV%d%s' % (len(name), name) not in defined
+          and '__ZN%d%s9metaClassE' % (len(name), name) not in defined]
 if absent:
     sys.exit('the archive does not define: %s' % ', '.join(absent))
 print('PASS: %d objects, %d defined symbols, %d bytes -> %s'
-      % (len(objects), len(names), archive.stat().st_size, archive.relative_to(ROOT)))
+      % (len(objects), len(defined), archive.stat().st_size, archive.relative_to(ROOT)))
