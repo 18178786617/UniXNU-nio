@@ -1202,6 +1202,21 @@ static bool hostBringUp (const char **why)
                  read32 (gHost.hc, 0x34), read32 (gHost.hc, 0x30),
                  read32 (gHost.hc, 0x20));
         }
+        // run-78 measured it: right after the HCE cycle HCS.DPY (device
+        // present) reads 0 -- the controller re-detects the device on its
+        // own, and every UIC command before DPY rises is doomed (the
+        // queue-rebuild panic showed hcs=0x8, no DPY). Give detection its
+        // time (two seconds -- hostWaitRegister's 100 ms deadline is
+        // shorter than real re-detection can take) before touching the DME.
+        {
+          unsigned det = 0;
+          while (!(read32 (gHost.hc, 0x30) & 0x2) && ++det < 200000) IODelay (10);
+          if (!(read32 (gHost.hc, 0x30) & 0x2)) {
+            panic ("NATIVE_UFS uic: device never re-detected after HCE\n"
+                   "hcs=%08x is=%08x", read32 (gHost.hc, 0x30),
+                   read32 (gHost.hc, 0x20));
+          }
+        }
         if (!hostStartQueue (why)) {
           panic ("NATIVE_UFS uic: queue rebuild after HCE failed (%s)\n"
                  "hcs=%08x is=%08x", *why,
