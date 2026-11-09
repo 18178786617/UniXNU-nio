@@ -1,0 +1,55 @@
+Add landmarks inside kmem_scramble_ranges()
+
+The console stops right after the kmem range table, and the series'
+"nio: kmem scramble done" never prints, so the stall is inside
+kmem_scramble_ranges() itself.  One landmark per step it takes
+(enter, kext_alloc_init, fuzz, shuffle, every claim) makes the next boot
+name the step that hangs instead of the function.
+
+---
+diff --git a/a/osfmk/vm/vm_kern.c b/b/osfmk/vm/vm_kern.c
+index 2927d4b..0ed6090 100644
+--- a/a/osfmk/vm/vm_kern.c
++++ b/b/osfmk/vm/vm_kern.c
+@@ -3546,6 +3546,8 @@ kmem_scramble_ranges(void)
+ {
+ 	vm_map_offset_t start = 0;
+ 
++	printf("nio: scramble enter, claims %u\n", kmem_claim_count);
++
+ 	/*
+ 	 * Initiatize KMEM_RANGE_ID_NONE range to use the entire map so that
+ 	 * the vm can find the requested ranges.
+@@ -3560,6 +3562,7 @@ kmem_scramble_ranges(void)
+ 	 * could overflow into the heap.
+ 	 */
+ 	kext_alloc_init();
++	printf("nio: kext_alloc_init done\n");
+ 
+ 	/*
+ 	 * Eat a random amount of kernel_map to fuzz subsequent heap, zone and
+@@ -3571,6 +3574,7 @@ kmem_scramble_ranges(void)
+ 	 * do not admit this address to be part of any zone submap.
+ 	 */
+ 	start = kmem_fuzz_start();
++	printf("nio: fuzz start %#llx\n", (unsigned long long)start);
+ 
+ 	/*
+ 	 * Add claims for ptr and data kmem_ranges
+@@ -3582,6 +3586,7 @@ kmem_scramble_ranges(void)
+ 	 */
+ 	assert(kmem_claim_count < UINT16_MAX);
+ 	kmem_shuffle_claims();
++	printf("nio: claims shuffled\n");
+ 
+ 	/*
+ 	 * Apply restrictions and determine range for each claim
+@@ -3590,6 +3595,8 @@ kmem_scramble_ranges(void)
+ 		vm_map_offset_t end = 0;
+ 		struct kmem_range_startup_spec sp = kmem_claims[i];
+ 		struct mach_vm_range *sp_range = sp.kc_range;
++		printf("nio: claim %u/%u size %#llx\n", i, kmem_claim_count,
++		    (unsigned long long)sp.kc_size);
+ 		if (vm_map_locate_space(kernel_map, sp.kc_size, 0,
+ 		    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL) != KERN_SUCCESS) {
+ 			panic("kmem_range_init: vm_map_locate_space failing for claim %s",
