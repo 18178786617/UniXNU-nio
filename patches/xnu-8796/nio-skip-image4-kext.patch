@@ -1,7 +1,7 @@
 diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 --- a/libkern/c++/OSKext.cpp
 +++ b/libkern/c++/OSKext.cpp
-@@ -6090,6 +6090,58 @@
+@@ -6090,6 +6090,80 @@
  		goto finish;
  	}
  
@@ -48,19 +48,41 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +		    PE_boot_args_raw(),
 +		    PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0));
 +	}
-+	if (kextIdentifier != NULL &&
-+	    strncmp(kextIdentifier->getCStringNoCopy(),
-+	    "com.apple.security.", 19) == 0) {
-+		printf("nio: not loading %s, it needs /chosen/manifest-properties\n",
-+		    kextIdentifier->getCStringNoCopy());
-+		result = kOSKextReturnNotFound;
-+		goto finish;
++	if (kextIdentifier != NULL) {
++		const char *nio_cid = kextIdentifier->getCStringNoCopy();
++		/* R287: run-73 closed the loop -- exec of launchd died with
++		 * "unexpected SIGKILL of launchd ... namespace 9 code 0x8",
++		 * i.e. EXEC_EXIT_REASON_SECURITY_POLICY raised by
++		 * process_signature() because imgp->ip_mac_return was nonzero:
++		 * a MAC policy refused cred_label_update_execve for the unsigned
++		 * launchd. The refusing policy is AMFI, and its bundle identifier
++		 * is com.apple.driver.AppleMobileFileIntegrity -- it does NOT
++		 * start with "com.apple.security.", so the family skip below and
++		 * the start() skip passed AMFI through: AppleImage4 was blocked
++		 * (img4if == NULL) while AMFI still started, registered its MAC
++		 * policy and its amfi interface (why run-72 could even call into
++		 * amfi->TrustCache.query). amfi_get_out_of_my_way=1 cannot help:
++		 * every boot arg on this port is dead (UTF-16 command line, see
++		 * nio-boot-args-fallback.patch) and the release AMFI ignores
++		 * them anyway. Skipping its start leaves amfi == NULL, which
++		 * trust_cache_runtime_init() and every amfi-> dereference in
++		 * kern_trustcache.c already tolerate (nio-trust-cache-without-
++		 * security-extensions.patch), and kern_cs.c only reaches
++		 * amfi->OSEntitlements_* with a blob AMFI alone would have set. */
++		if (strncmp(nio_cid, "com.apple.security.", 19) == 0 ||
++		    strncmp(nio_cid, "com.apple.driver.AppleMobileFileIntegrity",
++		    42) == 0) {
++			printf("nio: not loading %s, it needs /chosen/manifest-properties\n",
++			    nio_cid);
++			result = kOSKextReturnNotFound;
++			goto finish;
++		}
 +	}
 +
  	OSKext::recordIdentifierRequest(kextIdentifier);
  
  	theKext = OSDynamicCast(OSKext, sKextsByID->getObject(kextIdentifier));
-@@ -8411,8 +8411,21 @@
+@@ -8411,8 +8411,23 @@
  OSKext::start(bool startDependenciesFlag)
  {
  	OSReturn                            result = kOSReturnError;
@@ -75,7 +97,9 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * every loaded kext passes through: skip the family here (their C++
 +	 * constructors already ran during load; img4if stays NULL, which the
 +	 * trust-cache path already tolerates). */
-+	if (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0) {
++	if (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0 ||
++	    strncmp(getIdentifierCString(),
++	    "com.apple.driver.AppleMobileFileIntegrity", 42) == 0) {
 +		printf("nio: skipping start of %s\n", getIdentifierCString());
 +		result = kOSReturnSuccess;
 +		goto finish;
