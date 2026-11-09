@@ -76,3 +76,4 @@ nio-port-command-line.patch
 nio-boot-args-fallback.patch
 nio-kmem-range-landmarks.patch
 nio-kmem-scramble-landmarks.patch
+nio-kalloc-init-landmarks.patch

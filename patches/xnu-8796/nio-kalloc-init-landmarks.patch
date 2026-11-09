@@ -1,0 +1,50 @@
+Add landmarks inside kalloc_init()
+
+kmem_range_init() now prints all 17 kmem claims and the range table, so
+it completes.  Of the two STARTUP_RANK_THIRD functions only
+kalloc_init() is left before the console goes quiet, and it is the first
+code that allocates real memory through the 4K pmap, so a landmark per
+step names the failing call instead of the function.
+
+---
+diff --git a/osfmk/kern/kalloc.c b/osfmk/kern/kalloc.c
+index e08348b..7677621 100644
+--- a/osfmk/kern/kalloc.c
++++ b/osfmk/kern/kalloc.c
+@@ -1481,21 +1481,28 @@ kalloc_init(void)
+ 	uint64_t max_count = kt_count = kt_scratch_size / sizeof(kalloc_type_views_t);
+ 
+ 	static_assert(KHEAP_MAX_SIZE >= KALLOC_SAFE_ALLOC_SIZE);
++	printf("nio: kalloc enter\n");
+ 	kalloc_zsize_compute();
++	printf("nio: kalloc zsize done\n");
+ 
+ 	/* Initialize kalloc default heap */
+ 	kalloc_heap_init(KHEAP_DEFAULT);
++	printf("nio: kalloc default heap done\n");
+ 
+ 	/* Initialize kalloc data buffers heap */
+ 	kalloc_heap_init(KHEAP_DATA_BUFFERS);
++	printf("nio: kalloc data heap done\n");
+ 
++	printf("nio: kalloc kt_alloc %#llx bytes\n", (unsigned long long)kt_scratch_size);
+ 	kmem_alloc(kernel_map, (vm_offset_t *)&kt_buffer, kt_scratch_size,
+ 	    KMA_NOFAIL | KMA_ZERO | KMA_KOBJECT, VM_KERN_MEMORY_KALLOC);
++	printf("nio: kalloc kt_buffer %p\n", kt_buffer);
+ 
+ 	/*
+ 	 * Handle fixed size views
+ 	 */
+ 	kalloc_type_view_init_fixed();
++	printf("nio: kalloc fixed views done\n");
+ 
+ 	/*
+ 	 * Reset
+@@ -1507,6 +1514,7 @@ kalloc_init(void)
+ 	 * Handle variable size views
+ 	 */
+ 	kalloc_type_view_init_var();
++	printf("nio: kalloc var views done\n");
+ 
+ 	/*
+ 	 * Free resources used
