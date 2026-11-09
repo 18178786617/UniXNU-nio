@@ -1,0 +1,27 @@
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -4275,8 +4275,23 @@
+ static errno_t
+ accelerate_entitlement_queries(
+ 	struct cs_blob *cs_blob)
+ {
+ 	kern_return_t ret = KERN_NOT_SUPPORTED;
++
++	/* nio: R287 skips the start of AMFI -- its bundle identifier is
++	 * com.apple.driver.AppleMobileFileIntegrity, which the
++	 * com.apple.security.* family skip does not cover -- so the amfi
++	 * interface stays NULL for the whole boot. run-74 measured the
++	 * consequence: exec of launchd reached ubc_cs_blob_add with
++	 * launchd's real Apple signature attached, and the no-monitor path
++	 * here dereferences amfi unconditionally ("Kernel data abort",
++	 * lr = ubc_cs_blob_add+0x384, far=0, inside this function). The
++	 * acceleration is only an optimisation; csb_entitlements stays NULL
++	 * without AMFI anyway, so a plain success answers every later
++	 * query with "no entitlements". */
++	if (amfi == NULL) {
++		return 0;
++	}
+ 
+ #if CODE_SIGNING_MONITOR
+ 	CEQueryContext_t ce_ctx = NULL;
