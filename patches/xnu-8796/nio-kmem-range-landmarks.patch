@@ -1,0 +1,45 @@
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index bbd648e..761b985 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -2691,6 +2691,7 @@ void
+ pmap_init(
+ 	void)
+ {
++	printf("nio: pmap_init enter\n");
+ 	/*
+ 	 *	Protect page zero in the kernel map.
+ 	 *	(can be overruled by permanent transltion
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..d3863e3 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -2389,6 +2389,7 @@ kmem_metadata_init(void)
+ 		struct kmem_page_meta *meta;
+ 		uint64_t meta_idx;
+ 
++		printf("nio: meta init range %d\n", i);
+ 		vm_map_will_allocate_early_map(&kmem_meta_map[i]);
+ 		kmem_meta_map[i] = kmem_suballoc(kernel_map, &addr, kmem_meta_size,
+ 		    VM_MAP_CREATE_NEVER_FAULTS | VM_MAP_CREATE_DISABLE_HOLELIST,
+@@ -3656,6 +3657,8 @@ kmem_range_init(void)
+ 
+ 	kmem_scramble_ranges();
+ 
++	printf("nio: kmem scramble done\n");
++
+ 	range_adjustment = sprayqtn_range_size >> 3;
+ 	kmem_large_ranges[KMEM_RANGE_ID_SPRAYQTN].min_address =
+ 	    kmem_ranges[KMEM_RANGE_ID_SPRAYQTN].min_address + range_adjustment;
+@@ -3669,8 +3672,11 @@ kmem_range_init(void)
+ 	    kmem_ranges[KMEM_RANGE_ID_DATA].max_address;
+ 
+ 	pmap_init();
++	printf("nio: pmap_init done\n");
+ 	kmem_metadata_init();
++	printf("nio: kmem metadata done\n");
+ 	kmem_sizeclass_init();
++	printf("nio: kmem sizeclass done\n");
+ 
+ #if DEBUG || DEVELOPMENT
+ 	for (kmem_range_id_t i = 1; i < KMEM_RANGE_COUNT; i++) {
