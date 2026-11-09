@@ -2350,7 +2350,9 @@ bool NioUfs::start (IOService *provider)
   if (probe == 12) {
     bool published = startRoot (provider);
     if (!published) {
-      panic ("NATIVE_UFS media report: root start failed (blocks=%u)", native_ufs_blocks_published);
+      panic ("NATIVE_UFS media report: root start failed (%s; stage=%s, blocks=%u)",
+             native_ufs_root_failure ? native_ufs_root_failure : "(no reason)",
+             gRootDiagnostic.stage, native_ufs_blocks_published);
     }
     thread_t thread = nullptr;
     if (kernel_thread_start (mediaReportThread, nullptr, &thread) != KERN_SUCCESS) {
