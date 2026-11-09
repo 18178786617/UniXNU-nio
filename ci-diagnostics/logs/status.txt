@@ -1,0 +1,121 @@
+device   /Users/runner/work/UniXNU-nio/UniXNU-nio/device (nio)
+output   /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio
+config   /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/.config
+profile  arch                     /Users/runner/work/UniXNU-nio/UniXNU-nio/profiles/arch/arm64
+profile  soc                      /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/UniXNU-sm8250-common-e8b46722
+profile  os                       /Users/runner/work/UniXNU-nio/UniXNU-nio/profiles/os/ios-16.5-20F66
+profile  device                   /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+component ArmCpu                  arm64
+component ArmDTPlatform           arm64
+component NioUfs                  board
+component SoftwareAES             os
+component AdrenoFirmware          gpu
+component AdrenoPM4               gpu
+component ArmSmmu4K               controller
+component VerifiedRoot            storage
+component XnuPrelink              tool
+patch    01 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/apple-only-cpu-tunables.patch
+patch    02 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/architectural-timer-entry.patch
+patch    03 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/armvirt-platform-personality.patch
+patch    04 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/cxx-flag-dependencies.patch
+patch    05 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/disabled-deferred-reclaim.patch
+patch    06 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/external-archive-dependencies.patch
+patch    07 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/kernel-sdk-root.patch
+patch    08 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/xnu-8796-compile-records.patch
+patch    09 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/local-availability.patch
+patch    10 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/mockfs-intermediate-lookup.patch
+patch    11 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/mockfs-memory-device-width.patch
+patch    12 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/mockfs-statfs.patch
+patch    13 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/mockfs-test-file.patch
+patch    14 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/mockfs-typed-allocation.patch
+patch    15 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-4k-bootstrap-capacity.patch
+patch    16 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-4k-signature-hash-cache.patch
+patch    17 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-4k-user-abi.patch
+patch    18 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-aes-personality.patch
+patch    19 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-arm-pan.patch
+patch    20 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-dt-panic-region.patch
+patch    21 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-lookup-trace.patch
+patch    22 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-priv-work-interval.patch
+patch    23 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-quiet-managed-page-report.patch
+patch    24 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-text-fixup.patch
+patch    25 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-trust-cache-runtime.patch
+patch    26 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-union-getattrlistbulk.patch
+patch    27 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-union-lower-directory.patch
+patch    28 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-work-interval-soft-fail.patch
+patch    29 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-work-interval-trace.patch
+patch    30 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-work-interval-instance.patch
+patch    31 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/non-apple-cache-monitor.patch
+patch    32 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/non-apple-iommu-bootstrap.patch
+patch    33 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/non-apple-pmap-field.patch
+patch    34 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/null-root-media.patch
+patch    35 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-component-load-probes.patch
+patch    36 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-legacy-start.patch
+patch    37 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/gpu-probe-start.patch
+patch    38 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-native-gpu-broker.patch
+patch    39 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-boot-manifest.patch
+patch    40 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-cache-carrier.patch
+patch    41 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-root-binding-audit.patch
+patch    42 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-root-crypto-probe.patch
+patch    43 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-systemos-mount.patch
+patch    44 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-owner-z-air-init.patch
+patch    45 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/offline-pgz-alignment-probe.patch
+patch    46 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/public-entitlements-header.patch
+patch    47 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/source-corecrypto14-bootstrap.patch
+patch    48 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/source-machine-layer.patch
+patch    49 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/source-pthread-bootstrap.patch
+patch    50 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzw-native-adreno-sandbox-grant.patch
+patch    51 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzwb-native-sandbox-grant-set-properties.patch
+patch    52 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzx-pmap-sync-64bit-pa.patch
+patch    53 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzy-native-gpu-addon-mount.patch
+patch    54 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzy-staged-system-apps.patch
+patch    55 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzyb-native-cryptex-os-view.patch
+patch    56 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzyc-owner-skip-launch-constraints.patch
+patch    57 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-smp-secondary.patch
+patch    58 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/native-smp-type-clusters.patch
+patch    59 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/sheng-platform-power.patch
+patch    60 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/zzz-boot-progress.patch
+patch    61 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/xnu-8796.101.5-security-init.patch
+patch    62 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/xnu-8796.101.5-sparse-index.patch
+patch    63 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/linux-clang-auto-var-init.patch
+patch    64 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/linux-clang-uio-stackbuf-align.patch
+patch    65 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/linux-clang-kalloc-pointee-type.patch
+patch    66 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/linux-clang-iorpc-kernel-content.patch
+patch    67 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/xnu-8796-arm64-kpc-backend.patch
+patch    68 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-skip-security-extensions.patch
+patch    69 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-trust-cache-without-security-extensions.patch
+patch    70 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-amfi-less-blob-acceleration.patch
+patch    71 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-amfi-less-entitlement-queries.patch
+patch    72 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-kext-data-const-stays-writable.patch
+patch    73 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-kernel-data-const-stays-writable.patch
+patch    74 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-skip-image4-kext.patch
+patch    75 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-port-command-line.patch
+patch    76 /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/nio-boot-args-fallback.patch
+driver   ArmCpu                   base
+driver   ArmDTPlatform            base
+driver   NioUfs                   device
+driver   SoftwareAES              base
+kit      AdrenoFirmware           base
+kit      AdrenoPM4                base
+kit      ArmSmmu4K                base
+kit      VerifiedRoot             base
+kit      XnuPrelink               base
+package  device                   device
+package  main                     base
+patch    darwinboot               device
+patch    libpthread               base
+patch    mesa                     base
+patch    xnu                      device
+patch    xnu-12377                base
+patch    xnu-8796                 device
+patch    xnu-prelink              device
+refer    AvailabilityVersions     git pinned 933f9360f1b7
+refer    IOStorageFamily          git pinned e45fbe30a787
+refer    corecrypto-2023          git pinned 11fba65b12d8
+refer    edk2                     git pinned cfb93724a06f
+refer    libdispatch              git pinned 30fe6a7d9453
+refer    libplatform              git pinned a00a4cc36da2
+refer    libpthread               git pinned c0e60fb5ecfc
+refer    xnu                      git pinned aca3beaa3dfb
+refer    xnu-driverkit            git pinned 2c2f96dc2b9a
+refer    xnu-trustcache           git pinned aca3beaa3dfb
+soc      sm8250                   git pinned a6e7e36caab5
