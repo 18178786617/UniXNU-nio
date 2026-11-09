@@ -87,19 +87,20 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
-  hostWrite (0x58, 1);
-  /* nio run-65: the kernel hung with no panic screen somewhere around the
-   * first doorbell. Ring it, read everything back and stop on the panic
-   * screen for one round: if this message shows, the doorbell write and
-   * the following reads survived and the hang is in the poll loop (the
-   * controller's own DMA over the region); if it never shows, the
-   * doorbell MMIO write itself hung the fabric. */
-  panic ("NATIVE_UFS submit: doorbell rung\n"
-         "phys=%llx db=%08x hcs=%08x is=%08x\n"
+  /* nio run-282: the after-doorbell marker never printed under the
+   * uncached mapping (run-65/66), the cached mapping (run-67/68) or with
+   * the UCD on the list page (run-281), so a NOP's every controller DMA
+   * target is now on the proven page and the ring itself still kills the
+   * board. Stop BEFORE the doorbell instead: if this prints, every UTRD
+   * store, the cache clean and the IS ack survived and the ring is the
+   * killer; it also finally prints the firmware list's physical address.
+   * If it never prints, the new cacheClean or the IS write is the killer. */
+  panic ("NATIVE_UFS submit: before doorbell\n"
+         "phys=%llx ba=%08x%08x hcs=%08x is=%08x\n"
          "utrd0=%08x %08x %08x %08x\n"
          "utrd4=%08x %08x %08x %08x",
-         gHost.phys, read32 (gHost.hc, 0x58), read32 (gHost.hc, 0x30),
-         read32 (gHost.hc, 0x20),
+         gHost.phys, read32 (gHost.hc, 0x54), read32 (gHost.hc, 0x50),
+         read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[0],
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[1],
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[2],
@@ -108,6 +109,7 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[5],
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[6],
          reinterpret_cast<volatile uint32_t *> (gHost.virt)[7]);
+  hostWrite (0x58, 1);
   UfsTransferPoll state;
   UfsTransferEnd end = pollUfsTransfer (port, state);
   gRootDiagnostic.polls = state.polls;
