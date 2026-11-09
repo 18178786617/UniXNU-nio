@@ -1,0 +1,1 @@
+unixnu: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/series:1: patch missing: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/﻿apple-only-cpu-tunables.patch

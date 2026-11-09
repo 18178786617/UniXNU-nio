@@ -1,0 +1,19 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== fetch https://github.com/apple-oss-distributions/xnu.git aca3beaa3dfb
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/xnu-01c28cc1 fetch -q --depth 1 origin aca3beaa3dfbd42498b42c5e5ce20a938e6554e5
+== fetch https://github.com/apple-oss-distributions/libplatform.git a00a4cc36da2
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/libplatform-0f31118b fetch -q --depth 1 origin a00a4cc36da2110578bcf3b8eeeeb93dcc7f4e11
+== fetch https://github.com/apple-oss-distributions/libdispatch.git 30fe6a7d9453
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/libdispatch-d8f167ce fetch -q --depth 1 origin 30fe6a7d945340ce69cef121132f049e810089a5
+== fetch https://github.com/apple-oss-distributions/AvailabilityVersions.git 933f9360f1b7
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/AvailabilityVersions-6928d18a fetch -q --depth 1 origin 933f9360f1b70dfbda5548386a3d65e0358b4f7d
+== fetch https://github.com/apple-oss-distributions/libpthread.git c0e60fb5ecfc
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/libpthread-9e5201bd fetch -q --depth 1 origin c0e60fb5ecfc54cf379c261d3f9572cc22ded891
+== fetch https://github.com/ONLYA/corecrypto-2023.git 11fba65b12d8
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/corecrypto-2023-c0651bae fetch -q --depth 1 origin 11fba65b12d8830630e248dfa8344caf8b065f26
+== fetch https://github.com/apple-oss-distributions/IOStorageFamily.git e45fbe30a787
++ git -C /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/IOStorageFamily-67f9003c fetch -q --depth 1 origin e45fbe30a7879e0b16e26dddb78538f1b00e0bff
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree
+== kernel: XNU
+unixnu: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/series:1: patch missing: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu-8796/﻿apple-only-cpu-tunables.patch
