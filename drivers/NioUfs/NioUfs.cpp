@@ -1178,21 +1178,37 @@ static bool hostBringUp (const char **why)
              "hcs=%08x is=%08x", read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
     }
     hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
-    hostWrite (0x90, 0x16);                     // DME_LINKSTARTUP
-    unsigned spin = 0;
-    while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
-    uint32_t result = read32 (gHost.hc, 0x98);
-    if (spin >= 100000) {
-      panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
-             "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
-             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
-             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
+    uint32_t result = 0xffffffffU;
+    unsigned tries = 0;
+    for (; tries < 3; ++tries) {
+      if (tries) IODelay (50000);               // let UniPro settle between attempts
+      hostWrite (0x90, 0x16);                   // DME_LINKSTARTUP
+      unsigned spin = 0;
+      while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
+      result = read32 (gHost.hc, 0x98);
+      if (spin >= 100000) {
+        panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
+               "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
+               read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+               read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
+      }
+      hostWrite (0x20, 0x400);                  // ack UCCS
+      if ((result & 0xff) == 0) break;
     }
-    hostWrite (0x20, 0x400);                    // ack UCCS
-    printf ("nio: UFS DME_LINKSTARTUP result=%08x\n", result);
+    printf ("nio: UFS DME_LINKSTARTUP result=%08x tries=%u\n", result, tries + 1);
     if ((result & 0xff) != 0) {
-      *why = "DME_LINKSTARTUP result";
-      return false;
+      // The DME result code is the one datum this bring-up has never seen.
+      // Nonzero here can mean a dead link, or one the hand-off firmware
+      // already started (benign). run-70 and run-71 both died blind on this
+      // check; print the whole UIC error picture and stop.
+      panic ("NATIVE_UFS uic: LINKSTARTUP failed\n"
+             "result=%02x tries=%u hcs=%08x is=%08x\n"
+             "pa=%08x dl=%08x nl=%08x tl=%08x dme=%08x",
+             result & 0xff, tries + 1,
+             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c),
+             read32 (gHost.hc, 0x40), read32 (gHost.hc, 0x44),
+             read32 (gHost.hc, 0x48));
     }
   }
   gRootDiagnostic.stage = "NOP OUT";
