@@ -38,7 +38,7 @@ diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
 +	strlcpy(const_boot_args.CommandLine,
 +	    "-v keepsyms=1 kt_fixed_zones=120 native-ufs-root=1 "
 +	    "native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 "
-+	    "amfi_allow_any_signature=1 nio_skip_security_extensions=1",
++	    "amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1",
 +	    sizeof(const_boot_args.CommandLine));
 +
  	cpu_data_init(&BootCpuData);
