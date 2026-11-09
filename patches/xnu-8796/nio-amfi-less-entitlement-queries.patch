@@ -1,0 +1,86 @@
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -1492,6 +1492,19 @@
+ 	}
+ 	proc_t proc = (proc_t)get_bsdtask_info(task);
+ 
++	/* nio: R287 skips the start of AMFI (bundle id
++	 * com.apple.driver.AppleMobileFileIntegrity is not covered by the
++	 * com.apple.security.* family skip), so the amfi interface stays NULL
++	 * for the whole boot. run-75 measured the consequence: exec of launchd
++	 * reached machine_task_process_signature, whose x18-entitlement probe
++	 * calls IOTaskHasEntitlement, which dereferences amfi unconditionally
++	 * -- "Kernel data abort", pc = IOTaskHasEntitlement+0x44, far=0x1b0
++	 * (the vtable slot load off the NULL interface). Without AMFI nothing
++	 * ever carries entitlements, so "no" is the only truthful answer. */
++	if (amfi == NULL) {
++		return false;
++	}
++
+ 	kern_return_t ret = amfi->OSEntitlements.queryEntitlementStringWithProc(
+ 		proc,
+ 		entitlement,
+@@ -1523,6 +1536,19 @@
+ 	}
+ 	proc_t proc = (proc_t)get_bsdtask_info(task);
+ 
++	/* nio: R287 skips the start of AMFI (bundle id
++	 * com.apple.driver.AppleMobileFileIntegrity is not covered by the
++	 * com.apple.security.* family skip), so the amfi interface stays NULL
++	 * for the whole boot. run-75 measured the consequence: exec of launchd
++	 * reached machine_task_process_signature, whose x18-entitlement probe
++	 * calls IOTaskHasEntitlement, which dereferences amfi unconditionally
++	 * -- "Kernel data abort", pc = IOTaskHasEntitlement+0x44, far=0x1b0
++	 * (the vtable slot load off the NULL interface). Without AMFI nothing
++	 * ever carries entitlements, so "no" is the only truthful answer. */
++	if (amfi == NULL) {
++		return false;
++	}
++
+ 	kern_return_t ret = amfi->OSEntitlements.queryEntitlementBooleanWithProc(
+ 		proc,
+ 		entitlement);
+@@ -1555,6 +1581,19 @@
+ 		return NULL;
+ 	}
+ 	proc_t proc = (proc_t)get_bsdtask_info(task);
++
++	/* nio: R287 skips the start of AMFI (bundle id
++	 * com.apple.driver.AppleMobileFileIntegrity is not covered by the
++	 * com.apple.security.* family skip), so the amfi interface stays NULL
++	 * for the whole boot. run-75 measured the consequence: exec of launchd
++	 * reached machine_task_process_signature, whose x18-entitlement probe
++	 * calls IOTaskHasEntitlement, which dereferences amfi unconditionally
++	 * -- "Kernel data abort", pc = IOTaskHasEntitlement+0x44, far=0x1b0
++	 * (the vtable slot load off the NULL interface). Without AMFI nothing
++	 * ever carries entitlements, so "no" is the only truthful answer. */
++	if (amfi == NULL) {
++		return NULL;
++	}
+ 
+ 	kern_return_t ret = amfi->OSEntitlements.copyEntitlementAsOSObjectWithProc(
+ 		proc,
+diff --git a/iokit/Kernel/IOUserClient.cpp b/iokit/Kernel/IOUserClient.cpp
+--- a/iokit/Kernel/IOUserClient.cpp
++++ b/iokit/Kernel/IOUserClient.cpp
+@@ -1503,6 +1503,19 @@
+ 		return NULL;
+ 	}
+ 	proc_t proc = (proc_t)get_bsdtask_info(task);
++
++	/* nio: R287 skips the start of AMFI (bundle id
++	 * com.apple.driver.AppleMobileFileIntegrity is not covered by the
++	 * com.apple.security.* family skip), so the amfi interface stays NULL
++	 * for the whole boot. run-75 measured the consequence: exec of launchd
++	 * reached machine_task_process_signature, whose x18-entitlement probe
++	 * calls IOTaskHasEntitlement, which dereferences amfi unconditionally
++	 * -- "Kernel data abort", pc = IOTaskHasEntitlement+0x44, far=0x1b0
++	 * (the vtable slot load off the NULL interface). Without AMFI nothing
++	 * ever carries entitlements, so "no" is the only truthful answer. */
++	if (amfi == NULL) {
++		return NULL;
++	}
+ 
+ 	kern_return_t ret = amfi->OSEntitlements.copyEntitlementAsOSObjectWithProc(
+ 		proc,
