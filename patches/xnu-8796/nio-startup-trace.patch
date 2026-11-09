@@ -8,14 +8,14 @@ address symbolizes with tools/kernel-symbols.py.
 
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..6861417 100644
+index bec97fb..0695c5a 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
 @@ -407,6 +407,11 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		}
  		startup_phase = cur->subsystem - 1;
  		kernel_startup_log(cur->subsystem);
-+		if (startup_phase >= STARTUP_SUB_KPRINTF) {
++		if (cur->subsystem >= 15) {
 +			printf("nio: S%u r%d n%u a%08x\n", cur->subsystem,
 +			    cur->rank, (unsigned)(cur - startup_entries),
 +			    (unsigned)(uintptr_t)cur->func);
