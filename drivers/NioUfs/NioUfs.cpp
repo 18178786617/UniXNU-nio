@@ -1180,13 +1180,33 @@ static bool hostBringUp (const char **why)
     hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
     uint32_t result = 0xffffffffU;
     unsigned tries = 0;
-    for (; tries < 5; ++tries) {
+    for (; tries < 4; ++tries) {
       if (tries) {
-        // A warm reboot can leave the UniPro layer in a state where plain
-        // DME_LINKSTARTUP retries fail forever (run-76's second boot:
-        // result=01 tries=4, UECDME=1, while the same image came up on the
-        // first boot). The ufshcd-standard cure: reset the DME, re-enable
-        // it, then try the link startup again.
+        // run-77 measured it: DME_RESET+DME_ENABLE alone does not clear a
+        // warm-reboot link failure (result=01 tries=6, UECDME=1, is=0x4 on
+        // every attempt). Go all the way to the ufshcd "host reset and
+        // restore" recovery: power-cycle the HCI (HCE 1->0->1, which also
+        // resets the DME), rebuild the request list (hostStartQueue, since
+        // the HCE cycle cleared UTRLBA/UTRLRSR), then DME_RESET/ENABLE and
+        // the link startup again.
+        hostWrite (0x34, 0);                    // HCE off
+        unsigned off = 0;
+        while ((read32 (gHost.hc, 0x34) & 1) && ++off < 100000) IODelay (10);
+        IODelay (50000);
+        hostWrite (0x34, 1);                    // HCE on
+        unsigned on = 0;
+        while (!(read32 (gHost.hc, 0x34) & 1) && ++on < 100000) IODelay (10);
+        if (!(read32 (gHost.hc, 0x34) & 1)) {
+          panic ("NATIVE_UFS uic: HCE did not come back\n"
+                 "hce=%08x hcs=%08x is=%08x",
+                 read32 (gHost.hc, 0x34), read32 (gHost.hc, 0x30),
+                 read32 (gHost.hc, 0x20));
+        }
+        if (!hostStartQueue (why)) {
+          panic ("NATIVE_UFS uic: queue rebuild after HCE failed (%s)\n"
+                 "hcs=%08x is=%08x", *why,
+                 read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
+        }
         IODelay (100000);                       // let UniPro settle
         hostWrite (0x90, 0x12);                 // DME_RESET
         unsigned rst = 0;
