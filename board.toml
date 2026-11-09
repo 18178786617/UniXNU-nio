@@ -78,7 +78,7 @@ kit = "nio"
 # build stops at that line, before a single file is compiled. Runs 29 and 30
 # ended exactly there: "component:NioUfs" had been added to the archives list
 # when the UFS path was turned on, and this list was not.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VerifiedRoot"]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs"]
 
 [kernel]
 defconfig = "nio_defconfig"
