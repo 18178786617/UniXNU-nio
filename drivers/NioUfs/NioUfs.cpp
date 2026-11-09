@@ -1163,6 +1163,38 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) return false;
+  /* nio R283: DME_LINKSTARTUP, the UFSHCI-mandated first UIC command after
+   * power-on, before any UTP traffic. Nothing in this bring-up has ever
+   * issued a UIC, and run-65..69 all hung at the first transfer doorbell --
+   * a UniPro link that was never (re)started is the remaining suspect.
+   * Sequence per EDK2 UfsExecUicCommands: clear stale IS.UCCS, wait
+   * HCS.UCRDY, ARG1..3, then the raw opcode in UICCMD; completion is
+   * IS.Bit10 (UCCS), the DME result lands in ARG2 low byte. */
+  {
+    uint32_t isReg = read32 (gHost.hc, 0x20);
+    if (isReg & 0x400) hostWrite (0x20, isReg & 0x400);
+    if (!hostWaitRegister (0x30, 0x8, 0x8)) {
+      panic ("NATIVE_UFS uic: UCRDY never set\n"
+             "hcs=%08x is=%08x", read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
+    }
+    hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
+    hostWrite (0x90, 0x16);                     // DME_LINKSTARTUP
+    unsigned spin = 0;
+    while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
+    uint32_t result = read32 (gHost.hc, 0x98);
+    if (spin >= 100000) {
+      panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
+             "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
+             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
+    }
+    hostWrite (0x20, 0x400);                    // ack UCCS
+    printf ("nio: UFS DME_LINKSTARTUP result=%08x\n", result);
+    if ((result & 0xff) != 0) {
+      *why = "DME_LINKSTARTUP result";
+      return false;
+    }
+  }
   gRootDiagnostic.stage = "NOP OUT";
   // NOP OUT proves the transport before touching the SCSI layer.
   if (hostNop () != kIOReturnSuccess) {
