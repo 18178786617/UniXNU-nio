@@ -7,10 +7,10 @@ kmem_scramble_ranges() itself.  One landmark per step it takes
 name the step that hangs instead of the function.
 
 ---
-diff --git a/a/osfmk/vm/vm_kern.c b/b/osfmk/vm/vm_kern.c
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
 index 2927d4b..0ed6090 100644
---- a/a/osfmk/vm/vm_kern.c
-+++ b/b/osfmk/vm/vm_kern.c
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
 @@ -3546,6 +3546,8 @@ kmem_scramble_ranges(void)
  {
  	vm_map_offset_t start = 0;
