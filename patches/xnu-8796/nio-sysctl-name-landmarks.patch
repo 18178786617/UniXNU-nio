@@ -1,0 +1,28 @@
+Landmark each early sysctl registration by name
+
+The startup trace's tail is all sysctl_register_oid_early(), so the hang is in
+one OID's registration.  Print the OID name before entering
+sysctl_register_oid_locked() and after it returns: the last name without a
+matching done is the OID whose registration hangs, and the pair also says
+whether it dies inside the geometry lock or after it.
+---
+diff --git a/bsd/kern/kern_newsysctl.c b/bsd/kern/kern_newsysctl.c
+index fbb0b28..41dfc40 100644
+--- a/bsd/kern/kern_newsysctl.c
++++ b/bsd/kern/kern_newsysctl.c
+@@ -298,6 +298,7 @@ sysctl_register_oid_early(struct sysctl_oid *oidp)
+ 	assert((oidp->oid_kind & CTLFLAG_OID2) &&
+ 	    (oidp->oid_kind & CTLFLAG_PERMANENT) &&
+ 	    oidp->oid_version == SYSCTL_OID_VERSION);
++	printf("nio: sysctl %s\n", oidp->oid_name);
+ 	assert(startup_phase < STARTUP_SUB_SYSCTL);
+ 
+ 	/*
+@@ -310,6 +311,7 @@ sysctl_register_oid_early(struct sysctl_oid *oidp)
+ 	}
+ 
+ 	sysctl_register_oid_locked(oidp, oidp);
++	printf("nio: sysctl %s done\n", oidp->oid_name);
+ }
+ 
+ void
