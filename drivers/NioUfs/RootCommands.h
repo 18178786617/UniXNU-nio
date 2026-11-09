@@ -6,8 +6,9 @@ struct HardwareTransferPort {
   uint32_t doorbell () { return read32 (gHost.hc, 0x58); }
   uint32_t interrupt () { return read32 (gHost.hc, 0x20); }
   uint32_t completedOcs () {
-    // Device mapping (kIOMapInhibitCache): DC maintenance traps on it
-    // (run-63 hung here). Volatile reads already bypass the caches.
+    // Cached mapping: the controller wrote the OCS over our dirty cache
+    // lines. Invalidate the UTRD line before reading (harness recipe).
+    cacheInvalidate (gHost.virt, 64);
     return *reinterpret_cast<volatile uint32_t *> (gHost.virt + 8) & 0xff;
   }
   bool expired () { return mach_absolute_time () >= deadline; }
@@ -80,8 +81,9 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
     prd[2] = 0;
     prd[3] = dataBytes - 1;
   }
-  // No cache clean before the doorbell: the region is uncached for
-  // the CPU, so every store above already reached memory.
+  // The region is cached again (run-280, harness recipe): clean it so the
+  // controller's DMA fetch sees every UTRD/UCD store above.
+  cacheClean (gHost.virt, kDmaBytes);
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
@@ -119,6 +121,9 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
     gHost.ready = false;
     return recordTransport (end == UfsTransferEnd::Timeout ? kIOReturnTimeout : kIOReturnIOError, *ocs);
   }
+  // The controller wrote the response UPIU (and possibly data) over our
+  // cache lines: clean+invalidate the whole region before reading results.
+  cacheCleanInvalidate (gHost.virt, kDmaBytes);
   gRootDiagnostic.response = loadBe32 (gHost.virt + kUcdOffset + kRspOffset);
   return recordTransport (*ocs == 0 ? kIOReturnSuccess : kIOReturnIOError, *ocs);
 }

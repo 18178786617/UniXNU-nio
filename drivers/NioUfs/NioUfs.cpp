@@ -1002,7 +1002,19 @@ static bool hostBringUp (const char **why)
     return false;
   }
   gHost.phys = fwList;
-  gHost.virt = reinterpret_cast<uint8_t *> (mapPhys (fwList, kDmaBytes, gHost.dmaMap));
+  // nio run-280: adoptAndRead is the only recipe ever validated on hardware,
+  // and it maps this region CACHED and maintains the cache around each DMA
+  // hand-off. R275's uncached mapPhys mapping changed exactly that: the CPU
+  // stores still reached memory (run-63), yet ringing the first doorbell
+  // hung the fabric with no panic screen, twice (run-65, run-66). Return to
+  // the proven environment: cached mapping, zero32, cacheClean before
+  // ringing, cacheCleanInvalidate before reading results.
+  IOMemoryDescriptor *dmaRegion = IOMemoryDescriptor::withPhysicalAddress (fwList, kDmaBytes, kIODirectionInOut);
+  if (dmaRegion) {
+    gHost.dmaMap = OSSharedPtr<IOMemoryMap> (dmaRegion->map (kIOMapAnywhere), OSNoRetain);
+    dmaRegion->release ();
+  }
+  gHost.virt = gHost.dmaMap ? reinterpret_cast<uint8_t *> (gHost.dmaMap->getVirtualAddress ()) : nullptr;
   gRootDiagnostic.dma = gHost.phys;
   gRootDiagnostic.contiguous = kDmaBytes;
   gHost.lock = IOLockAlloc ();
@@ -1010,15 +1022,8 @@ static bool hostBringUp (const char **why)
     *why = "firmware list map";
     return false;
   }
-  // mapPhys maps uncached (kIOMapInhibitCache), so no cache maintenance is
-  // needed or safe here. bzero's DC ZVA aborts on device memory (run-61:
-  // "Unaligned kernel data abort" at _bzero+0x44, dc zva), so clear the
-  // region with plain stores instead.
-  for (volatile uint32_t *word = reinterpret_cast<volatile uint32_t *> (gHost.virt);
-       word < reinterpret_cast<volatile uint32_t *> (gHost.virt + kDmaBytes); ++word) {
-    *word = 0;
-  }
-  __asm__ volatile ("dsb sy" ::: "memory");
+  zero32 (gHost.virt, kDmaBytes);
+  cacheClean (gHost.virt, kDmaBytes);
   uint32_t report[3] = { 0, 0, 0 };
   gRootDiagnostic.stage = "SMMU and request list";
   if (!hostStopQueue (why)) return false;
