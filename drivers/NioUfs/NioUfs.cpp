@@ -1163,6 +1163,7 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) return false;
+  printf ("nio: queue ready hcs=%08x\n", read32 (gHost.hc, 0x30));
   /* nio R283: DME_LINKSTARTUP, the UFSHCI-mandated first UIC command after
    * power-on, before any UTP traffic. Nothing in this bring-up has ever
    * issued a UIC, and run-65..69 all hung at the first transfer doorbell --
@@ -1211,6 +1212,8 @@ static bool hostBringUp (const char **why)
         {
           unsigned det = 0;
           while (!(read32 (gHost.hc, 0x30) & 0x2) && ++det < 200000) IODelay (10);
+          printf ("nio: hce cycle done, dpy back after %u00us (hcs=%08x)\n",
+                  det, read32 (gHost.hc, 0x30));
           if (!(read32 (gHost.hc, 0x30) & 0x2)) {
             panic ("NATIVE_UFS uic: device never re-detected after HCE\n"
                    "hcs=%08x is=%08x", read32 (gHost.hc, 0x30),
@@ -1235,18 +1238,22 @@ static bool hostBringUp (const char **why)
         IODelay (10000);
       }
       hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
-      hostWrite (0x90, 0x16);                   // DME_LINKSTARTUP
-      unsigned spin = 0;
-      while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
-      result = read32 (gHost.hc, 0x98);
-      if (spin >= 100000) {
-        panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
-               "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
-               read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
-               read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
-      }
-      hostWrite (0x20, 0x400);                  // ack UCCS
-      if ((result & 0xff) == 0) break;
+    printf ("nio: linkstartup begin hcs=%08x dpy=%u\n",
+            read32 (gHost.hc, 0x30),
+            !!(read32 (gHost.hc, 0x30) & 0x2));
+    hostWrite (0x90, 0x16);                   // DME_LINKSTARTUP
+    unsigned spin = 0;
+    while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
+    result = read32 (gHost.hc, 0x98);
+    if (spin >= 100000) {
+      panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
+             "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
+             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
+    }
+    hostWrite (0x20, 0x400);                  // ack UCCS
+    if ((result & 0xff) == 0) break;
+    printf ("nio: linkstartup retry %u, full recovery\n", tries + 1);
     }
     printf ("nio: UFS DME_LINKSTARTUP result=%08x tries=%u\n", result, tries + 1);
     if ((result & 0xff) != 0) {
@@ -1279,6 +1286,7 @@ static bool hostBringUp (const char **why)
     return false;
   }
   gRootDiagnostic.power = power;
+  printf ("nio: wake begin power=%08x\n", power);
   if ((power & 0xff) != 0x11) {
     gRootDiagnostic.stage = "device wake";
     // START STOP UNIT, power condition ACTIVE, to the UFS Device well-known LU (as Linux resumes).
@@ -1291,6 +1299,7 @@ static bool hostBringUp (const char **why)
     }
     IOSleep (50);
   }
+  printf ("nio: wake done, polling LUN ready\n");
   gRootDiagnostic.stage = "LUN ready";
   for (unsigned attempt = 0; attempt < 20; attempt++) {
     uint8_t tur[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2317,6 +2326,7 @@ static void mediaReportThread (void *, wait_result_t)
 
 bool NioUfs::start (IOService *provider)
 {
+  printf ("nio: ufs driver start enter\n");
   unsigned probe = 0, rootMode = 0;
   PE_parse_boot_argn ("native-ufs-probe", &probe, sizeof (probe));
   PE_parse_boot_argn ("native-ufs-root", &rootMode, sizeof (rootMode));
@@ -2515,6 +2525,7 @@ static bool windowVolumeIdentity (uint64_t absolute, uint64_t windowBytes,
 bool NioUfs::startRoot (IOService *provider)
 {
   const char *why = "";
+  printf ("nio: ufs startRoot enter\n");
   native_ufs_root_step = 1;
   if (!hostBringUp (&why)) {
     rootDiagnosticFailure (why);
