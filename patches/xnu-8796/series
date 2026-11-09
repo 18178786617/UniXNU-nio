@@ -1,4 +1,4 @@
-﻿apple-only-cpu-tunables.patch
+apple-only-cpu-tunables.patch
 architectural-timer-entry.patch
 armvirt-platform-personality.patch
 cxx-flag-dependencies.patch
