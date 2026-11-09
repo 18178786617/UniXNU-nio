@@ -1,0 +1,25 @@
+Trace every startup function
+
+run-86 printed all eight kalloc_init landmarks, so both of the
+STARTUP_RANK_THIRD functions complete and the stall sits in a later
+startup function.  Print an enter/exit pair around each call: the last
+enter without a matching exit names the function that hangs, and its
+address symbolizes with tools/kernel-symbols.py.
+
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index bec97fb..db1ac0d 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -407,7 +407,11 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 		}
+ 		startup_phase = cur->subsystem - 1;
+ 		kernel_startup_log(cur->subsystem);
++		printf("nio: startup %d/%d %p enter\n", cur->subsystem,
++		    cur->rank, cur->func);
+ 		cur->func(cur->arg);
++		printf("nio: startup %d/%d %p exit\n", cur->subsystem,
++		    cur->rank, cur->func);
+ 		startup_entry_cur = ++cur;
+ 	}
+ 	kernel_startup_log(upto);
