@@ -1180,8 +1180,26 @@ static bool hostBringUp (const char **why)
     hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
     uint32_t result = 0xffffffffU;
     unsigned tries = 0;
-    for (; tries < 3; ++tries) {
-      if (tries) IODelay (50000);               // let UniPro settle between attempts
+    for (; tries < 5; ++tries) {
+      if (tries) {
+        // A warm reboot can leave the UniPro layer in a state where plain
+        // DME_LINKSTARTUP retries fail forever (run-76's second boot:
+        // result=01 tries=4, UECDME=1, while the same image came up on the
+        // first boot). The ufshcd-standard cure: reset the DME, re-enable
+        // it, then try the link startup again.
+        IODelay (100000);                       // let UniPro settle
+        hostWrite (0x90, 0x12);                 // DME_RESET
+        unsigned rst = 0;
+        while (!(read32 (gHost.hc, 0x20) & 0x400) && ++rst < 100000) IODelay (10);
+        hostWrite (0x20, 0x400);                // ack UCCS
+        IODelay (10000);
+        hostWrite (0x90, 0x13);                 // DME_ENABLE
+        unsigned en = 0;
+        while (!(read32 (gHost.hc, 0x20) & 0x400) && ++en < 100000) IODelay (10);
+        hostWrite (0x20, 0x400);                // ack UCCS
+        IODelay (10000);
+      }
+      hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
       hostWrite (0x90, 0x16);                   // DME_LINKSTARTUP
       unsigned spin = 0;
       while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
