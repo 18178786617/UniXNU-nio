@@ -77,4 +77,4 @@ nio-boot-args-fallback.patch
 nio-kmem-range-landmarks.patch
 nio-kmem-scramble-landmarks.patch
 nio-kalloc-init-landmarks.patch
-nio-sysctl-name-landmarks.patch
+nio-sysctl-walk-guard.patch

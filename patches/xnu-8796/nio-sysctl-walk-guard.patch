@@ -1,0 +1,32 @@
+Catch the sysctl walk looping forever
+
+sysctl_register_oid_locked() takes no lock on the early path: it only walks the
+parent list with SLIST_FOREACH_PREVPTR.  If that list is corrupt the walk never
+ends, which is exactly console
+---
+diff --git a/bsd/kern/kern_newsysctl.c b/bsd/kern/kern_newsysctl.c
+index fbb0b28..6567003 100644
+--- a/bsd/kern/kern_newsysctl.c
++++ b/bsd/kern/kern_newsysctl.c
+@@ -164,6 +164,8 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 	struct sysctl_oid *p, **prevp;
+ 
+ 	p = SLIST_FIRST(parent);
++	printf("nio: reg %p parent %p first %p\n", (void *)new_oidp,
++	    (void *)parent, (void *)p);
+ 	if (p && p->oid_number == OID_MUTABLE_ANCHOR) {
+ 		parent_rw = p->oid_arg1;
+ 	}
+@@ -177,7 +179,12 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 		 * OID_AUTO_START to leave space for pre-assigned oid numbers.
+ 		 */
+ 
++		int nio_walk = 0;
+ 		SLIST_FOREACH_PREVPTR(p, prevp, parent, oid_link) {
++			if (++nio_walk > 100000) {
++				panic("nio: sysctl list cycle at %p (n=%d)",
++				    (void *)p, n);
++			}
+ 			if (p->oid_number >= n) {
+ 				n = p->oid_number + 1;
+ 			}
