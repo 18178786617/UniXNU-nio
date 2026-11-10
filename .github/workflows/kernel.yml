@@ -154,7 +154,7 @@ jobs:
     # machine that cannot reach the arm64 one, and the Xcode is pinned there
     # too: "auto" picks whatever the image carries, and that is how this build
     # ended up on a clang that its own tree does not compile with.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
