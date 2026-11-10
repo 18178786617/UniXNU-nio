@@ -83,3 +83,4 @@ nio-compressor-landmarks.patch
 nio-heartbeat.patch
 nio-skip-zone-ro-gate.patch
 nio-stack-rw.patch
+nio-badstack-print.patch
