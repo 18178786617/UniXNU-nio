@@ -1,35 +1,31 @@
-Protect the boot stack window read/write
+Protect the boot stack window, bootstrap-safe
 
-The boot thread's stack is the one the loader supplied and nothing registers it,
-so the stack check finds kstk 0 / top 0, and the first push faults with a
-permission error.  Protecting the whole low kernel window had no effect, so
-protect the window derived from the current sp instead, at the end of pmap_init.
+The previous version used __builtin_frame_address and printf, which the
+bootstrap link does not accept.  Take the address of a volatile local and use
+plain arithmetic, and drop the print, so the minimal link stays intact.
 ---
 diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
-index bbd648e..57f046e 100644
+index bbd648e..9d8dcf8 100644
 --- a/osfmk/arm/pmap/pmap.c
 +++ b/osfmk/arm/pmap/pmap.c
-@@ -2726,6 +2726,24 @@ pmap_init(
+@@ -2726,6 +2726,21 @@ pmap_init(
  	if ((uint32_t)hard_maxproc > pmap_max_asids) {
  		hard_maxproc = pmap_max_asids;
  	}
 +
 +	/*
-+	 * nio: the boot thread's stack is the one the loader handed us, and
-+	 * nothing registers it (thread->kernel_stack stays 0).  Its first
-+	 * push faults with a permission error, so the page it lives on is
-+	 * read-only by then.  Protect the window around the current sp.
++	 * nio: the boot thread runs on the loader's stack, nothing registers
++	 * it, and its first push faults with a permission error.  Protect the
++	 * window around the live frame; keep this to plain arithmetic so the
++	 * bootstrap link stays happy.
 +	 */
 +	{
-+		vm_offset_t nio_sp = (vm_offset_t)__builtin_frame_address(0);
-+		vm_offset_t nio_page = trunc_page(nio_sp);
-+		vm_offset_t nio_lo = nio_page - 0x40000;
-+		vm_offset_t nio_hi = nio_page + 0x4000;
-+		pmap_protect(pmap_kernel(), nio_lo, nio_hi,
++		volatile uint64_t nio_marker = 0;
++		uint64_t nio_sp = (uint64_t)(uintptr_t)&nio_marker;
++		uint64_t nio_page = nio_sp & ~(uint64_t)0x3fffull;
++		pmap_protect(pmap_kernel(), (vm_offset_t)(nio_page - 0x40000ull),
++		    (vm_offset_t)(nio_page + 0x4000ull),
 +		    VM_PROT_READ | VM_PROT_WRITE);
-+		printf("nio: boot stack %lx prot %lx..%lx rw\n",
-+		    (unsigned long)nio_sp, (unsigned long)nio_lo,
-+		    (unsigned long)nio_hi);
 +	}
  }
  
