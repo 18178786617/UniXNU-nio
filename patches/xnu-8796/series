@@ -85,3 +85,4 @@ nio-skip-zone-ro-gate.patch
 nio-stack-rw.patch
 nio-badstack-print.patch
 nio-kernel-window-rw.patch
+nio-register-boot-stack.patch

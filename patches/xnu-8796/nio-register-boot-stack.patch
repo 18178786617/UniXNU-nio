@@ -1,0 +1,33 @@
+Register the boot thread's stack window
+
+Nothing registers the loader-supplied boot stack, so kstackptr stays 0 and every
+fault is reported as Invalid
+---
+diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
+index ce42b1a..6d7bb47 100644
+--- a/osfmk/kern/stack.c
++++ b/osfmk/kern/stack.c
+@@ -127,6 +127,23 @@ stack_init(void)
+ 
+ 	stack_addr_mask = roundup_pow2(kernel_stack_size) - 1;
+ 	kernel_stack_mask = ~stack_addr_mask;
++
++	/*
++	 * nio: the boot thread runs on the stack the loader supplied and
++	 * nothing registers it, so thread->machine.kstackptr stays 0 and
++	 * sleh_invalid_stack rejects every fault as corruption.  Register the
++	 * window the boot thread is actually using; no stack switch here.
++	 */
++	{
++		thread_t nio_th = current_thread();
++		volatile uint64_t nio_marker = 0;
++		uint64_t nio_sp = (uint64_t)(uintptr_t)&nio_marker;
++		uint64_t nio_top = (nio_sp & ~(uint64_t)0x3fffull) + 0x4000ull;
++		if (nio_th != THREAD_NULL && nio_th->machine.kstackptr == 0) {
++			nio_th->machine.kstackptr = (vm_offset_t)nio_top;
++			nio_th->kernel_stack = (vm_offset_t)(nio_top - kernel_stack_size);
++		}
++	}
+ }
+ STARTUP(TUNABLES, STARTUP_RANK_MIDDLE, stack_init);
+ 
