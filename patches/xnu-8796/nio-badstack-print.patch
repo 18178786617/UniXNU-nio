@@ -1,21 +1,20 @@
-Print the stack bounds when the stack check fails
+Put the stack numbers in the panic message
 
-The check compares sp against round_page(kstackptr) - KERNEL_STACK_SIZE.  Print
-sp, the thread's kstackptr, the computed bottom and KERNEL_STACK_SIZE so it is
-clear whether the recorded stack top is wrong or the size constant does not
-match a 4 KiB page port.
+The console draws the panic block over earlier lines, so a separate printf was
+unreadable.  Carry sp, the recorded stack top, the computed bottom,
+KERNEL_STACK_SIZE, esr and far in the panic string itself, which renders clearly.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..c2ea058 100644
+index 2cc442e..3797293 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -2082,6 +2082,9 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+@@ -2087,6 +2087,8 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+ 		panic_with_thread_kernel_state("Invalid kernel stack pointer (probable overflow).", &context->ss);
+ 	}
  
- 	sp = get_saved_state_sp(&context->ss);
- 	kernel_stack_bottom = round_page(thread->machine.kstackptr) - KERNEL_STACK_SIZE;
-+	printf("nio: badstack sp %p kstackptr %p bottom %p size %#x esr %#x far %#x\n",
+-	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
++	panic_with_thread_kernel_state("BadStack sp %p top %p bot %p sz %#x esr %#x far %#x",
 +	    (void *)sp, (void *)thread->machine.kstackptr,
 +	    (void *)kernel_stack_bottom, KERNEL_STACK_SIZE, esr, far);
+ }
  
- 	if ((sp < kernel_stack_bottom) && (sp >= (kernel_stack_bottom - PAGE_SIZE))) {
- 		panic_with_thread_kernel_state("Invalid kernel stack pointer (probable overflow).", &context->ss);
