@@ -1,14 +1,12 @@
-Start a heartbeat thread so a silent screen is distinguishable
+Start the heartbeat as soon as kalloc is up
 
-The stop point moves between boots with the same patches (kalloc, then sysctl,
-then vm_compressor, then the claim table), which reads like memory corruption
-rather than one missing feature.  A thread that prints every 100 ms tells the
-two cases apart: heartbeats continuing mean the kernel is alive and only the
-current path is quiet; heartbeats stopping mean it really died, and the last
-number dates the death.
+run-100 printed no heartbeats at all, so the gate on STARTUP_SUB_EARLY_BOOT was
+never reached: the boot dies between ZALLOC and EARLY_BOOT, right after the kmem
+range dump.  Start the thread from ZALLOC instead, and bring the startup trace
+back so the dying entry is named.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..5c269ca 100644
+index bec97fb..527d654 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
 @@ -391,11 +391,33 @@ event_register_handler(struct event_hdr *hdr)
@@ -32,7 +30,7 @@ index bec97fb..5c269ca 100644
  	struct startup_entry *cur = startup_entry_cur;
 +	static bool nio_hb_started = false;
 +
-+	if (!nio_hb_started && startup_phase >= STARTUP_SUB_EARLY_BOOT) {
++	if (!nio_hb_started && startup_phase >= STARTUP_SUB_ZALLOC) {
 +		thread_t th = THREAD_NULL;
 +		nio_hb_started = true;
 +		if (kernel_thread_start(nio_heartbeat_thread, NULL, &th) == KERN_SUCCESS) {
