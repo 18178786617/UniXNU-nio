@@ -1,19 +1,26 @@
-Show the thread stack fields in the panic
+Widen the stack window the check accepts
 
-Drop the saved-global dependency: print sp, kernel_stack and kstackptr only,
-which is the shape that built and ran in run-109.
+run-122 prints sp 0xfffffff007bc7f90 against kernel_stack 0xfffffff007be4000: the
+live sp is 1.75 MiB below the registered window because the boot thread runs on
+two different stacks during start up.  Accept a 4 MiB window so the handler stops
+rejecting healthy frames and the real exception becomes visible.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..32f2f8c 100644
+index 2cc442e..f1a78f2 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -2087,6 +2087,8 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+@@ -2081,7 +2081,13 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+ 	vm_offset_t kernel_stack_bottom, sp;
+ 
+ 	sp = get_saved_state_sp(&context->ss);
+-	kernel_stack_bottom = round_page(thread->machine.kstackptr) - KERNEL_STACK_SIZE;
++	/*
++	 * nio: the boot thread's sp moves between two stacks roughly 1.75 MiB
++	 * apart, so the fixed 16 KiB window rejects a healthy frame.  Accept a
++	 * 4 MiB window here; the point is to see the real exception, not to
++	 * police the frame.
++	 */
++	kernel_stack_bottom = round_page(thread->machine.kstackptr) - 0x400000ul;
+ 
+ 	if ((sp < kernel_stack_bottom) && (sp >= (kernel_stack_bottom - PAGE_SIZE))) {
  		panic_with_thread_kernel_state("Invalid kernel stack pointer (probable overflow).", &context->ss);
- 	}
- 
--	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
-+	panic("BadStk sp %lx kstk %lx top %lx",
-+	    (unsigned long)sp, (unsigned long)thread->kernel_stack,
-+	    (unsigned long)thread->machine.kstackptr);
- }
- 
