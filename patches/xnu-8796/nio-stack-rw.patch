@@ -1,0 +1,32 @@
+Force kernel stack pages read/write
+
+run-102/103 panic with the same signature: a permission fault (esr 0x9600004f)
+at far = sp - 0x20, i.e. the first push, and the exception handler then rejects
+sp as not
+---
+diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
+index ce42b1a..374584a 100644
+--- a/osfmk/kern/stack.c
++++ b/osfmk/kern/stack.c
+@@ -42,6 +42,7 @@
+ #include <kern/thread.h>
+ #include <kern/zalloc.h>
+ #include <kern/kalloc.h>
++#include <vm/pmap.h>
+ #include <kern/ledger.h>
+ 
+ #include <vm/vm_map.h>
+@@ -179,6 +180,13 @@ stack_alloc_internal(void)
+ 		 */
+ 
+ 		stack += PAGE_SIZE;
++		/*
++		 * nio: the port faults with a permission error (esr 0x9600004f)
++		 * 0x20 bytes below sp, i.e. on the first push, so the stack pages
++		 * came back read-only.  Force read/write on the stack body.
++		 */
++		pmap_protect(pmap_kernel(), stack, stack + kernel_stack_size,
++		    VM_PROT_READ | VM_PROT_WRITE);
+ 	}
+ 	return stack;
+ }
