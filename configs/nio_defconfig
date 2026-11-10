@@ -104,7 +104,7 @@ CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=n
 # SM8250 implements PAN; copyin/copyout must manage it on exception entry.
 # nio: PAN turns the boot-stack write into a permission fault (esr 0x9600004f).
 # Test with it off; the comment above still applies once the stack is sorted.
-CONFIG_XNU_NATIVE_PAN=n
+CONFIG_XNU_NATIVE_PAN=y
 
 # The kernel's screen channel is the injected console blob, not boot_progress.
 #
