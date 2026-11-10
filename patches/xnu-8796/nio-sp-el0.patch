@@ -1,0 +1,30 @@
+Point SP_EL0 at the running stack
+
+locore.s validates an exception stack by comparing SP_EL0 with TH_KSTACKPTR and
+the interrupt stack; when SP_EL0 is zero, which it is during early boot, every
+kernel data abort is turned into Invalid
+---
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+index e76e7e7..7f35a6f 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -475,6 +475,19 @@ machine_startup(__unused boot_args * args)
+ #endif /* defined(HAS_IPI) && (DEVELOPMENT || DEBUG)*/
+ 
+ 
++	/*
++	 * nio: locore.s validates an exception's stack by comparing SP_EL0
++	 * against TH_KSTACKPTR and the interrupt stack.  During early boot
++	 * SP_EL0 is still zero, so every kernel data abort is reported as
++	 * "Invalid kernel stack pointer" before it is even decoded.  Point
++	 * SP_EL0 at the stack we are actually running on.
++	 */
++	{
++		uint64_t nio_sp0;
++		__asm__ volatile("mov %0, sp" : "=r"(nio_sp0));
++		__asm__ volatile("msr SP_EL0, %0\n\tisb" :: "r"(nio_sp0));
++	}
++
+ 	machine_conf();
+ 
+ 
