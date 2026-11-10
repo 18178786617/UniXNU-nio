@@ -1,32 +1,37 @@
-Register the boot thread's stack window
+Register and protect the boot stack once the pmap is live
 
-Nothing registers the loader-supplied boot stack, so kstackptr stays 0 and every
-fault is reported as Invalid
+Protecting the window before arm_vm_init installs the real tables had no effect.
+Do it in stack_init (STARTUP TUNABLES), by which point pmap_kernel() is the map
+the faulting push will actually use: register the thread's window and mark the
+megabyte around it read/write.
 ---
 diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
-index ce42b1a..6d7bb47 100644
+index ce42b1a..cba37f8 100644
 --- a/osfmk/kern/stack.c
 +++ b/osfmk/kern/stack.c
-@@ -127,6 +127,23 @@ stack_init(void)
+@@ -127,6 +127,26 @@ stack_init(void)
  
  	stack_addr_mask = roundup_pow2(kernel_stack_size) - 1;
  	kernel_stack_mask = ~stack_addr_mask;
 +
 +	/*
-+	 * nio: the boot thread runs on the stack the loader supplied and
-+	 * nothing registers it, so thread->machine.kstackptr stays 0 and
-+	 * sleh_invalid_stack rejects every fault as corruption.  Register the
-+	 * window the boot thread is actually using; no stack switch here.
++	 * nio: the boot stack is the loader's, at the top of the kernel image,
++	 * and nothing registers it.  Register the window the boot thread is
++	 * running on and make it writable now that the real pmap is live.
 +	 */
 +	{
 +		thread_t nio_th = current_thread();
 +		volatile uint64_t nio_marker = 0;
 +		uint64_t nio_sp = (uint64_t)(uintptr_t)&nio_marker;
-+		uint64_t nio_top = (nio_sp & ~(uint64_t)0x3fffull) + 0x4000ull;
++		uint64_t nio_page = nio_sp & ~(uint64_t)0x3fffull;
++		uint64_t nio_top = nio_page + 0x4000ull;
 +		if (nio_th != THREAD_NULL && nio_th->machine.kstackptr == 0) {
 +			nio_th->machine.kstackptr = (vm_offset_t)nio_top;
 +			nio_th->kernel_stack = (vm_offset_t)(nio_top - kernel_stack_size);
 +		}
++		pmap_protect(pmap_kernel(), (vm_offset_t)(nio_page - 0x100000ull),
++		    (vm_offset_t)(nio_top + 0x4000ull),
++		    VM_PROT_READ | VM_PROT_WRITE);
 +	}
  }
  STARTUP(TUNABLES, STARTUP_RANK_MIDDLE, stack_init);
