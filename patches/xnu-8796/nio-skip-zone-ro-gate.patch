@@ -1,0 +1,31 @@
+Skip the read-only zone gate
+
+run-101 shows the real failure, and it is a panic, not a hang:
+
+    zone_require_ro failed: address not in a ro zone (addr: 0x0) @zalloc.c
+
+The gate fires while the port is still deciding which pages are read-only,
+right after the kmem ranges are laid out.  It is the same class of problem the
+__DATA_CONST patches already solve for data, so skip it unless
+nio_zone_ro_check is passed, and keep the check available for later.
+---
+diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
+index be8be8a..8de4de7 100644
+--- a/osfmk/kern/zalloc.c
++++ b/osfmk/kern/zalloc.c
+@@ -7009,6 +7009,15 @@ __attribute__((always_inline))
+ void
+ zone_require_ro(zone_id_t zid, vm_size_t elem_size __unused, void *addr)
+ {
++	/*
++	 * nio: this board panics here with "address not in a ro zone
++	 * (addr: 0x0)" right after the kmem ranges are laid out, i.e. while
++	 * the port is still establishing which data is read-only.  Skip the
++	 * gate unless nio_zone_ro_check is passed.
++	 */
++	if (!PE_parse_boot_argn("nio_zone_ro_check", NULL, 0)) {
++		return;
++	}
+ #if ZSECURITY_CONFIG(READ_ONLY)
+ 	struct zone_size_params p = zone_ro_size_params[zid];
+ 	vm_offset_t elem = (vm_offset_t)addr;
