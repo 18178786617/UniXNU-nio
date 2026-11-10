@@ -1,21 +1,22 @@
-Report the stack numbers with plain panic
+Identify the thread whose stack is unregistered
 
-panic_with_thread_kernel_state does not take the formatting arguments here, so
-the bootstrap link failed.  Use panic(), which is variadic, and carry sp, the
-recorded top, the computed bottom, KERNEL_STACK_SIZE, esr and far in the string
-so the screenshot is readable despite the console overlay.
+The previous round printed top 0x0: current_thread()->machine.kstackptr is zero,
+so the thread was never attached.  Print the thread pointer, its kernel_stack
+and kernel_stack_size in the same message, with plain %lx formats.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..2e77072 100644
+index 2cc442e..a9d872d 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -2087,6 +2087,8 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+@@ -2087,6 +2087,10 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
  		panic_with_thread_kernel_state("Invalid kernel stack pointer (probable overflow).", &context->ss);
  	}
  
 -	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
-+	panic("BadStack sp %p top %p bot %p sz %#x esr %#x far %#x",
-+	    (void *)sp, (void *)thread->machine.kstackptr,
-+	    (void *)kernel_stack_bottom, KERNEL_STACK_SIZE, esr, far);
++	panic("BadStack sp %lx th %lx kstk %lx ksz %lx top %lx",
++	    (unsigned long)sp, (unsigned long)thread,
++	    (unsigned long)thread->kernel_stack,
++	    (unsigned long)kernel_stack_size,
++	    (unsigned long)thread->machine.kstackptr);
  }
  
