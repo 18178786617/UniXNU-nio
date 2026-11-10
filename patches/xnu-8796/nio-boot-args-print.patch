@@ -1,23 +1,29 @@
-Save topOfKernelData in a global
+Save topOfKernelData in a file scope global
 
-The panic path needs the loader's topOfKernelData but PE_state is awkward in
-that translation unit, so save it once at machine_startup.
+The first attempt declared it inside machine_startup, so sleh.c's extern never
+resolved.  Declare it at file scope and assign at startup.
 ---
 diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
-index e76e7e7..3355934 100644
+index e76e7e7..bf2a8e1 100644
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
-@@ -475,8 +475,13 @@ machine_startup(__unused boot_args * args)
+@@ -465,6 +465,8 @@ user_timebase_type(void)
+ #endif
+ }
+ 
++uint64_t nio_kdata_saved = 0;
++
+ void
+ machine_startup(__unused boot_args * args)
+ {
+@@ -475,6 +477,10 @@ machine_startup(__unused boot_args * args)
  #endif /* defined(HAS_IPI) && (DEVELOPMENT || DEBUG)*/
  
- 
-+	uint64_t nio_kdata_saved = 0;
-+
- 	machine_conf();
  
 +	if (PE_state.bootArgs != NULL) {
 +		nio_kdata_saved = PE_state.bootArgs->topOfKernelData;
 +	}
++
+ 	machine_conf();
  
- 	/*
- 	 * Kick off the kernel bootstrap.
+ 
