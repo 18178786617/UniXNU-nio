@@ -1,11 +1,12 @@
-Put the stack numbers in the panic message
+Report the stack numbers with plain panic
 
-The console draws the panic block over earlier lines, so a separate printf was
-unreadable.  Carry sp, the recorded stack top, the computed bottom,
-KERNEL_STACK_SIZE, esr and far in the panic string itself, which renders clearly.
+panic_with_thread_kernel_state does not take the formatting arguments here, so
+the bootstrap link failed.  Use panic(), which is variadic, and carry sp, the
+recorded top, the computed bottom, KERNEL_STACK_SIZE, esr and far in the string
+so the screenshot is readable despite the console overlay.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..3797293 100644
+index 2cc442e..2e77072 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
 @@ -2087,6 +2087,8 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
@@ -13,7 +14,7 @@ index 2cc442e..3797293 100644
  	}
  
 -	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
-+	panic_with_thread_kernel_state("BadStack sp %p top %p bot %p sz %#x esr %#x far %#x",
++	panic("BadStack sp %p top %p bot %p sz %#x esr %#x far %#x",
 +	    (void *)sp, (void *)thread->machine.kstackptr,
 +	    (void *)kernel_stack_bottom, KERNEL_STACK_SIZE, esr, far);
  }
