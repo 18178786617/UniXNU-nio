@@ -1,0 +1,66 @@
+Do not depend on pinst for SPSel and SCTLR
+
+run-129 stops with "Undefined kernel instruction: instr=d5184108", which is
+the msr SPSel that pinst_spsel_1 is supposed to have written in place.  The
+pinst sites are never patched on this port, so compile the #else branches:
+the direct msr SPSel, #1 and msr SCTLR_EL1, x0 encodings.
+
+---
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index 505533a..41dddaf 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -43,7 +43,7 @@
+ 
+ 
+ .macro MSR_VBAR_EL1_X0
+-#if defined(KERNEL_INTEGRITY_KTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ 	mov	x1, lr
+ 	bl		EXT(pinst_set_vbar)
+ 	mov	lr, x1
+@@ -269,7 +269,7 @@ LEXT(LowExceptionVectorBase)
+ 	b		.
+ 	.align 12, 0
+ 
+-#if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ /*
+  * Provide a global symbol so that we can narrow the V=P mapping to cover
+  * this page during arm_vm_init.
+@@ -295,7 +295,7 @@ LEXT(start_cpu)
+ 
+ 	.align 2
+ start_cpu:
+-#if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ 	// This is done right away in reset vector for pre-KTRR devices
+ 	// Set low reset vector now that we are in the KTRR-free zone
+ 	adrp	x0, EXT(LowExceptionVectorBase)@page
+@@ -327,7 +327,7 @@ start_cpu:
+ 
+ 
+ 	// Set SP_EL1 to exception stack
+-#if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ 	mov		x1, lr
+ 	bl		EXT(pinst_spsel_1)
+ 	mov		lr, x1
+@@ -489,7 +489,7 @@ LEXT(start_first_cpu)
+ 	sub		x0, x0, x23
+ 
+ 	// Set SP_EL1 to exception stack
+-#if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ 	bl		EXT(pinst_spsel_1)
+ #else
+ 	msr		SPSel, #1
+@@ -649,7 +649,7 @@ common_start:
+ 	 *	TTBR0 - V=P table @ top of kernel
+ 	 *	TTBR1 - KVA table @ top of kernel + 1 page
+ 	 */
+-#if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
++#if 0 /* nio: pinst sites are never patched on this port */
+ 	/* Note that for KTRR configurations, the V=P map will be modified by
+ 	 * arm_vm_init.c.
+ 	 */
