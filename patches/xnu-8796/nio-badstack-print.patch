@@ -1,11 +1,11 @@
-Identify the thread whose stack is unregistered
+Carry topOfKernelData in the stack panic
 
-The previous round printed top 0x0: current_thread()->machine.kstackptr is zero,
-so the thread was never attached.  Print the thread pointer, its kernel_stack
-and kernel_stack_size in the same message, with plain %lx formats.
+The boot_args print scrolled off the 40 line console before the panic.  Put sp,
+kernel_stack, kstackptr, topOfKernelData and virtBase in the panic string, which
+is the last thing on screen.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..a9d872d 100644
+index 2cc442e..ca31243 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
 @@ -2087,6 +2087,10 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
@@ -13,10 +13,10 @@ index 2cc442e..a9d872d 100644
  	}
  
 -	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
-+	panic("BadStack sp %lx th %lx kstk %lx ksz %lx top %lx",
-+	    (unsigned long)sp, (unsigned long)thread,
-+	    (unsigned long)thread->kernel_stack,
-+	    (unsigned long)kernel_stack_size,
-+	    (unsigned long)thread->machine.kstackptr);
++	panic("BadStk sp %lx kstk %lx top %lx kdata %lx virt %lx",
++	    (unsigned long)sp, (unsigned long)thread->kernel_stack,
++	    (unsigned long)thread->machine.kstackptr,
++	    (unsigned long)(PE_state.bootArgs ? PE_state.bootArgs->topOfKernelData : 0),
++	    (unsigned long)(PE_state.bootArgs ? PE_state.bootArgs->virtBase : 0));
  }
  
