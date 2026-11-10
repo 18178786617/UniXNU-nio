@@ -1,0 +1,30 @@
+Print the kernel stack geometry
+
+run-102 panics with Invalid
+---
+diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
+index ce42b1a..ee9c5ae 100644
+--- a/osfmk/kern/stack.c
++++ b/osfmk/kern/stack.c
+@@ -118,6 +118,9 @@ stack_init(void)
+ 	    &kernel_stack_pages,
+ 	    sizeof(kernel_stack_pages))) {
+ 		kernel_stack_size = kernel_stack_pages * PAGE_SIZE;
++	printf("nio: stack init pages %u size %#llx mask %#llx\n",
++	    kernel_stack_pages, (unsigned long long)kernel_stack_size,
++	    (unsigned long long)stack_addr_mask);
+ 	}
+ 
+ 	if (kernel_stack_size < round_page(kernel_stack_size)) {
+@@ -179,6 +182,11 @@ stack_alloc_internal(void)
+ 		 */
+ 
+ 		stack += PAGE_SIZE;
++		if (stack_total <= 12) {
++			printf("nio: stack new %p size %#llx total %u\n",
++			    (void *)stack, (unsigned long long)kernel_stack_size,
++			    stack_total);
++		}
+ 	}
+ 	return stack;
+ }

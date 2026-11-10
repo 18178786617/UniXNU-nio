@@ -82,3 +82,4 @@ nio-sysctl-walk-guard.patch
 nio-compressor-landmarks.patch
 nio-heartbeat.patch
 nio-skip-zone-ro-gate.patch
+nio-stack-geometry.patch
