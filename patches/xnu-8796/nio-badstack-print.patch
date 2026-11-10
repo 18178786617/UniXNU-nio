@@ -1,22 +1,29 @@
-Carry topOfKernelData in the stack panic
+Print the loader's data end in the stack panic
 
-The boot_args print scrolled off the 40 line console before the panic.  Put sp,
-kernel_stack, kstackptr, topOfKernelData and virtBase in the panic string, which
-is the last thing on screen.
+Read the value machine_startup saved, so the panic shows sp, kernel_stack,
+kstackptr and topOfKernelData.
 ---
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 2cc442e..ca31243 100644
+index 2cc442e..d45c9b3 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -2087,6 +2087,10 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
+@@ -2074,6 +2074,8 @@ sleh_interrupt_handler_epilogue(void)
+ 	KDBG_RELEASE(MACHDBG_CODE(DBG_MACH_EXCP_INTR, 0) | DBG_FUNC_END);
+ }
+ 
++extern uint64_t nio_kdata_saved;
++
+ void
+ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t far __unused)
+ {
+@@ -2087,6 +2089,9 @@ sleh_invalid_stack(arm_context_t *context, uint32_t esr __unused, vm_offset_t fa
  		panic_with_thread_kernel_state("Invalid kernel stack pointer (probable overflow).", &context->ss);
  	}
  
 -	panic_with_thread_kernel_state("Invalid kernel stack pointer (probable corruption).", &context->ss);
-+	panic("BadStk sp %lx kstk %lx top %lx kdata %lx virt %lx",
++	panic("BadStk sp %lx kstk %lx top %lx kdata %lx",
 +	    (unsigned long)sp, (unsigned long)thread->kernel_stack,
 +	    (unsigned long)thread->machine.kstackptr,
-+	    (unsigned long)(PE_state.bootArgs ? PE_state.bootArgs->topOfKernelData : 0),
-+	    (unsigned long)(PE_state.bootArgs ? PE_state.bootArgs->virtBase : 0));
++	    (unsigned long)nio_kdata_saved);
  }
  

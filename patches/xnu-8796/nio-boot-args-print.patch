@@ -1,29 +1,22 @@
-Print the boot_args the loader handed over
+Save topOfKernelData in a global
 
-The boot stack sits at 0xfffffff007bc7f90, inside the kernel text/data window, and
-the first push into it is a permission fault.  XNU derives the physmap and the
-boot stack position from boot_args->topOfKernelData, so print virtBase, physBase,
-memSize, topOfKernelData and the live sp once the console is up.
+The panic path needs the loader's topOfKernelData but PE_state is awkward in
+that translation unit, so save it once at machine_startup.
 ---
 diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
-index e76e7e7..5b1af35 100644
+index e76e7e7..3355934 100644
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
-@@ -477,6 +477,18 @@ machine_startup(__unused boot_args * args)
+@@ -475,8 +475,13 @@ machine_startup(__unused boot_args * args)
+ #endif /* defined(HAS_IPI) && (DEVELOPMENT || DEBUG)*/
  
+ 
++	uint64_t nio_kdata_saved = 0;
++
  	machine_conf();
  
-+	{
-+		volatile uint64_t nio_marker = 0;
-+		boot_args *nio_ba = PE_state.bootArgs;
-+		if (nio_ba != NULL) {
-+			printf("nio: ba virt %lx phys %lx size %lx kdata %lx sp %lx\n",
-+			    (unsigned long)nio_ba->virtBase,
-+			    (unsigned long)nio_ba->physBase,
-+			    (unsigned long)nio_ba->memSize,
-+			    (unsigned long)nio_ba->topOfKernelData,
-+			    (unsigned long)(uintptr_t)&nio_marker);
-+		}
++	if (PE_state.bootArgs != NULL) {
++		nio_kdata_saved = PE_state.bootArgs->topOfKernelData;
 +	}
  
  	/*
