@@ -1,0 +1,25 @@
+Return early from ast_taken_user without a thread
+
+run-131 reaches a clean data abort: pc get_threadtask+0x24, far 0, from
+ast_taken_user, because TPIDR_EL1 is still zero and current_thread() is NULL.
+Nothing to do without a thread, so return.
+---
+diff --git a/osfmk/kern/ast.c b/osfmk/kern/ast.c
+index ba26da2..09781d6 100644
+--- a/osfmk/kern/ast.c
++++ b/osfmk/kern/ast.c
+@@ -158,6 +158,14 @@ ast_taken_user(void)
+ {
+ 	assert(ml_get_interrupts_enabled() == FALSE);
+ 
++	/*
++	 * nio: this runs with TPIDR_EL1 still zero, so current_thread() is NULL
++	 * and get_threadtask(NULL) faults at address zero.  Nothing to do yet.
++	 */
++	if (current_thread() == NULL) {
++		return;
++	}
++
+ 	thread_t thread = current_thread();
+ 	task_t   task   = get_threadtask(thread);
+ 

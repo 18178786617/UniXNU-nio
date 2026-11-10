@@ -87,3 +87,4 @@ nio-badstack-print.patch
 nio-kernel-window-rw.patch
 nio-register-boot-stack.patch
 nio-no-pinst-spsel.patch
+nio-ast-no-thread.patch
