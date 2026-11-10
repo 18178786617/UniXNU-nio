@@ -1,31 +1,29 @@
-Make the low kernel window read/write
+Protect the kernel window at the end of pmap_init
 
-The stack check reports kstk 0 and top 0 for thread 0xfffffff007b96258 - the
-boot thread, whose stack nothing registered - and the first push into that
-stack takes a permission fault (esr 0x9600004f).  The page is read-only, so set
-the low 512 MiB of kernel VA read/write after pmap_init.
+The same pmap_protect placed at the top of pmap_init printed its line but the
+stack write still faulted, so the pmap is not usable yet at that point.  Move
+the call to the end of pmap_init.
 ---
 diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
-index bbd648e..bf2f75b 100644
+index bbd648e..fd82d90 100644
 --- a/osfmk/arm/pmap/pmap.c
 +++ b/osfmk/arm/pmap/pmap.c
-@@ -2700,6 +2700,19 @@ pmap_init(
- 
- 	pmap_initialized = TRUE;
- 
+@@ -2726,6 +2726,18 @@ pmap_init(
+ 	if ((uint32_t)hard_maxproc > pmap_max_asids) {
+ 		hard_maxproc = pmap_max_asids;
+ 	}
++
 +	/*
 +	 * nio: the boot thread runs on a stack nothing registered
-+	 * (thread->kernel_stack == 0), and its first push faults with a
-+	 * permission error, so the page came back read-only.  Make the low
-+	 * kernel window read/write; this is a debug port, not a hardened
-+	 * one.
++	 * (thread->kernel_stack == 0) and its first push faults with a
++	 * permission error.  Do this at the end of pmap_init, when the pmap
++	 * is usable; the same call placed earlier had no effect.
 +	 */
 +	pmap_protect(pmap_kernel(), VM_MIN_KERNEL_ADDRESS,
 +	    VM_MIN_KERNEL_ADDRESS + 0x20000000ul,
 +	    VM_PROT_READ | VM_PROT_WRITE);
-+	printf("nio: kernel window %lx set rw\n",
++	printf("nio: kernel window %lx rw at pmap end\n",
 +	    (unsigned long)VM_MIN_KERNEL_ADDRESS);
-+
- 	/*
- 	 *	Create the zone of physical maps
- 	 *	and the physical-to-virtual entries.
+ }
+ 
+ /**
