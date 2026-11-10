@@ -1,0 +1,19 @@
+Accept an exception while no stack is registered
+
+locore.s rejects an exception whose interrupted SP is outside both the thread
+stack and the interrupt stack, and that path never returns.  During early start
+up no thread stack is registered yet (TH_KSTACKPTR is zero), so every data abort
+is turned into Invalid
+---
+diff --git a/osfmk/arm64/locore.s b/osfmk/arm64/locore.s
+index 48d12cb..052cf21 100644
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -155,6 +155,7 @@
+ 	mrs		x1, TPIDR_EL1						// Get thread pointer
+ Ltest_kstack_\@:
+ 	ldr		x2, [x1, TH_KSTACKPTR]				// Get top of kernel stack
++	cbz		x2, Lvalid_stack_\@				// nio: no stack registered yet, accept
+ 	sub		x3, x2, KERNEL_STACK_SIZE			// Find bottom of kernel stack
+ 	cmp		x0, x2								// if (SP_EL0 >= kstack top)
+ 	b.ge	Ltest_istack_\@						//    jump to istack test
