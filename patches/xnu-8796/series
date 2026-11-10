@@ -87,4 +87,3 @@ nio-badstack-print.patch
 nio-kernel-window-rw.patch
 nio-register-boot-stack.patch
 nio-sp-el0.patch
-nio-no-stack-yet.patch
