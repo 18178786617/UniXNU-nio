@@ -1,0 +1,29 @@
+Landmark vm_compressor_init
+
+Boot now ends at vm_compressor_mode
+---
+diff --git a/osfmk/vm/vm_compressor.c b/osfmk/vm/vm_compressor.c
+index c47bad2..302cdbe 100644
+--- a/osfmk/vm/vm_compressor.c
++++ b/osfmk/vm/vm_compressor.c
+@@ -978,6 +978,9 @@ vm_compressor_init(void)
+ #endif /* DEVELOPMENT || DEBUG || CONFIG_FREEZE */
+ 	__unused uint64_t early_boot_compressor_size = compressor_size;
+ 
++	printf("nio: comp enter, size %#llx\n",
++	    (unsigned long long)early_boot_compressor_size);
++
+ #if CONFIG_JETSAM
+ 	if (memorystatus_swap_all_apps && osenvironment_is_diagnostics()) {
+ 		printf("osenvironment == \"diagnostics\". Disabling app swap.\n");
+@@ -990,7 +993,10 @@ vm_compressor_init(void)
+ 		 * Now that we're no longer in early boot, we can get
+ 		 * the NAND size and re-run vm_compressor_set_size.
+ 		 */
++		printf("nio: comp swap query %s\n", SWAP_VOLUME_NAME);
+ 		int error = vm_swap_vol_get_capacity(SWAP_VOLUME_NAME, &vm_swap_volume_capacity);
++		printf("nio: comp swap capacity %#llx err %d\n",
++		    (unsigned long long)vm_swap_volume_capacity, error);
+ #if DEVELOPMENT || DEBUG
+ 		if (error != 0) {
+ 			panic("vm_compressor_init: Unable to get swap volume capacity. error=%d\n", error);
