@@ -15,7 +15,11 @@ static bool hostStopQueue (const char **why)
 {
   // Confirm the firmware has no active transfer/task before changing its
   // request list or the storage stream's SMMU routing.
-  if (!(read32 (gHost.hc, 0x34) & 1) || (read32 (gHost.hc, 0x30) & 0x0f) != 0x0f) {
+  // HCS.DP (device present) is bit 0 and HCS.UCRDY (UIC command ready) is
+  // bit 3; the other bits in between report device and link errors, so
+  // waiting for all of them would mean waiting for a failure.
+  if (!(read32 (gHost.hc, 0x34) & 1) ||
+      (read32 (gHost.hc, 0x30) & (0x1 | 0x8)) != (0x1 | 0x8)) {
     recordTransport (kIOReturnNotReady, 15);
     *why = "controller not ready for takeover";
     return false;
@@ -53,7 +57,9 @@ static bool hostStartQueue (const char **why)
   gRootDiagnostic.isBefore = read32 (gHost.hc, 0x20);
   hostWrite (0x20, gRootDiagnostic.isBefore);
   hostWrite (0x60, 1);
-  if (!hostWaitRegister (0x60, 1, 1) || !hostWaitRegister (0x30, 3, 3)) {
+  // The request list is running once HCLKRUN is set and the controller
+  // reports the device present and the UIC command path ready.
+  if (!hostWaitRegister (0x60, 1, 1) || !hostWaitRegister (0x30, 0x1 | 0x8, 0x1 | 0x8)) {
     recordTransport (kIOReturnTimeout, 15);
     *why = "request list ready";
     return false;

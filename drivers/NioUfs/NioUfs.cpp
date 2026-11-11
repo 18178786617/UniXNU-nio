@@ -961,6 +961,37 @@ static void hostWrite (unsigned offset, uint32_t value)
 
 #include "RootCommands.h"
 
+// One UIC command, the EDK2 way (UfsSendUicCmd): clear the stale completion,
+// wait for HCS.UCRDY, zero ARG1..3, then write the opcode into UICCMD.
+// Completion is IS.Bit10 (UCCS) and the DME result lands in ARG2's low byte.
+// The opcodes are the ones the silicon's own header lists (UfsHostBridge.h):
+// UIC_CMD_DME_ENABLE = 0x12, UIC_CMD_DME_RESET = 0x14,
+// UIC_CMD_DME_LINK_STARTUP = 0x16.
+static uint32_t hostUicCommand (uint8_t opcode, const char *name)
+{
+  uint32_t isReg = read32 (gHost.hc, 0x20);
+  if (isReg & 0x400) {
+    hostWrite (0x20, isReg & 0x400);          // ack a stale UCCS
+  }
+  if (!hostWaitRegister (0x30, 0x8, 0x8)) {
+    panic ("NATIVE_UFS uic: UCRDY never set for %s\n"
+           "hcs=%08x is=%08x", name, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
+  }
+  hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
+  hostWrite (0x90, opcode);
+  unsigned spin = 0;
+  while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
+  uint32_t result = read32 (gHost.hc, 0x98);
+  if (spin >= 100000) {
+    panic ("NATIVE_UFS uic: %s never completed\n"
+           "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x", name,
+           read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+           read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
+  }
+  hostWrite (0x20, 0x400);                    // ack UCCS
+  return result & 0xff;
+}
+
 // Bring the live controller up for reading: map, SMMU pass-through for the UFS stream, take over
 // the request list, wake the device from UFS-PowerDown and wait for LUN 0 to be ready.
 // `why` receives a short reason on failure.
@@ -1164,119 +1195,81 @@ static bool hostBringUp (const char **why)
   }
   if (!hostStartQueue (why)) return false;
   printf ("nio: queue ready hcs=%08x\n", read32 (gHost.hc, 0x30));
-  /* nio R283: DME_LINKSTARTUP, the UFSHCI-mandated first UIC command after
-   * power-on, before any UTP traffic. Nothing in this bring-up has ever
-   * issued a UIC, and run-65..69 all hung at the first transfer doorbell --
-   * a UniPro link that was never (re)started is the remaining suspect.
-   * Sequence per EDK2 UfsExecUicCommands: clear stale IS.UCCS, wait
-   * HCS.UCRDY, ARG1..3, then the raw opcode in UICCMD; completion is
-   * IS.Bit10 (UCCS), the DME result lands in ARG2 low byte. */
-  {
-    uint32_t isReg = read32 (gHost.hc, 0x20);
-    if (isReg & 0x400) hostWrite (0x20, isReg & 0x400);
-    if (!hostWaitRegister (0x30, 0x8, 0x8)) {
-      panic ("NATIVE_UFS uic: UCRDY never set\n"
-             "hcs=%08x is=%08x", read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
-    }
-    hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
-    uint32_t result = 0xffffffffU;
-    unsigned tries = 0;
-    for (; tries < 4; ++tries) {
-      if (tries) {
-        // run-77 measured it: DME_RESET+DME_ENABLE alone does not clear a
-        // warm-reboot link failure (result=01 tries=6, UECDME=1, is=0x4 on
-        // every attempt). Go all the way to the ufshcd "host reset and
-        // restore" recovery: power-cycle the HCI (HCE 1->0->1, which also
-        // resets the DME), rebuild the request list (hostStartQueue, since
-        // the HCE cycle cleared UTRLBA/UTRLRSR), then DME_RESET/ENABLE and
-        // the link startup again.
-        hostWrite (0x34, 0);                    // HCE off
-        unsigned off = 0;
-        while ((read32 (gHost.hc, 0x34) & 1) && ++off < 100000) IODelay (10);
-        IODelay (50000);
-        hostWrite (0x34, 1);                    // HCE on
-        unsigned on = 0;
-        while (!(read32 (gHost.hc, 0x34) & 1) && ++on < 100000) IODelay (10);
-        if (!(read32 (gHost.hc, 0x34) & 1)) {
-          panic ("NATIVE_UFS uic: HCE did not come back\n"
-                 "hce=%08x hcs=%08x is=%08x",
-                 read32 (gHost.hc, 0x34), read32 (gHost.hc, 0x30),
-                 read32 (gHost.hc, 0x20));
-        }
-        // run-78 measured it: right after the HCE cycle HCS.DPY (device
-        // present) reads 0 -- the controller re-detects the device on its
-        // own, and every UIC command before DPY rises is doomed (the
-        // queue-rebuild panic showed hcs=0x8, no DPY). Give detection its
-        // time (two seconds -- hostWaitRegister's 100 ms deadline is
-        // shorter than real re-detection can take) before touching the DME.
-        {
-          unsigned det = 0;
-          while (!(read32 (gHost.hc, 0x30) & 0x2) && ++det < 200000) IODelay (10);
-          printf ("nio: hce cycle done, dpy back after %u00us (hcs=%08x)\n",
-                  det, read32 (gHost.hc, 0x30));
-          if (!(read32 (gHost.hc, 0x30) & 0x2)) {
-            panic ("NATIVE_UFS uic: device never re-detected after HCE\n"
-                   "hcs=%08x is=%08x", read32 (gHost.hc, 0x30),
-                   read32 (gHost.hc, 0x20));
-          }
-        }
-        if (!hostStartQueue (why)) {
-          panic ("NATIVE_UFS uic: queue rebuild after HCE failed (%s)\n"
-                 "hcs=%08x is=%08x", *why,
-                 read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20));
-        }
-        IODelay (100000);                       // let UniPro settle
-        hostWrite (0x90, 0x12);                 // DME_RESET
-        unsigned rst = 0;
-        while (!(read32 (gHost.hc, 0x20) & 0x400) && ++rst < 100000) IODelay (10);
-        hostWrite (0x20, 0x400);                // ack UCCS
-        IODelay (10000);
-        hostWrite (0x90, 0x13);                 // DME_ENABLE
-        unsigned en = 0;
-        while (!(read32 (gHost.hc, 0x20) & 0x400) && ++en < 100000) IODelay (10);
-        hostWrite (0x20, 0x400);                // ack UCCS
-        IODelay (10000);
-      }
-      hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
-    printf ("nio: linkstartup begin hcs=%08x dpy=%u\n",
-            read32 (gHost.hc, 0x30),
-            !!(read32 (gHost.hc, 0x30) & 0x2));
-    hostWrite (0x90, 0x16);                   // DME_LINKSTARTUP
-    unsigned spin = 0;
-    while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
-    result = read32 (gHost.hc, 0x98);
-    if (spin >= 100000) {
-      panic ("NATIVE_UFS uic: LINKSTARTUP no completion\n"
-             "hcs=%08x is=%08x pa=%08x dl=%08x result=%08x",
-             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
-             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c), result);
-    }
-    hostWrite (0x20, 0x400);                  // ack UCCS
-    if ((result & 0xff) == 0) break;
-    printf ("nio: linkstartup retry %u, full recovery\n", tries + 1);
-    }
-    printf ("nio: UFS DME_LINKSTARTUP result=%08x tries=%u\n", result, tries + 1);
-    if ((result & 0xff) != 0) {
-      // The DME result code is the one datum this bring-up has never seen.
-      // Nonzero here can mean a dead link, or one the hand-off firmware
-      // already started (benign). run-70 and run-71 both died blind on this
-      // check; print the whole UIC error picture and stop.
-      panic ("NATIVE_UFS uic: LINKSTARTUP failed\n"
-             "result=%02x tries=%u hcs=%08x is=%08x\n"
-             "pa=%08x dl=%08x nl=%08x tl=%08x dme=%08x",
-             result & 0xff, tries + 1,
-             read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
-             read32 (gHost.hc, 0x38), read32 (gHost.hc, 0x3c),
-             read32 (gHost.hc, 0x40), read32 (gHost.hc, 0x44),
-             read32 (gHost.hc, 0x48));
-    }
-  }
+  /* nio R294: the UniPro link is not touched unless the transport itself
+   * fails.
+   *
+   * run-146 measured what the R283..R292 UIC sequence does on this board:
+   * hostStartQueue() returned true, so HCS.DP (bit 0) was set and the
+   * controller could see the device; the first DME_LINKSTARTUP then came back
+   * with a nonzero result, and R291's recovery (HCE 1->0->1) took the device
+   * detection down with it -- the re-detection never came back (hcs=0x8, DP
+   * clear) and the board panicked inside the recovery.
+   *
+   * The bootloader that hands this kernel over does not start the link from
+   * here either: the UFS driver it carries (refs/ShengUfs, NativeUfs.cpp)
+   * sends no UIC command at all, adopts the controller the firmware left
+   * running and goes straight to NOP OUT.  A DME_LINKSTARTUP on a link that
+   * is already up is exactly what UniPro refuses, so the order that works on
+   * this hardware is the proven one: prove the transport first, and only go
+   * near the DME if the transport does not answer. */
   gRootDiagnostic.stage = "NOP OUT";
   // NOP OUT proves the transport before touching the SCSI layer.
   if (hostNop () != kIOReturnSuccess) {
-    gHost.ready = false;
-    *why = "NOP OUT";
-    return false;
+    // The transport did not answer.  Now the UniPro link is a suspect and the
+    // standard recovery is the only thing left: DME_RESET, DME_ENABLE,
+    // DME_LINK_STARTUP (UIC_CMD_DME_RESET = 0x14, UIC_CMD_DME_ENABLE = 0x12,
+    // UIC_CMD_DME_LINK_STARTUP = 0x16 in the silicon's own header).
+    // The HCE power cycle R291 used is deliberately NOT here: run-146 showed
+    // that it takes the device detection down with it.
+    uint32_t rst = hostUicCommand (0x14, "DME_RESET");
+    uint32_t en  = hostUicCommand (0x12, "DME_ENABLE");
+    uint32_t ls  = hostUicCommand (0x16, "DME_LINKSTARTUP");
+    printf ("nio: uic recovery rst=%02x en=%02x ls=%02x hcs=%08x\n",
+            rst, en, ls, read32 (gHost.hc, 0x30));
+    // The link went down and came back, so the device has to be present again
+    // and the request list has to be rebuilt before it can be used.
+    {
+      unsigned det = 0;
+      while (!(read32 (gHost.hc, 0x30) & 0x1) && ++det < 200000) IODelay (10);
+      if (!(read32 (gHost.hc, 0x30) & 0x1)) {
+        panic ("NATIVE_UFS uic: no device after the UIC recovery\n"
+               "rst=%02x en=%02x ls=%02x hcs=%08x is=%08x\n"
+               "hce=%08x pa=%08x dl=%08x nl=%08x tl=%08x",
+               rst, en, ls, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+               read32 (gHost.hc, 0x34), read32 (gHost.hc, 0x38),
+               read32 (gHost.hc, 0x3c), read32 (gHost.hc, 0x40),
+               read32 (gHost.hc, 0x44));
+      }
+    }
+    // The NOP OUT timed out with its request still outstanding, and
+    // hostSubmit() quarantines the buffer when that happens: the doorbell is
+    // still set and gHost.poisoned refuses every later command.  The link
+    // went down and came back above, so the controller can own nothing now:
+    // clear the doorbell (UTRLCLR), stop the request list, and let the
+    // retry run.
+    hostWrite (0x5c, 1);                       // UTRLCLR: clear the doorbell
+    hostWrite (0x60, 0);                       // stop the request list
+    {
+      unsigned stop = 0;
+      while ((read32 (gHost.hc, 0x60) & 1) && ++stop < 100000) IODelay (10);
+    }
+    gHost.poisoned = false;
+    if (!hostStartQueue (why)) {
+      panic ("NATIVE_UFS uic: queue rebuild failed (%s)\n"
+             "rst=%02x en=%02x ls=%02x hcs=%08x is=%08x hce=%08x",
+             *why, rst, en, ls, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+             read32 (gHost.hc, 0x34));
+    }
+    if (hostNop () != kIOReturnSuccess) {
+      gHost.ready = false;
+      panic ("NATIVE_UFS: transport dead after the UIC recovery\n"
+             "rst=%02x en=%02x ls=%02x hcs=%08x is=%08x\n"
+             "hce=%08x pa=%08x dl=%08x nl=%08x tl=%08x",
+             rst, en, ls, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+             read32 (gHost.hc, 0x34), read32 (gHost.hc, 0x38),
+             read32 (gHost.hc, 0x3c), read32 (gHost.hc, 0x40),
+             read32 (gHost.hc,0x44));
+    }
   }
   uint32_t power = 0;
   gRootDiagnostic.stage = "power mode query";
