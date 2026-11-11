@@ -1,0 +1,103 @@
+Count a fault only when there is a task to charge
+
+The boot thread runs before any task exists, so current_task() is NULL while
+the VM comes up.  vm_fault_internal() counts the fault through
+&current_task()->faults, and &NULL->faults is address 0x380, so the counter
+store itself faults.
+
+That is the fault run-138 died on.  Its panic read "Invalid kernel stack
+pointer (probable corruption)", which sent the search after the stack, but
+the register dump says the Data Abort was somewhere else entirely:
+
+    pc  0xfffffff0073fcf14   counter_inc + 0xc, the ldr x8, [x0]
+    lr  0xfffffff007336cfc   _vm_fault_internal + 0x400, the return address
+    x0  0x380                &current_task()->faults
+    far 0x380
+    esr 0x96000004           EC 0x25, a data abort from EL1
+
+so the fault handler faulted while handling the first fault, and the second
+one is what the panic reported.  The first fault is still unknown, which is
+why the fault address is printed now: the handler says out loud what it was
+asked to fault on, before anything can fault on top of it.
+
+The same counting appears twice more, in the copy-on-write paths, and there
+it can fault the same way, so both go through the same guard.  The safe
+pattern is the one the same file already uses further down, where the
+counter is only charged when the thread has a task.
+---
+diff --git a/osfmk/vm/vm_fault.c b/osfmk/vm/vm_fault.c
+--- a/osfmk/vm/vm_fault.c
++++ b/osfmk/vm/vm_fault.c
+@@ -258,6 +258,36 @@
+ #endif /* CONFIG_FREEZE */
+ 
+ /*
++ *	nio: the boot thread runs before any task exists, so current_task() is
++ *	NULL until the first task is created.  Counting a fault through
++ *	&current_task()->faults would then dereference address 0x380
++ *	(offsetof(task, faults)) and fault again inside the fault handler.
++ *	The second fault is what the panic reported, and it hid the first one:
++ *	run-138 died with "Invalid kernel stack pointer (probable corruption)"
++ *	while the real fault was this NULL task dereference.
++ *	Charge the task only when there is one.
++ */
++static void
++vm_fault_count_task_faults(void)
++{
++	task_t task = current_task();
++
++	if (task != TASK_NULL) {
++		counter_inc(&task->faults);
++	}
++}
++
++static void
++vm_fault_count_task_cow_faults(void)
++{
++	task_t task = current_task();
++
++	if (task != TASK_NULL) {
++		counter_inc(&task->cow_faults);
++	}
++}
++
++/*
+  *	Routine:	vm_fault_init
+  *	Purpose:
+  *		Initialize our private data structures.
+@@ -2177,7 +2207,7 @@
+ 			my_fault = DBG_COW_FAULT;
+ 			counter_inc(&vm_statistics_cow_faults);
+ 			DTRACE_VM2(cow_fault, int, 1, (uint64_t *), NULL);
+-			counter_inc(&current_task()->cow_faults);
++			vm_fault_count_task_cow_faults();
+ 
+ 			object = first_object;
+ 			offset = first_offset;
+@@ -4203,7 +4233,16 @@
+ 	fault_type = (change_wiring ? VM_PROT_NONE : caller_prot);
+ 
+ 	counter_inc(&vm_statistics_faults);
+-	counter_inc(&current_task()->faults);
++	/*
++	 * nio: say what we were asked to fault on before anything can fault on
++	 * top of it, so the first fault is never lost.
++	 */
++	if (current_task() == TASK_NULL) {
++		printf("nio: vm_fault: no task yet, vaddr 0x%llx map %p prot 0x%x sp 0x%llx\n",
++		    (unsigned long long)real_vaddr, (void *)map, (unsigned int)caller_prot,
++		    (unsigned long long)(uintptr_t)__builtin_frame_address(0));
++	}
++	vm_fault_count_task_faults();
+ 	original_fault_type = fault_type;
+ 
+ 	need_copy = FALSE;
+@@ -5043,7 +5082,7 @@
+ 			type_of_fault = DBG_COW_FAULT;
+ 			counter_inc(&vm_statistics_cow_faults);
+ 			DTRACE_VM2(cow_fault, int, 1, (uint64_t *), NULL);
+-			counter_inc(&current_task()->cow_faults);
++			vm_fault_count_task_cow_faults();
+ 
+ 			goto FastPmapEnter;
+ 		} else {

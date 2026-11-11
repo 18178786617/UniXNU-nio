@@ -1,24 +1,58 @@
-Register the boot stack above the live frame
+Leave the boot thread's kernel stack unregistered
 
-The registration worked: the panic moved from corruption to overflow, meaning
-sp now falls just below the recorded bottom.  Record the top 128 KiB above the
-live frame instead of one page, and protect that whole window, so the boot
-thread's deepest frame stays inside it.
+The recorded stack top was a guess.  The boot thread runs on the loader's
+stack, so the live frame is not the one the recorded top describes, and
+CHECK_KERNEL_STACK does not ask whether the frame is inside the stack it
+knows about: it accepts a stack pointer only inside the 16 KiB window just
+below the recorded top and calls everything else a corrupted kernel stack.
+The recorded top was placed 128 KiB above the live frame, so the live frame
+could never be inside that window.  The check then fell through to the
+interrupt stack test, where a boot stack pointer is always above the
+interrupt stack top, and every data abort taken on the boot thread came out
+as "Invalid kernel stack pointer (probable corruption)".
+
+That is the panic run-138 died of, and it was a false one: the register dump
+says the data abort was a store to address 0x380, the NULL task dereference
+in vm_fault.c, and the kernel stack had nothing to do with it.  The
+misleading panic is what sent the last few runs looking at the stack.
+
+Nothing registers the boot thread's stack here, and upstream leaves
+machine.kstackptr zero for it as well.  Leaving it zero is what makes the
+cbz in CHECK_KERNEL_STACK (nio-check-stack-zero.patch) let the exception
+through, so the fault that actually happened is decoded and reported with
+its address.  When the kernel attaches a real stack to the boot thread the
+normal check resumes.
+
+The pmap_protect() call stays: the boot stack is the loader's and has to be
+writable, and the kernel's own mappings do not cover it.
 ---
 diff --git a/osfmk/kern/stack.c b/osfmk/kern/stack.c
-index ce42b1a..df4970d 100644
 --- a/osfmk/kern/stack.c
 +++ b/osfmk/kern/stack.c
-@@ -127,6 +127,27 @@ stack_init(void)
+@@ -128,6 +128,40 @@
  
  	stack_addr_mask = roundup_pow2(kernel_stack_size) - 1;
  	kernel_stack_mask = ~stack_addr_mask;
 +
 +	/*
-+	 * nio: the boot stack is the loader's and nothing registers it.  Put the
-+	 * recorded top 128 KiB above the live frame so the check's bottom sits
-+	 * well above the deepest frame the boot thread will reach, and make the
-+	 * whole window writable now that pmap_kernel() is the live map.
++	 * nio: the boot stack is the loader's and nothing registers it.  Make the
++	 * window around the live frame writable now that pmap_kernel() is the
++	 * live map.
++	 *
++	 * The stack itself deliberately stays unregistered.  CHECK_KERNEL_STACK
++	 * accepts a stack pointer only inside the 16 KiB window just below the
++	 * recorded top and calls everything else a corrupted kernel stack, so a
++	 * recorded top that does not describe the frame the boot thread really
++	 * runs on turns every data abort into a bogus "Invalid kernel stack
++	 * pointer (probable corruption)" panic.  That is what run-138 died of,
++	 * while the real fault was a NULL task dereference in vm_fault.c: the
++	 * misleading panic hid the real one for several runs.
++	 *
++	 * With the stack left unregistered the cbz in CHECK_KERNEL_STACK
++	 * (nio-check-stack-zero.patch) lets the exception be decoded, so the
++	 * fault that actually happened is reported with its address instead of
++	 * being reported as a corrupted stack.  When the kernel later attaches a
++	 * real stack to the boot thread the normal check resumes.
 +	 */
 +	{
 +		thread_t nio_th = current_thread();
@@ -27,7 +61,6 @@ index ce42b1a..df4970d 100644
 +		uint64_t nio_page = nio_sp & ~(uint64_t)0x3fffull;
 +		uint64_t nio_top = nio_page + 0x20000ull;
 +		if (nio_th != THREAD_NULL && nio_th->machine.kstackptr == 0) {
-+			nio_th->machine.kstackptr = (vm_offset_t)nio_top;
 +			nio_th->kernel_stack = (vm_offset_t)(nio_top - kernel_stack_size);
 +		}
 +		pmap_protect(pmap_kernel(), (vm_offset_t)(nio_page - 0x100000ull),
