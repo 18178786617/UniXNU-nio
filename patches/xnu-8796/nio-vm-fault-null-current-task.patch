@@ -18,7 +18,8 @@ the register dump says the Data Abort was somewhere else entirely:
 so the fault handler faulted while handling the first fault, and the second
 one is what the panic reported.  The first fault is still unknown, which is
 why the fault address is printed now: the handler says out loud what it was
-asked to fault on, before anything can fault on top of it.
+asked to fault on, and who asked for it, before anything can fault on top of
+it.
 
 The same counting appears twice more, in the copy-on-write paths, and there
 it can fault the same way, so both go through the same guard.  The safe
@@ -74,7 +75,7 @@ diff --git a/osfmk/vm/vm_fault.c b/osfmk/vm/vm_fault.c
  
  			object = first_object;
  			offset = first_offset;
-@@ -4203,7 +4233,16 @@
+@@ -4203,7 +4233,17 @@
  	fault_type = (change_wiring ? VM_PROT_NONE : caller_prot);
  
  	counter_inc(&vm_statistics_faults);
@@ -84,15 +85,16 @@ diff --git a/osfmk/vm/vm_fault.c b/osfmk/vm/vm_fault.c
 +	 * top of it, so the first fault is never lost.
 +	 */
 +	if (current_task() == TASK_NULL) {
-+		printf("nio: vm_fault: no task yet, vaddr 0x%llx map %p prot 0x%x sp 0x%llx\n",
++		printf("nio: vm_fault: no task yet, vaddr 0x%llx map %p prot 0x%x sp 0x%llx caller 0x%llx\n",
 +		    (unsigned long long)real_vaddr, (void *)map, (unsigned int)caller_prot,
-+		    (unsigned long long)(uintptr_t)__builtin_frame_address(0));
++		    (unsigned long long)(uintptr_t)__builtin_frame_address(0),
++		    (unsigned long long)(uintptr_t)__builtin_return_address(0));
 +	}
 +	vm_fault_count_task_faults();
  	original_fault_type = fault_type;
  
  	need_copy = FALSE;
-@@ -5043,7 +5082,7 @@
+@@ -5043,7 +5083,7 @@
  			type_of_fault = DBG_COW_FAULT;
  			counter_inc(&vm_statistics_cow_faults);
  			DTRACE_VM2(cow_fault, int, 1, (uint64_t *), NULL);
