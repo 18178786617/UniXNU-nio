@@ -1,0 +1,33 @@
+Do not charge a page-in to a task that does not exist
+
+VM_PAGE_COUNT_AS_PAGEIN() counts the page-in against the current task, and the
+boot thread has no task while the VM comes up, so the counter store faults on
+address offsetof(task, pageins).  The macro runs six times in the fault path,
+and the first of them is in vm_fault_enter_prepare(), right where the fault
+that run-138 died on was being handled: the counter at the top of
+vm_fault_internal() was the first of these, and this one is the next.
+
+Charge the task only when there is one.
+---
+diff --git a/osfmk/vm/vm_page.h b/osfmk/vm/vm_page.h
+--- a/osfmk/vm/vm_page.h
++++ b/osfmk/vm/vm_page.h
+@@ -1820,9 +1820,17 @@
+ 	MACRO_BEGIN                                             \
+ 	{                                                       \
+ 	vm_object_t o;                                          \
++	task_t pio_task = current_task();                        \
+ 	o = VM_PAGE_OBJECT(mem);                                \
+ 	DTRACE_VM2(pgin, int, 1, (uint64_t *), NULL);           \
+-	counter_inc(&current_task()->pageins);                  \
++	/*                                                      \
++	 * nio: the boot thread has no task while the VM comes  \
++	 * up, so charging the page-in to it would fault on     \
++	 * address offsetof(task, pageins).                     \
++	 */                                                     \
++	if (pio_task != TASK_NULL) {                             \
++		counter_inc(&pio_task->pageins);                \
++	}                                                       \
+ 	if (o->internal) {                                      \
+ 	        DTRACE_VM2(anonpgin, int, 1, (uint64_t *), NULL);       \
+ 	} else {                                                \
