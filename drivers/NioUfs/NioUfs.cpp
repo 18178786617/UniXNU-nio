@@ -1221,6 +1221,30 @@ static bool hostBringUp (const char **why)
     // UIC_CMD_DME_LINK_STARTUP = 0x16 in the silicon's own header).
     // The HCE power cycle R291 used is deliberately NOT here: run-146 showed
     // that it takes the device detection down with it.
+    /* nio R295: the link is left running by the loader, and DME_RESET on a live
+     * link is what killed DP on run-146.  Look at the controller state first:
+     * if the device is still present, keep the link untouched and just retry the
+     * NOP with the controller state printed, so the next run says why the
+     * transport did not answer instead of losing the device.
+     */
+    {
+      uint32_t dp = read32 (gHost.hc, 0x30);
+      if (dp & 0x1) {
+        for (int attempt = 0; attempt < 3; ++attempt) {
+          if (hostNop () == kIOReturnSuccess) {
+            printf ("nio: uic recovery skipped, NOP answered on retry %d\n",
+                    attempt + 1);
+            return true;
+          }
+          IODelay (2000);
+        }
+        panic ("NATIVE_UFS uic: DP set but NOP unanswered\n"
+               "hcs=%08x is=%08x utrlba=%08x utrlbase=%08x utrldoor=%08x\n",
+               read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x20),
+               read32 (gHost.hc, 0x50), read32 (gHost.hc, 0x54),
+               read32 (gHost.hc, 0x60));
+      }
+    }
     uint32_t rst = hostUicCommand (0x14, "DME_RESET");
     uint32_t en  = hostUicCommand (0x12, "DME_ENABLE");
     uint32_t ls  = hostUicCommand (0x16, "DME_LINKSTARTUP");
