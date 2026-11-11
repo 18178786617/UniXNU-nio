@@ -1,0 +1,67 @@
+Print the bsd_init landmarks
+
+bsd_init() walks the whole BSD bring-up: credentials, the file table, the
+buffer cache, the network stack, setconf, vfs_mountroot, VFS_ROOT, and
+finally the exec of launchd.  Between those calls it drops 47 landmarks,
+but DEBUG_BSDINIT is 0, so every one of them compiles to
+boot_progress_stage(), and XNU_BOOT_PROGRESS is not defined, so
+boot_progress_stage() is an empty macro.  The console shows nothing at all
+between the heartbeat and the next panic, which leaves no way to tell how
+far the boot got.
+
+Print the landmarks instead.  The heartbeat runs every 100 ms and scrolls
+the console, so the reader has to be able to see the sequence of names
+rather than a single position.
+
+load_init_program() is the last hop into user space.  Its own printf says
+which path it is about to try, but not how far the exec got, so name the
+milestones inside load_init_program_at_path() and exec_mach_imgact() as
+well.
+
+---
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 315cd80..02d43ad 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -582,7 +582,7 @@ bsd_init(void)
+ #if DEBUG_BSDINIT
+ #define bsd_init_kprintf(x, ...) kprintf("bsd_init: " x, ## __VA_ARGS__)
+ #else
+-#define bsd_init_kprintf(x, ...) boot_progress_stage("bsd_init: " x)
++#define bsd_init_kprintf(x, ...) printf("nio: bsd_init: " x, ## __VA_ARGS__)
+ #endif
+ 
+ 	throttle_init();
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 036acec..f0fd9bf 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1162,6 +1162,11 @@ static int
+ exec_mach_imgact(struct image_params *imgp)
+ {
+ 	struct mach_header *mach_header = (struct mach_header *)imgp->ip_vdata;
++
++	/* ip_user_fname is a user address, not a string.  The file name is
++	 * already on the console by the time we get here, so only mark the
++	 * arrival. */
++	printf("nio: exec: exec_mach_imgact enter\n");
+ 	proc_t                  p = vfs_context_proc(imgp->ip_vfs_context);
+ 	int                     error = 0;
+ 	task_t                  task;
+@@ -7814,6 +7819,8 @@ load_init_program_at_path(proc_t p, user_addr_t scratch_addr, const char* path,
+ 	assert(scratch_addr);
+ 	assert(path);
+ 
++	printf("nio: exec: load_init_program_at_path %s\n", path);
++
+ 	/*
+ 	 * Copy out program name.
+ 	 */
+@@ -7924,6 +7931,7 @@ static const char * init_programs[] = {
+ void
+ load_init_program(proc_t p)
+ {
++	printf("nio: exec: load_init_program enter\n");
+ 	boot_progress_stage("load_init_program enter");
+ 	uint32_t i;
+ 	int error;
