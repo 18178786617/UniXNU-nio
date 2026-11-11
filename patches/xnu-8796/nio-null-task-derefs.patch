@@ -1,0 +1,161 @@
+Do not dereference a task that does not exist yet
+
+The boot thread runs before any task exists, so current_task() is NULL while
+the VM comes up.  Five places in the fault path take that NULL for a task and
+dereference it, and each of them faults on an address inside the task struct:
+offsetof(task, faults) is 0x380, offsetof(task, map) and offsetof(task,
+t_flags) are their own.  A fault inside the fault handler is the worst place
+to fault, because the second fault replaces the first one and the panic then
+reports the wrong thing entirely.
+
+That is what run-138 died on.  Its panic read "Invalid kernel stack pointer
+(probable corruption)", which sent the search after the stack, but the
+register dump says the data abort was a store to address 0x380:
+
+    pc  0xfffffff0073fcf14   counter_inc + 0xc, the ldr x8, [x0]
+    lr  0xfffffff007336cfc   _vm_fault_internal + 0x400, the return address
+    x0  0x380                &current_task()->faults
+    far 0x380
+    esr 0x96000004           EC 0x25, a data abort from EL1
+
+so the fault handler faulted while handling the first fault.  The counters
+now only charge a task when there is one, and the other three dereferences
+are guarded the same way.  The safe pattern is the one the same file already
+uses further down, where the counter is charged only when the thread has a
+task.
+
+The first fault is still unknown, so the handler now says out loud what it
+was asked to fault on and who asked for it, before anything can fault on top
+of it.  vm_corrupt_text_addr() also checked the task's map after taking it,
+which is the same dereference one step later.
+---
+diff --git a/osfmk/vm/vm_fault.c b/osfmk/vm/vm_fault.c
+--- a/osfmk/vm/vm_fault.c
++++ b/osfmk/vm/vm_fault.c
+@@ -258,6 +258,33 @@
+ #endif /* CONFIG_FREEZE */
+ 
+ /*
++ *	nio: the boot thread runs before any task exists, so current_task() is
++ *	NULL until the first task is created.  Every use of it has to cope with
++ *	that, or the kernel faults on address 0x380 (offsetof(task, faults)) and
++ *	on whatever else the task struct holds.
++ *	Charge the task only when there is one.
++ */
++static void
++vm_fault_count_task_faults(void)
++{
++	task_t task = current_task();
++
++	if (task != TASK_NULL) {
++		counter_inc(&task->faults);
++	}
++}
++
++static void
++vm_fault_count_task_cow_faults(void)
++{
++	task_t task = current_task();
++
++	if (task != TASK_NULL) {
++		counter_inc(&task->cow_faults);
++	}
++}
++
++/*
+  *	Routine:	vm_fault_init
+  *	Purpose:
+  *		Initialize our private data structures.
+@@ -2177,7 +2204,7 @@
+ 			my_fault = DBG_COW_FAULT;
+ 			counter_inc(&vm_statistics_cow_faults);
+ 			DTRACE_VM2(cow_fault, int, 1, (uint64_t *), NULL);
+-			counter_inc(&current_task()->cow_faults);
++			vm_fault_count_task_cow_faults();
+ 
+ 			object = first_object;
+ 			offset = first_offset;
+@@ -3111,10 +3138,17 @@
+ {
+ 	bool map_is_switched, map_is_switch_protected, cs_violation;
+ 	kern_return_t kr;
++	task_t cs_task = current_task();
++	thread_t cs_thread = current_thread();
++	vm_map_t cs_thread_map = (cs_thread != THREAD_NULL) ? cs_thread->map : NULL;
+ 	/* Validate code signature if necessary. */
+-	map_is_switched = ((pmap != vm_map_pmap(current_task()->map)) &&
+-	    (pmap == vm_map_pmap(current_thread()->map)));
+-	map_is_switch_protected = current_thread()->map->switch_protect;
++	map_is_switched = FALSE;
++	if (cs_task != TASK_NULL && cs_task->map != NULL && cs_thread_map != NULL) {
++		map_is_switched = ((pmap != vm_map_pmap(cs_task->map)) &&
++		    (pmap == vm_map_pmap(cs_thread_map)));
++	}
++	map_is_switch_protected = (cs_thread_map != NULL) ?
++	    cs_thread_map->switch_protect : FALSE;
+ 	kr = vm_fault_cs_check_violation(cs_bypass, object, m, pmap,
+ 	    prot, caller_prot, fault_page_size, fault_phys_offset, fault_info,
+ 	    map_is_switched, map_is_switch_protected, &cs_violation);
+@@ -4203,7 +4237,17 @@
+ 	fault_type = (change_wiring ? VM_PROT_NONE : caller_prot);
+ 
+ 	counter_inc(&vm_statistics_faults);
+-	counter_inc(&current_task()->faults);
++	/*
++	 * nio: say what we were asked to fault on, and who asked for it, before
++	 * anything can fault on top of it, so the first fault is never lost.
++	 */
++	if (current_task() == TASK_NULL) {
++		printf("nio: vm_fault: no task yet, vaddr 0x%llx map %p prot 0x%x sp 0x%llx caller 0x%llx\n",
++		    (unsigned long long)real_vaddr, (void *)map, (unsigned int)caller_prot,
++		    (unsigned long long)(uintptr_t)__builtin_frame_address(0),
++		    (unsigned long long)(uintptr_t)__builtin_return_address(0));
++	}
++	vm_fault_count_task_faults();
+ 	original_fault_type = fault_type;
+ 
+ 	need_copy = FALSE;
+@@ -5043,7 +5087,7 @@
+ 			type_of_fault = DBG_COW_FAULT;
+ 			counter_inc(&vm_statistics_cow_faults);
+ 			DTRACE_VM2(cow_fault, int, 1, (uint64_t *), NULL);
+-			counter_inc(&current_task()->cow_faults);
++			vm_fault_count_task_cow_faults();
+ 
+ 			goto FastPmapEnter;
+ 		} else {
+@@ -8353,8 +8397,12 @@
+ 	pmap_paddr_t           pa;
+ 	vm_prot_t              prot;
+ 
++	if (task == TASK_NULL) {
++		printf("corrupt_text_addr: no task\n");
++		return KERN_FAILURE;
++	}
+ 	map = task->map;
+-	if (task->map == NULL) {
++	if (map == NULL) {
+ 		printf("corrupt_text_addr: no map\n");
+ 		return KERN_FAILURE;
+ 	}
+diff --git a/osfmk/kern/bsd_kern.c b/osfmk/kern/bsd_kern.c
+--- a/osfmk/kern/bsd_kern.c
++++ b/osfmk/kern/bsd_kern.c
+@@ -93,7 +93,16 @@
+ void  *
+ get_bsdtask_info(task_t t)
+ {
+-	void *proc_from_task = task_get_proc_raw(t);
++	void *proc_from_task;
++
++	/*
++	 * nio: a task that does not exist yet has no proc behind it, and
++	 * task_has_proc() would dereference the null task to find that out.
++	 */
++	if (t == TASK_NULL) {
++		return NULL;
++	}
++	proc_from_task = task_get_proc_raw(t);
+ 	proc_require(proc_from_task, PROC_REQUIRE_ALLOW_NULL | PROC_REQUIRE_ALLOW_ALL);
+ 	return task_has_proc(t) ? proc_from_task : NULL;
+ }
