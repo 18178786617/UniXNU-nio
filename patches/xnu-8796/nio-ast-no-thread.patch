@@ -1,25 +1,30 @@
-Return early from ast_taken_user without a thread
+Skip the AST path until the thread has a task
 
-run-131 reaches a clean data abort: pc get_threadtask+0x24, far 0, from
-ast_taken_user, because TPIDR_EL1 is still zero and current_thread() is NULL.
-Nothing to do without a thread, so return.
+run-132 still faults at get_threadtask+0x28 with far 0, so the thread pointer is
+fine and it is thread->task that is NULL: nothing has attached a task yet.
+Return before the AST path dereferences it.
 ---
 diff --git a/osfmk/kern/ast.c b/osfmk/kern/ast.c
-index ba26da2..09781d6 100644
+index ba26da2..38610cd 100644
 --- a/osfmk/kern/ast.c
 +++ b/osfmk/kern/ast.c
-@@ -158,6 +158,14 @@ ast_taken_user(void)
+@@ -158,8 +158,19 @@ ast_taken_user(void)
  {
  	assert(ml_get_interrupts_enabled() == FALSE);
  
 +	/*
-+	 * nio: this runs with TPIDR_EL1 still zero, so current_thread() is NULL
-+	 * and get_threadtask(NULL) faults at address zero.  Nothing to do yet.
++	 * nio: early in boot the thread exists but thread->task does not, so
++	 * get_threadtask hands back NULL and the AST path dereferences zero.
++	 * Nothing to do until the task is attached.
 +	 */
-+	if (current_thread() == NULL) {
+ 	thread_t thread = current_thread();
++	if (thread == NULL) {
 +		return;
 +	}
-+
- 	thread_t thread = current_thread();
  	task_t   task   = get_threadtask(thread);
++	if (task == NULL) {
++		return;
++	}
  
+ 	/* We are about to return to userspace, there must not be a pending wait */
+ 	assert(waitq_wait_possible(thread));
