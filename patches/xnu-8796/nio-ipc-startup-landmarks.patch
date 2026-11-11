@@ -1,0 +1,172 @@
+diff --git a/osfmk/bank/bank.c b/osfmk/bank/bank.c
+index bc4fffd..75107f8 100644
+--- a/osfmk/bank/bank.c
++++ b/osfmk/bank/bank.c
+@@ -200,6 +200,7 @@ __startup_func
+ static void
+ bank_init(void)
+ {
++	printf("nio: bank_init enter\n");
+ 	init_bank_ledgers();
+ 
+ 	/* Register the bank manager with the Vouchers sub system. */
+@@ -210,6 +211,7 @@ bank_init(void)
+ 		&bank_voucher_attr_control);
+ 
+ 	kprintf("BANK subsystem is initialized\n");
++	printf("nio: bank_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, bank_init);
+ 
+diff --git a/osfmk/ipc/ipc_importance.c b/osfmk/ipc/ipc_importance.c
+index 5623a0d..5d524e6 100644
+--- a/osfmk/ipc/ipc_importance.c
++++ b/osfmk/ipc/ipc_importance.c
+@@ -3782,10 +3782,13 @@ __startup_func
+ static void
+ ipc_importance_init(void)
+ {
++	printf("nio: ipc_importance_init enter\n");
+ 	ipc_register_well_known_mach_voucher_attr_manager(&ipc_importance_manager,
++	printf("nio: ipc_importance_init enter\n");
+ 	    (mach_voucher_attr_value_handle_t)0,
+ 	    MACH_VOUCHER_ATTR_KEY_IMPORTANCE,
+ 	    &ipc_importance_control);
++	printf("nio: ipc_importance_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_LAST, ipc_importance_init);
+ 
+diff --git a/osfmk/ipc/ipc_init.c b/osfmk/ipc/ipc_init.c
+index 03a2049..e098ed3 100644
+--- a/osfmk/ipc/ipc_init.c
++++ b/osfmk/ipc/ipc_init.c
+@@ -155,12 +155,15 @@ ipc_init(void)
+ 	kern_return_t kr;
+ 
+ 	/* create special spaces */
++	printf("nio: ipc_init enter\n");
+ 
+ 	kr = ipc_space_create_special(&ipc_space_kernel);
+ 	assert(kr == KERN_SUCCESS);
++	printf("nio: ipc_init kernel space done\n");
+ 
+ 	kr = ipc_space_create_special(&ipc_space_reply);
+ 	assert(kr == KERN_SUCCESS);
++	printf("nio: ipc_init reply space done\n");
+ 
+ 	/* initialize modules with hidden data structures */
+ 
+@@ -185,11 +188,13 @@ ipc_init(void)
+ 	}
+ 
+ 	ipc_kernel_map = kmem_suballoc(kernel_map, &ipc_kernel_range.min_address,
++	printf("nio: ipc_init before kernel_map\n");
+ 	    IPC_KERNEL_MAP_SIZE, VM_MAP_CREATE_PAGEABLE,
+ 	    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, KMS_PERMANENT | KMS_NOFAIL,
+ 	    VM_KERN_MEMORY_IPC).kmr_submap;
+ 
+ 	ipc_kernel_copy_map = kmem_suballoc(kernel_map, &ipc_kernel_copy_range.min_address,
++	printf("nio: ipc_init before copy_map\n");
+ 	    IPC_KERNEL_COPY_MAP_SIZE,
+ 	    VM_MAP_CREATE_PAGEABLE | VM_MAP_CREATE_DISABLE_HOLELIST,
+ 	    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, KMS_PERMANENT | KMS_NOFAIL,
+@@ -199,6 +204,8 @@ ipc_init(void)
+ 	ipc_kernel_copy_map->wait_for_space = TRUE;
+ 
+ 	ipc_host_init();
++	printf("nio: ipc_init before ipc_host_init\n");
+ 	ux_handler_init();
++	printf("nio: ipc_init after ux_handler_init\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_LAST, ipc_init);
+diff --git a/osfmk/ipc/ipc_voucher.c b/osfmk/ipc/ipc_voucher.c
+index d515677..d5ab877 100644
+--- a/osfmk/ipc/ipc_voucher.c
++++ b/osfmk/ipc/ipc_voucher.c
+@@ -182,8 +182,10 @@ __startup_func
+ static void
+ ipc_voucher_init(void)
+ {
++	printf("nio: ipc_voucher_init enter\n");
+ 	zone_enable_smr(zone_by_id(ZONE_ID_IPC_VOUCHERS), &voucher_smr, bzero);
+ 	smr_shash_init(&voucher_table, SMRSH_BALANCED, 128);
++	printf("nio: ipc_voucher_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, ipc_voucher_init);
+ 
+@@ -2712,6 +2714,7 @@ __startup_func
+ static void
+ user_data_attr_manager_init(void)
+ {
++	printf("nio: user_data_attr_manager_init enter\n");
+ #if defined(MACH_VOUCHER_ATTR_KEY_USER_DATA)
+ 	ipc_register_well_known_mach_voucher_attr_manager(&user_data_manager,
+ 	    (mach_voucher_attr_value_handle_t)0,
+@@ -2729,6 +2732,7 @@ user_data_attr_manager_init(void)
+ 		queue_init(&user_data_bucket[i]);
+ 	}
+ #endif
++	printf("nio: user_data_attr_manager_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, user_data_attr_manager_init);
+ 
+diff --git a/osfmk/kern/ipc_kobject.c b/osfmk/kern/ipc_kobject.c
+index bd45ee7..9be200c 100644
+--- a/osfmk/kern/ipc_kobject.c
++++ b/osfmk/kern/ipc_kobject.c
+@@ -229,6 +229,7 @@ __startup_func
+ static void
+ mig_init(void)
+ {
++	printf("nio: mig_init enter\n");
+ 	unsigned int i, n = sizeof(mig_e) / sizeof(const struct mig_subsystem *);
+ 	int howmany;
+ 	mach_msg_id_t j, pos, nentry, range;
+@@ -284,6 +285,7 @@ mig_init(void)
+ 
+ 	printf("mig_table_max_displ = %d mach_kobj_count = %d\n",
+ 	    mig_table_max_displ, mach_kobj_count);
++	printf("nio: mig_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, mig_init);
+ 
+diff --git a/osfmk/kern/waitq.c b/osfmk/kern/waitq.c
+index 596729c..4b819c8 100644
+--- a/osfmk/kern/waitq.c
++++ b/osfmk/kern/waitq.c
+@@ -625,6 +625,7 @@ __startup_func
+ static void
+ waitq_bootstrap(void)
+ {
++	printf("nio: waitq_bootstrap enter\n");
+ 	const uint32_t qsz = sizeof(struct waitq);
+ 	vm_offset_t whsize;
+ 	int cpu = 0;
+@@ -666,6 +667,7 @@ waitq_bootstrap(void)
+ 		/* is not cpu_number() but CPUs haven't been numbered yet */
+ 		*setid = cpu++;
+ 	}
++	printf("nio: waitq_bootstrap done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, waitq_bootstrap);
+ 
+diff --git a/osfmk/voucher/ipc_pthread_priority.c b/osfmk/voucher/ipc_pthread_priority.c
+index 00f98ee..974550a 100644
+--- a/osfmk/voucher/ipc_pthread_priority.c
++++ b/osfmk/voucher/ipc_pthread_priority.c
+@@ -110,6 +110,7 @@ __startup_func
+ static void
+ ipc_pthread_priority_init(void)
+ {
++	printf("nio: ipc_pthread_priority_init enter\n");
+ 	/* Register the ipc_pthread_priority manager with the Vouchers sub system. */
+ 	ipc_register_well_known_mach_voucher_attr_manager(
+ 		&ipc_pthread_priority_manager,
+@@ -118,6 +119,7 @@ ipc_pthread_priority_init(void)
+ 		&ipc_pthread_priority_voucher_attr_control);
+ 
+ 	kprintf("IPC_PTHREAD_PRIORITY subsystem is initialized\n");
++	printf("nio: ipc_pthread_priority_init done\n");
+ }
+ STARTUP(MACH_IPC, STARTUP_RANK_FIRST, ipc_pthread_priority_init);
+ 
