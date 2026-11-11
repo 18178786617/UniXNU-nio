@@ -873,8 +873,19 @@ jobs:
       # The branch is an orphan, like the diagnostics one: it carries the
       # kernel and its record and nothing else, and it never touches the
       # history of the source.
+      #
+      # The condition is not success(), because the step before this one
+      # uploads an artifact, and that upload is the one part of the pipeline
+      # that depends on a service outside the runner. Run 142 built the
+      # kernel and then lost it: the artifact upload failed, success() went
+      # false, this step was skipped, and no ci-kernel branch appeared even
+      # though the kernel was sitting in the tree the whole time. The branch
+      # is the path that needs no account and no service, so it does not
+      # wait for the artifact; !cancelled() still keeps it off a cancelled
+      # run. The step still copes with a build that produced no kernel: it
+      # says so and leaves nothing behind.
       - name: Publish the kernel on a branch
-        if: success()
+        if: ${{ !cancelled() }}
         continue-on-error: true
         run: |
           set +e
