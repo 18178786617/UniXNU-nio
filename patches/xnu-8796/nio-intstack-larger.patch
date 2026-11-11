@@ -1,0 +1,35 @@
+Give the boot interrupt stack room for the page fault path
+
+The early boot runs on the interrupt stack: start.s points SP_EL0 at
+intstack_top, and the kernel stays there until the first thread stack is
+registered.  A data abort taken there is answered by the page fault path,
+whose frames are deeper than the 16 KiB the stack has, so the stack runs out
+and the fault that ends the boot is the push that crossed the guard page
+rather than the fault that asked for the page.
+
+64 KiB leaves room for the boot chain and the fault path together.  The
+guard pages around the stack stay the same size, so an overflow is still
+caught by the page the push lands in.  Only the static stack grows; the one
+cpu_init() allocates per cpu keeps the size it has.
+
+---
+--- a/osfmk/arm/data.s
++++ b/osfmk/arm/data.s
+@@ -46,7 +46,16 @@
+ 	/* IRQ stack */
+ 	.globl  EXT(intstack)						// Boot processor IRQ stack
+ LEXT(intstack)
+-	.space	(INTSTACK_SIZE_NUM)
++	/*
++	 * nio: the early boot runs on this stack -- start.s points SP_EL0 at
++	 * intstack_top and the kernel stays there until the first thread stack
++	 * is registered.  A data abort taken there is answered by the page fault
++	 * path, whose frames do not fit in 16 KiB: the stack runs out and the
++	 * fault that ends the boot is the push that crossed the guard page, not
++	 * the fault that asked for the page.  Four times the size leaves room for
++	 * the boot chain and the fault path together.
++	 */
++	.space	(INTSTACK_SIZE_NUM * 4)
+ 	.globl  EXT(intstack_top)
+ LEXT(intstack_top)
+ 

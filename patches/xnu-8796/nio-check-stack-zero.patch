@@ -4,7 +4,6 @@ CHECK_KERNEL_STACK sends an EL1 data abort to fleh_invalid_stack, which
 never returns, when the interrupted sp is outside both the thread stack and
 the interrupt stack.  Early in start up TH_KSTACKPTR is zero, so the boot
 died there before the ESR was decoded.  Skip the checks in that case.
-A numeric local label is used, so the assembler cannot emit a stray symbol.
 
 The per-cpu intstack top is zero for the same reason: it is only set when
 cpu_init() runs, which is well after the early boot.  The kernel runs on the
@@ -12,8 +11,9 @@ interrupt stack at that point, so the check has to accept that stack too,
 otherwise every data abort taken there is reported as a corrupted stack.
 
 The frame fleh_invalid_stack builds is filled in from x0-x3 and the stack
-pointer only, so the pc and lr it reports are whatever the stack held.  Keep
-the real ELR_EL1 and x30 so a panic still names the faulting code.
+pointer only; SPILL_REGISTERS stores the real ELR_EL1 and x30 into it, so the
+pc and lr the panic reports are the faulting ones.
+
 ---
 --- a/osfmk/arm64/locore.s
 +++ b/osfmk/arm64/locore.s
@@ -21,7 +21,7 @@ the real ELR_EL1 and x30 so a panic still names the faulting code.
  	mrs		x1, TPIDR_EL1						// Get thread pointer
  Ltest_kstack_\@:
  	ldr		x2, [x1, TH_KSTACKPTR]				// Get top of kernel stack
-+	cbz		x2, 7701f					// nio: no stack registered yet
++	cbz		x2, Lvalid_stack_\@				// nio: no stack registered yet
  	sub		x3, x2, KERNEL_STACK_SIZE			// Find bottom of kernel stack
  	cmp		x0, x2								// if (SP_EL0 >= kstack top)
  	b.ge	Ltest_istack_\@						//    jump to istack test
@@ -29,25 +29,7 @@ the real ELR_EL1 and x30 so a panic still names the faulting code.
  Ltest_istack_\@:
  	ldr		x1, [x1, ACT_CPUDATAP]				// Load the cpu data ptr
  	ldr		x2, [x1, CPU_INTSTACK_TOP]			// Get top of istack
-+	cbz		x2, 7702f					// nio: no intstack registered yet
++	cbz		x2, Lvalid_stack_\@				// nio: no intstack registered yet
  	sub		x3, x2, INTSTACK_SIZE_NUM			// Find bottom of istack
  	cmp		x0, x2								// if (SP_EL0 >= istack top)
  	b.ge	Lcorrupt_stack_\@					//    corrupt stack pointer
-@@ -176,11 +178,17 @@
- 	stp		x2, x3, [sp, SS64_X2]				// Save x2, x3 to the exception frame
- 	mrs		x0, SP_EL0					// Get SP_EL0
- 	str		x0, [sp, SS64_SP]				// Save sp to the exception frame
-+	mrs		x0, ELR_EL1					// nio: keep the real faulting pc
-+	str		x0, [sp, SS64_PC]
-+	mrs		x0, x30						// nio: and the real link register
-+	str		x0, [sp, SS64_LR]
- 	INIT_SAVED_STATE_FLAVORS sp, w0, w1
- 	mov		x0, sp								// Copy exception frame pointer to x0
- 	adrp	x1, fleh_invalid_stack@page			// Load address for fleh
- 	add		x1, x1, fleh_invalid_stack@pageoff	// fleh_dispatch64 will save register state before we get there
- 	b		fleh_dispatch64
-+7701:
-+7702:
- Lvalid_stack_\@:
- 	ldp		x2, x3, [sp], #16			// Restore {x2-x3}
- .endmacro
