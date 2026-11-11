@@ -50,13 +50,6 @@ static bool hostStartQueue (const char **why)
   hostWrite (0x54, static_cast<uint32_t> (gHost.phys >> 32));
   if (read32 (gHost.hc, 0x50) != uint32_t (gHost.phys) ||
       read32 (gHost.hc, 0x54) != uint32_t (gHost.phys >> 32)) {
-    /* nio R297: say exactly what the controller kept, instead of only the
-     * reason string; a mismatched base is a mapping problem, not a link one. */
-    printf ("nio: utrl base wrote %08x/%08x read %08x/%08x phys %llx\n",
-            static_cast<uint32_t> (gHost.phys),
-            static_cast<uint32_t> (gHost.phys >> 32),
-            read32 (gHost.hc, 0x50), read32 (gHost.hc, 0x54),
-            static_cast<unsigned long long> (gHost.phys));
     recordTransport (kIOReturnIOError, 15);
     *why = "request list address";
     return false;
@@ -67,12 +60,6 @@ static bool hostStartQueue (const char **why)
   // The request list is running once HCLKRUN is set and the controller
   // reports the device present and the UIC command path ready.
   if (!hostWaitRegister (0x60, 1, 1) || !hostWaitRegister (0x30, 0x1 | 0x8, 0x1 | 0x8)) {
-    /* nio R297: HCS.DP (bit 0) is what says whether the controller sees a
-     * device at all; HCS.UCRDY is bit 3.  Print both with the error and doorbell
-     * registers so the next run separates power/clock/reset from link faults. */
-    printf ("nio: utrl start failed hclkrl=%08x hcs=%08x is=%08x hce=%08x\n",
-            read32 (gHost.hc, 0x60), read32 (gHost.hc, 0x30),
-            read32 (gHost.hc, 0x20), read32 (gHost.hc, 0x34));
     recordTransport (kIOReturnTimeout, 15);
     *why = "request list ready";
     return false;
