@@ -444,3 +444,5 @@ include_dirs = ["soc:dts"]
 # 4. framebuffer at 0x9c000000, 1080x2520, pitch 4320.
 # 5. touch is Novatek NT36672C over SPI (GPIO50 reset / GPIO24 irq), not ST FTS.
 # 6. keys: Vol+ on gpio-keys, Vol-/Power on PMIC PON.
+
+# nio: trigger after restoring R294 (00:17)
