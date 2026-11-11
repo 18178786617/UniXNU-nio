@@ -14,6 +14,8 @@ its frames live is worth keeping.  Only the copy is cleared, which is what
 upstream does, where init_thread.kernel_stack is zero to begin with.
 ---
 diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
+--- a/osfmk/kern/thread.c
++++ b/osfmk/kern/thread.c
 @@ -1360,6 +1360,15 @@
  #pragma clang diagnostic pop
  
