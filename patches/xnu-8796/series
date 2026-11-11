@@ -83,9 +83,9 @@ nio-compressor-landmarks.patch
 nio-heartbeat.patch
 nio-skip-zone-ro-gate.patch
 nio-stack-rw.patch
-nio-badstack-print.patch
 nio-kernel-window-rw.patch
 nio-register-boot-stack.patch
 nio-no-pinst-spsel.patch
 nio-ast-no-thread.patch
 nio-get-threadtask-null.patch
+nio-check-stack-zero.patch

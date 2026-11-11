@@ -1,0 +1,29 @@
+Let the exception be decoded before a stack is registered
+
+CHECK_KERNEL_STACK sends an EL1 data abort to fleh_invalid_stack, which
+never returns, when the interrupted sp is outside both the thread stack and
+the interrupt stack.  Early in start up TH_KSTACKPTR is zero, so the boot
+died there before the ESR was decoded.  Skip the checks in that case.
+A numeric local label is used, so the assembler cannot emit a stray symbol.
+
+---
+diff --git a/osfmk/arm64/locore.s b/osfmk/arm64/locore.s
+index 48d12cb..64c68af 100644
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -155,6 +155,7 @@
+ 	mrs		x1, TPIDR_EL1						// Get thread pointer
+ Ltest_kstack_\@:
+ 	ldr		x2, [x1, TH_KSTACKPTR]				// Get top of kernel stack
++	cbz		x2, 7701f					// nio: no stack registered yet
+ 	sub		x3, x2, KERNEL_STACK_SIZE			// Find bottom of kernel stack
+ 	cmp		x0, x2								// if (SP_EL0 >= kstack top)
+ 	b.ge	Ltest_istack_\@						//    jump to istack test
+@@ -181,6 +182,7 @@ Lcorrupt_stack_\@:
+ 	adrp	x1, fleh_invalid_stack@page			// Load address for fleh
+ 	add		x1, x1, fleh_invalid_stack@pageoff	// fleh_dispatch64 will save register state before we get there
+ 	b		fleh_dispatch64
++7701:
+ Lvalid_stack_\@:
+ 	ldp		x2, x3, [sp], #16			// Restore {x2-x3}
+ .endmacro
