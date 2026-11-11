@@ -88,3 +88,4 @@ nio-kernel-window-rw.patch
 nio-register-boot-stack.patch
 nio-no-pinst-spsel.patch
 nio-ast-no-thread.patch
+nio-get-threadtask-null.patch

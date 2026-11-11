@@ -1,0 +1,25 @@
+Make get_threadtask tolerate a null thread
+
+The AST path reaches get_threadtask with a null thread while TPIDR_EL1 is still
+zero, and get_thread_ro(NULL) faults at address zero.  Return TASK_NULL instead
+of dereferencing; every caller already has to cope with a thread that has no task
+yet during early boot.
+---
+diff --git a/osfmk/kern/bsd_kern.c b/osfmk/kern/bsd_kern.c
+index a53edad..5b833e3 100644
+--- a/osfmk/kern/bsd_kern.c
++++ b/osfmk/kern/bsd_kern.c
+@@ -795,6 +795,13 @@ set_task_loadTag(task_t task, uint32_t loadTag)
+ task_t
+ get_threadtask(thread_t th)
+ {
++	/*
++	 * nio: the AST path reaches here before any thread exists (TPIDR_EL1 is
++	 * still zero), and get_thread_ro(NULL) faults at address zero.
++	 */
++	if (th == NULL || th == THREAD_NULL) {
++		return TASK_NULL;
++	}
+ 	return get_thread_ro(th)->tro_task;
+ }
+ 
