@@ -93,3 +93,5 @@ nio-thread-ro-null-safe.patch
 nio-intstack-larger.patch
 nio-null-task-derefs.patch
 nio-vm-page-pageins-null.patch
+nio-heartbeat-wait-for-kernel-task.patch
+nio-null-parent-task.patch

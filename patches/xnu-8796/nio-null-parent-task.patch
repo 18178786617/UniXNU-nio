@@ -1,0 +1,121 @@
+Refuse a kernel thread that has no parent task
+
+thread_create_internal() passes its parent task straight to
+machine_thread_create() and to uthread_init(), neither of which can cope with
+a NULL task.  The only caller that can produce one is kernel_thread_create(),
+which uses kernel_task as the parent task, and kernel_task is NULL until
+task_init() has built it.
+
+Guard the entry point so that such a request fails cleanly instead of dying
+inside uthread_init() with a data abort at task->t_flags, and make the two
+places that dereference the task tolerate a NULL one so that a late arrival
+reports itself rather than corrupting the kernel.
+
+With this in place the boot no longer depends on the caller ordering: the
+heartbeat patch that starts a kernel thread from the ZALLOC startup phase now
+gets KERN_INVALID_ARGUMENT back instead of a crash, and the heartbeat is
+started later, once the kernel task exists.
+
+---
+diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
+--- a/osfmk/kern/thread.c
++++ b/osfmk/kern/thread.c
+@@ -1317,6 +1317,18 @@
+ 	kern_return_t kr = KERN_FAILURE;
+ 
+ 	/*
++	 * nio: a kernel thread can be requested before task_init() has built
++	 * the kernel task, and then kernel_task is still NULL.  That NULL
++	 * parent task travels down into uthread_init(), where it is
++	 * dereferenced, and the kernel dies with a data abort at task->t_flags.
++	 * Refuse the request instead, so the caller gets a clean error.
++	 */
++	if (__improbable(parent_task == TASK_NULL)) {
++		printf("nio: thread_create_internal: no parent task\n");
++		return KERN_INVALID_ARGUMENT;
++	}
++
++	/*
+ 	 *	Allocate a thread and initialize static fields
+ 	 */
+ 	new_thread = zalloc_flags(thread_zone, Z_WAITOK | Z_NOFAIL);
+diff --git a/osfmk/arm64/pcb.c b/osfmk/arm64/pcb.c
+--- a/osfmk/arm64/pcb.c
++++ b/osfmk/arm64/pcb.c
+@@ -246,9 +246,11 @@
+ 	thread->machine.kpcb = NULL;
+ 	thread->machine.exception_trace_code = 0;
+ #if defined(HAS_APPLE_PAC)
+-	thread->machine.rop_pid = task->rop_pid;
+-	thread->machine.jop_pid = task->jop_pid;
+-	if (task->disable_user_jop) {
++	/* nio: task can be NULL for a kernel thread created before the kernel
++	 * task existed. */
++	thread->machine.rop_pid = task ? task->rop_pid : 0;
++	thread->machine.jop_pid = task ? task->jop_pid : 0;
++	if (task && task->disable_user_jop) {
+ 		thread->machine.arm_machine_flags |= ARM_MACHINE_THREAD_DISABLE_USER_JOP;
+ 	}
+ #endif
+@@ -256,7 +258,9 @@
+ 
+ 
+ 
+-	if (task != kernel_task) {
++	/* nio: a NULL task means a kernel thread created before the kernel task
++	 * existed; treat it like a kernel thread instead of dereferencing it. */
++	if (task != TASK_NULL && task != kernel_task) {
+ 		/* If this isn't a kernel thread, we'll have userspace state. */
+ 		thread->machine.contextData = zalloc_flags(user_ss_zone,
+ 		    Z_WAITOK | Z_NOFAIL);
+diff --git a/bsd/kern/kern_fork.c b/bsd/kern/kern_fork.c
+--- a/bsd/kern/kern_fork.c
++++ b/bsd/kern/kern_fork.c
+@@ -1287,6 +1287,18 @@
+ 	    LCK_ATTR_NULL);
+ 
+ 	/*
++	 * nio: a kernel thread may be created before task_init() has built the
++	 * kernel task, in which case the task handed to us is NULL.  Say so
++	 * loudly and fall back to the kernel task, so that the NULL never
++	 * reaches one of the dereferences below.
++	 */
++	if (__improbable(task == TASK_NULL)) {
++		printf("nio: uthread_init: NULL task (kernel_task %p)\n",
++		    (void *)kernel_task);
++		task = kernel_task;
++	}
++
++	/*
+ 	 * Lazily set the thread on the kernel VFS context
+ 	 * to the first thread made which will be vm_pageout_scan_thread.
+ 	 */
+@@ -1298,7 +1310,7 @@
+ 		vfs_context0.vc_thread = get_machthread(uth);
+ 	}
+ 
+-	if (task_get_64bit_addr(task)) {
++	if (task != TASK_NULL && task_get_64bit_addr(task)) {
+ 		uth->uu_flag |= UT_LP64;
+ 	}
+ 
+@@ -1313,8 +1325,8 @@
+ 	if (task == kernel_task) {
+ 		kauth_cred_set(&tro_tpl->tro_cred, vfs_context0.vc_ucred);
+ 		tro_tpl->tro_proc = kernproc;
+-		tro_tpl->tro_proc_ro = kernproc->p_proc_ro;
+-	} else if (!task_is_a_corpse(task)) {
++		tro_tpl->tro_proc_ro = (kernproc != NULL) ? kernproc->p_proc_ro : NULL;
++	} else if (task != TASK_NULL && !task_is_a_corpse(task)) {
+ 		thread_ro_t curtro = current_thread_ro();
+ 		proc_t p = get_bsdtask_info(task);
+ 
+@@ -1348,7 +1360,7 @@
+ 			uth->t_dtrace_scratch = dtrace_ptss_claim_entry(p);
+ 		}
+ #endif
+-	} else {
++	} else if (task != TASK_NULL) {
+ 		tro_tpl->tro_proc_ro = task_get_ro(task);
+ 	}
+ 

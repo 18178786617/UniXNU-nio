@@ -1,0 +1,47 @@
+Do not start the heartbeat thread before the kernel task exists
+
+The heartbeat thread is started from kernel_startup_initialize_upto() as soon
+as the ZALLOC startup phase is reached, so it used to be the very first
+thread the kernel ever created.  At that point task_init() has not run yet,
+so kernel_task is still NULL: kernel_thread_create() passes kernel_task as
+the parent task, thread_create_internal() hands that NULL to uthread_init(),
+and uthread_init() reads task->t_flags through it.
+
+run-141 died exactly there, with a data abort at offset 0x3f0 of the task
+struct:
+
+    pc  0xfffffff0072c0708   _task_get_64bit_addr, the ldr w8, [x0, #0x3f0]
+    lr  0xfffffff0076cdc2c   _uthread_init + 0x5c, the return address
+    x0  0x0                  the task
+    far 0x3f0
+    esr 0x96000005
+
+machine_thread_create() did not fault before that, because it only reads
+task->t_flags when task != kernel_task, and both were NULL.
+
+The kernel task is built by task_init(), which kernel_bootstrap() calls well
+after the ZALLOC phase, so wait for it.  The next startup phase that runs
+after task_init() is STARTUP_SUB_THREAD_CALL, inside kernel_bootstrap_thread,
+so the heartbeat still comes up early and still covers the rest of the boot.
+
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -411,7 +411,15 @@
+ 	struct startup_entry *cur = startup_entry_cur;
+ 	static bool nio_hb_started = false;
+ 
+-	if (!nio_hb_started && startup_phase >= STARTUP_SUB_ZALLOC) {
++	/*
++	 * nio: the kernel task is created by task_init(), and kernel_bootstrap()
++	 * calls that long after the ZALLOC startup phase.  A kernel thread
++	 * started before then is handed kernel_task == NULL as its parent task,
++	 * and uthread_init() dereferences that NULL, so the kernel dies with a
++	 * data abort at task->t_flags.  Wait until the kernel task exists.
++	 */
++	if (!nio_hb_started && startup_phase >= STARTUP_SUB_ZALLOC &&
++	    kernel_task != TASK_NULL) {
+ 		thread_t th = THREAD_NULL;
+ 		nio_hb_started = true;
+ 		if (kernel_thread_start(nio_heartbeat_thread, NULL, &th) == KERN_SUCCESS) {
