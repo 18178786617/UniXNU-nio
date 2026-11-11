@@ -1,0 +1,32 @@
+Do not carry the boot thread's stack into the first kernel thread
+
+run-143 died on "Assertion failed: thread->kernel_stack == 0" (stack.c:232),
+which is the precondition stack_alloc() checks before it hands a thread a
+stack of its own.  The first thread could never satisfy it here: the port's
+nio-register-boot-stack.patch records the loader's stack in init_thread, and
+thread_create_internal() copies init_thread over the new thread wholesale,
+because that is how the new thread inherits the boot CPU state.  The copy
+carried kernel_stack along, so kernel_thread_create()'s stack_alloc() tripped
+over its own precondition on the very first thread the kernel made.
+
+init_thread keeps its value.  It is the boot thread, and the record of where
+its frames live is worth keeping.  Only the copy is cleared, which is what
+upstream does, where init_thread.kernel_stack is zero to begin with.
+---
+diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
+@@ -1360,6 +1360,15 @@
+ #pragma clang diagnostic pop
+ 
+ 		/*
++		 * nio: init_thread.kernel_stack records the loader's stack, and the
++		 * copy above carried that into this thread.  stack_alloc() asserts
++		 * that kernel_stack is still zero before it hands the thread a stack
++		 * of its own, so clear it here.  Upstream this field is zero in
++		 * init_thread and the copy is harmless.
++		 */
++		new_thread->kernel_stack = 0;
++
++		/*
+ 		 * Make the ctid table functional
+ 		 */
+ 		ctid_table_init();
