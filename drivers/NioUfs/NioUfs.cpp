@@ -1194,7 +1194,24 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) return false;
-  printf ("nio: queue ready hcs=%08x\n", read32 (gHost.hc, 0x30));
+  /* nio R296: HCS.DP is the one bit that says whether the controller sees the
+   * device at all.  Sample it for 20 ms right after the queue is up, so the next
+   * run tells power/clock/reset problems (DP never sets) apart from link
+   * problems (DP set and lost).
+   */
+  for (int sample = 0; sample < 20; ++sample) {
+    uint32_t cs = read32 (gHost.hc, 0x30);
+    if (sample == 0 || sample == 1 || sample == 5 || sample == 19 ||
+        (cs & 0x1)) {
+      printf ("nio: queue ready hcs=%08x dp=%u t=%dms\n",
+              cs, cs & 0x1u, sample);
+    }
+    if (cs & 0x1) {
+      IODelay (1000);
+      break;
+    }
+    IODelay (1000);
+  }
   /* nio R294: the UniPro link is not touched unless the transport itself
    * fails.
    *
