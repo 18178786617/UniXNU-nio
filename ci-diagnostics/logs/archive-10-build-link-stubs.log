@@ -1,0 +1,8 @@
+compiled LinkStubs.c (legacy display 0, mobile display 0, deployment 17.0)
+  _boot_log_export_put         T
+  _native_gop_handoff_call     T
+  _native_gop_handoff_memory   T
+  _native_gpu_dcvs             D
+  _native_pmap_user_mappings   T
+  _qcom_usb_debug_write        T
+PASS: 6 link stubs archived in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/link-stubs/libLinkStubs.a
