@@ -89,3 +89,4 @@ nio-no-pinst-spsel.patch
 nio-ast-no-thread.patch
 nio-get-threadtask-null.patch
 nio-check-stack-zero.patch
+nio-thread-ro-null-safe.patch

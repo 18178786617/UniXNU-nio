@@ -1,0 +1,37 @@
+diff --git a/osfmk/kern/ast.c b/osfmk/kern/ast.c
+--- a/osfmk/kern/ast.c
++++ b/osfmk/kern/ast.c
+@@ -167,6 +167,16 @@
+ 	if (thread == NULL) {
+ 		return;
+ 	}
++	/*
++	 * nio: current_thread() reads TPIDR_EL1, which does not hold a real
++	 * thread until one has been attached, so it can still carry a stale
++	 * value from before this boot.  Say which pointer it is instead of
++	 * walking into get_thread_ro() and faulting at address zero.
++	 */
++	if (thread->t_tro == NULL) {
++		printf("nio: ast: thread %p has no thread_ro\n", (void *)thread);
++		return;
++	}
+ 	task_t   task   = get_threadtask(thread);
+ 	if (task == NULL) {
+ 		return;
+diff --git a/osfmk/kern/bsd_kern.c b/osfmk/kern/bsd_kern.c
+--- a/osfmk/kern/bsd_kern.c
++++ b/osfmk/kern/bsd_kern.c
+@@ -802,6 +802,13 @@
+ 	if (th == NULL || th == THREAD_NULL) {
+ 		return TASK_NULL;
+ 	}
++	/*
++	 * nio: a thread can exist before its thread_ro has been attached,
++	 * and get_thread_ro() faults at address zero while checking it.
++	 */
++	if (th->t_tro == NULL) {
++		return TASK_NULL;
++	}
+ 	return get_thread_ro(th)->tro_task;
+ }
+ 
