@@ -652,6 +652,55 @@ jobs:
       # loop or a bare `return;` that sits at file scope. The checker reads
       # the tree's own diff and reports every added line that landed outside
       # a function. It never fails the build: it is a diagnosis, not a gate.
+      - name: Check the console blob still fits
+        # The boot console is injected into the tail padding of __TEXT_EXEC,
+        # so a patch that makes the kernel bigger takes the space the blob
+        # needs.  Run 158 built a kernel that could not be turned into an
+        # image at all, and the round only found out on the machine that was
+        # supposed to boot it.  The size is checked here instead, where the
+        # answer costs nothing.
+        if: always()
+        continue-on-error: true
+        run: |
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "no kernel to check"
+            exit 0
+          fi
+          python3 - "$kernel" <<'PY'
+          import struct, sys
+          data = open(sys.argv[1], 'rb').read()
+          ncmds = struct.unpack_from('<I', data, 16)[0]
+          off = 32
+          padding = None
+          for _ in range(ncmds):
+              cmd, size = struct.unpack_from('<II', data, off)
+              if cmd == 0x19:
+                  name = data[off+8:off+24].rstrip(b'\0').decode()
+                  vmaddr, vmsize, fileoff, filesize = struct.unpack_from('<QQQQ', data, off+24)
+                  if name == '__TEXT_EXEC':
+                      body = data[fileoff:fileoff+min(vmsize, filesize)]
+                      end = len(body)
+                      while end > 0 and body[end-1] == 0:
+                          end -= 1
+                      padding = len(body) - ((end + 15) & ~15)
+              off += size
+          if padding is None:
+              print('no __TEXT_EXEC in the kernel')
+              sys.exit(0)
+          # the blob is 9518 bytes as it stands; it is measured rather than
+          # assumed, so a change to it is noticed here
+          need = 9518
+          print('the tail padding of __TEXT_EXEC is %d bytes, the blob needs %d' % (padding, need))
+          if padding < need:
+              print('::error title=the console blob does not fit::the tail padding of '
+                    '__TEXT_EXEC is %d bytes and the blob needs %d; a patch that adds '
+                    'code took the space.  The generic startup trace covers every '
+                    'phase with two prints instead of one per function.' % (padding, need))
+          else:
+              print('the blob fits, with %d bytes to spare' % (padding - need))
+          PY
+
       - name: Check the patch series for rebase damage
         if: always()
         continue-on-error: true
