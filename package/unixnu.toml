@@ -4,13 +4,16 @@ version = 1
 # because that is the only path the loader reads.
 
 [boot]
-# The timeout is in milliseconds: DarwinBoot prints "timeout %d ms" when it
-# shows the menu, and its own example configuration uses "timeout = 10" for
-# the same key.  A value of 3 is three milliseconds, which is no timeout at
-# all: the menu comes up and waits for a keypress that nobody sends, and
-# the kernel never starts.  Ten seconds is long enough for a person to
-# pick a different entry and short enough that the phone boots by itself.
-timeout = 10000
+# The timeout is in milliseconds, not seconds: DarwinBoot prints
+# "timeout %d ms" when it shows the menu, and its own example
+# configuration uses "timeout = 10" for the same key.  A value of 3
+# means three milliseconds, which is no timeout at all -- the menu comes
+# up and waits for a keypress that nobody sends, and the kernel never
+# starts.  That is why every round photographed the same boot menu.
+#
+# 3000 is three seconds: long enough for a person to pick another
+# entry, short enough that the phone boots on its own.
+timeout = 3000
 default = "xnu"
 
 [ui]
