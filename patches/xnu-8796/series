@@ -97,3 +97,4 @@ nio-heartbeat-wait-for-kernel-task.patch
 nio-null-parent-task.patch
 nio-first-thread-kernel-stack.patch
 nio-bsd-init-trace.patch
+nio-ionvram-missing-partition.patch

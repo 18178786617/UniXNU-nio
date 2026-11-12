@@ -1,0 +1,90 @@
+Keep the NVRAM parser out of the partitions the image does not have
+
+The kernel stops in PE_init_iokit(), at the IONVRAM personality match,
+before the EARLY_BOOT phase and long before bsd_init().  The last thing
+the console shows is the NVRAM header dump that IONVRAM.cpp prints when
+it has read the image:
+
+    NVRAM : commonPartitionOffset - 0x..., commonPartitionSize - 0x800,
+            systemPartitionOffset - 0xffffffff, systemPartitionSize - 0x0
+
+The system partition is at 0xffffffff because the nio NVRAM image does
+not carry one.  nio_adt.py builds that image with a common partition and
+a free area, and no system partition, and XNU reads the partition list
+and leaves the offsets of the partitions it did not find at 0xffffffff.
+
+The size of the system partition was never initialized at all: the
+constructor sets _commonPartitionSize and nothing else, so
+_systemPartitionSize holds whatever was on the stack.  The loop that
+walks the partitions therefore passes the size test with that garbage
+value and reads _nvramImage + 0xffffffff, four gigabytes past an eight
+kilobyte image.  The boot dies there without a word on the console.
+
+Test the offset as well as the size, and initialize the two members the
+constructor left alone, so a partition that is not there is skipped
+instead of walked.  Both loops over the partitions need it: the one that
+reads the variables and the one that writes them back.
+
+--- a/iokit/Kernel/IONVRAMCHRPHandler.cpp
++++ b/iokit/Kernel/IONVRAMCHRPHandler.cpp
+@@ -320,7 +320,10 @@
+ }
+ 
+ IONVRAMCHRPHandler::IONVRAMCHRPHandler(OSSharedPtr<OSDictionary> &varDict) :
++	_commonPartitionOffset(0xFFFFFFFF),
+ 	_commonPartitionSize(0x800),
++	_systemPartitionOffset(0xFFFFFFFF),
++	_systemPartitionSize(0),
+ 	_varDict(varDict)
+ {
+ }
+@@ -490,6 +493,7 @@
+ 	OSSharedPtr<const OSSymbol> propSymbol;
+ 	OSSharedPtr<OSObject>       propObject;
+ 	NVRAMRegionInfo             *currentRegion;
++	const uint8_t               *imageData;
+ 	NVRAMRegionInfo             variableRegions[] = { { kIONVRAMPartitionCommon, _commonPartitionOffset, _commonPartitionSize},
+ 							  { kIONVRAMPartitionSystem, _systemPartitionOffset, _systemPartitionSize} };
+ 
+@@ -497,12 +501,26 @@
+ 
+ 	for (regionIndex = 0; regionIndex < ARRAY_SIZE(variableRegions); regionIndex++) {
+ 		currentRegion = &variableRegions[regionIndex];
+-		const uint8_t * imageData = _nvramImage + currentRegion->offset;
+ 
+-		if (currentRegion->size == 0) {
++		/*
++		 * nio: a partition that the image does not carry has no offset
++		 * and no size.  unserializeImage() leaves the offset at
++		 * 0xFFFFFFFF for a partition it did not find, and the size of a
++		 * partition it did not find was never initialized at all, so
++		 * the size test alone does not keep this loop out of the
++		 * partition.  Adding the offset to _nvramImage then reads
++		 * four gigabytes past the image, and the boot dies there with
++		 * no message.
++		 *
++		 * The nio NVRAM image carries a common partition and no
++		 * system one, so this is the branch that is always taken.
++		 */
++		if (currentRegion->size == 0 || currentRegion->offset == 0xFFFFFFFF) {
+ 			continue;
+ 		}
+ 
++		imageData = _nvramImage + currentRegion->offset;
++
+ 		DEBUG_INFO("region = %d\n", currentRegion->type);
+ 		cnt = 0;
+ 		while (cnt < currentRegion->size) {
+@@ -627,7 +645,11 @@
+ 	for (regionIndex = 0; regionIndex < ARRAY_SIZE(variableRegions); regionIndex++) {
+ 		currentRegion = &variableRegions[regionIndex];
+ 
+-		if (currentRegion->size == 0) {
++		/* nio: the same missing-partition case as in
++		 * unserializeVariables(): a partition the image does not
++		 * carry has no offset, and adding it to the image reads four
++		 * gigabytes past it. */
++		if (currentRegion->size == 0 || currentRegion->offset == 0xFFFFFFFF) {
+ 			continue;
+ 		}
+ 
