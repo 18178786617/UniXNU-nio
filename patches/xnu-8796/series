@@ -47,6 +47,7 @@ public-entitlements-header.patch
 source-corecrypto14-bootstrap.patch
 source-machine-layer.patch
 source-pthread-bootstrap.patch
+nio-early-boot-landmarks.patch
 zzw-native-adreno-sandbox-grant.patch
 zzwb-native-sandbox-grant-set-properties.patch
 zzx-pmap-sync-64bit-pa.patch

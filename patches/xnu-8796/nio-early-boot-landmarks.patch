@@ -1,0 +1,116 @@
+Mark the early boot functions
+
+The kernel reaches the early boot phase and does not get past it,
+and the last of the phase's own prints is on the screen while
+bsd_init's are not.  The phase is a list of startup entries, and
+this patch puts a number on each of the functions in it:
+
+    01 source_pthread_bootstrap      07 vm_pageout_create_gc_thread
+    02 telemetry_init               08 vm_deferred_reclamation_init
+    03 set_awl_scratch...           09 personas_bootstrap
+    04 iotrace_init                 10 cs_text_fixup_init
+    05 pgz_init                     11 kcov_init
+    06 kmem_crypto_init
+
+The numbers are two digits because the panel is read from a
+photograph of a phone that is held by hand.  They are also two
+digits because the space is what they compete for: the console
+blob needs 9518 bytes of the tail padding of __TEXT_EXEC and a
+kernel with nothing in it has 9648, so every marker has to fit
+in 130 bytes.
+
+---
+diff --git a/bsd/kern/source_pthread_bootstrap.c b/bsd/kern/source_pthread_bootstrap.c
+index 86a48e9..9d4ba9c 100644
+--- a/bsd/kern/source_pthread_bootstrap.c
++++ b/bsd/kern/source_pthread_bootstrap.c
+@@ -1,4 +1,5 @@
+ /* SPDX-License-Identifier: BSD-2-Clause-Patent */
++#include <kern/misc_protos.h>
+ #include <kern/startup.h>
+ #include <kern/debug.h>
+ #include <libkern/section_keywords.h>
+@@ -10,6 +11,7 @@ SECURITY_READ_ONLY_LATE(kern_return_t) source_pthread_status = KERN_FAILURE;
+ static void
+ source_pthread_bootstrap(void)
+ {
++	printf("nio: %u\n", 1);
+ 	static kmod_info_t info = {
+ 		.info_version = KMOD_INFO_VERSION,
+ 		.name = "source-libpthread",
+diff --git a/osfmk/kern/core_analytics.c b/osfmk/kern/core_analytics.c
+index 9cef6c4..a321d3a 100644
+--- a/osfmk/kern/core_analytics.c
++++ b/osfmk/kern/core_analytics.c
+@@ -23,6 +23,7 @@
+  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+  */
+ 
++#include <kern/misc_protos.h>
+ #include <kern/mpsc_queue.h>
+ #include <kern/thread.h>
+ #include <libkern/coreanalytics/coreanalytics.h>
+@@ -119,6 +120,7 @@ __startup_func
+ static void
+ telemetry_init(void *arg __unused)
+ {
++	printf("nio: %u\n", 2);
+ 	kern_return_t result;
+ 	result = mpsc_daemon_queue_init_with_thread(&core_analytics_event_queue,
+ 	    core_analytics_event_queue_invoke, CORE_ANALYTICS_EVENT_QUEUE_PRIORITY,
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
+index dbd23a4..140e3dd 100644
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -2065,6 +2065,7 @@ __startup_func
+ static void
+ set_awl_scratch_exists_flag_and_subscribe_for_pm(void)
+ {
++	printf("nio: %u\n", 3);
+ 	DTEntry base = NULL;
+ 
+ 	if (SecureDTLookupEntry(NULL, "/arm-io/wdt", &base) != kSuccess) {
+diff --git a/osfmk/kern/iotrace.c b/osfmk/kern/iotrace.c
+index d369e2d..9e29d97 100644
+--- a/osfmk/kern/iotrace.c
++++ b/osfmk/kern/iotrace.c
+@@ -29,6 +29,7 @@
+ #define __APPLE_API_PRIVATE 1
+ #define __APPLE_API_UNSTABLE 1
+ 
++#include <kern/misc_protos.h>
+ #include <kern/debug.h>
+ #include <kern/iotrace.h>
+ #include <kern/zalloc.h>
+@@ -61,6 +62,7 @@ __startup_func
+ static void
+ iotrace_init(void)
+ {
++	printf("nio: %u\n", 4);
+ 	int entries_per_cpu = DEFAULT_IOTRACE_ENTRIES_PER_CPU;
+ 	int enable = mmiotrace_enabled;
+ 
+diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
+index be8be8a..3d3a92b 100644
+--- a/osfmk/kern/zalloc.c
++++ b/osfmk/kern/zalloc.c
+@@ -5404,6 +5404,7 @@ __startup_func
+ static void
+ pgz_init(void)
+ {
++	printf("nio: %u\n", 5);
+ 	if (!pgz_uses) {
+ 		return;
+ 	}
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..d5c68f0 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -2447,6 +2447,7 @@ __startup_func
+ static void
+ kmem_crypto_init(void)
+ {
++	printf("nio: %u\n", 6);
+ 	vm_size_t ctx_size = crypto_random_kmem_ctx_size();
+ 
+ 	for (uint32_t i = 0; i < KMEM_NUM_SIZECLASS; i++) {
