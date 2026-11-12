@@ -23,6 +23,7 @@ native-priv-work-interval.patch
 native-quiet-managed-page-report.patch
 native-text-fixup.patch
 native-trust-cache-runtime.patch
+nio-post-startup-landmarks.patch
 native-union-getattrlistbulk.patch
 native-union-lower-directory.patch
 native-work-interval-soft-fail.patch
@@ -58,7 +59,6 @@ native-smp-secondary.patch
 native-smp-type-clusters.patch
 sheng-platform-power.patch
 zzz-boot-progress.patch
-nio-early-boot-landmarks.patch
 xnu-8796.101.5-security-init.patch
 xnu-8796.101.5-sparse-index.patch
 linux-clang-auto-var-init.patch
