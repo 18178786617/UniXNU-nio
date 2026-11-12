@@ -1,0 +1,4 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/verified-root/verified-root-policies.cpp:11:22: warning: 'extern' variable has an initializer [-Wextern-initializer]
+   11 | extern const uint8_t verified_root_key[VR_KEY_BYTES] = {0};
+      |                      ^
+1 warning generated.
