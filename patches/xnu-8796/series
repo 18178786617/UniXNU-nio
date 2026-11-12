@@ -23,7 +23,6 @@ native-priv-work-interval.patch
 native-quiet-managed-page-report.patch
 native-text-fixup.patch
 native-trust-cache-runtime.patch
-nio-post-startup-landmarks.patch
 native-union-getattrlistbulk.patch
 native-union-lower-directory.patch
 native-work-interval-soft-fail.patch
