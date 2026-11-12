@@ -120,18 +120,18 @@ def main():
             p = patches / name
             if not p.is_file():
                 continue
+            # The file this patch creates is removed first: the tree this
+            # runs on may already carry an older version of it, and the
+            # patch has to be made against the tree the build sees.
+            created = copy / 'bsd' / 'kern' / 'source_pthread_bootstrap.c'
+            if created.is_file():
+                created.unlink()
             r = subprocess.run(['patch', '-p1', '--no-backup-if-mismatch',
                                 '--forward', '-i', str(p)],
                                cwd=copy, capture_output=True, text=True)
             if r.returncode != 0:
-                # The tree this runs on may already carry the patch: the file
-                # it creates may be there already.  That is not a failure
-                # here -- what matters is that the file is right, and the
-                # check is on the text rather than on the exit code.
-                target = copy / 'bsd' / 'kern' / 'source_pthread_bootstrap.c'
-                if not target.is_file():
-                    print(r.stdout + r.stderr, file=sys.stderr)
-                    raise SystemExit('%s did not apply' % name)
+                print(r.stdout + r.stderr, file=sys.stderr)
+                raise SystemExit('%s did not apply' % name)
             subprocess.run(['git', 'add', '-A'], cwd=copy, capture_output=True)
             subprocess.run(['git', 'commit', '-q', '-m', name, '--allow-empty'],
                            cwd=copy, capture_output=True)

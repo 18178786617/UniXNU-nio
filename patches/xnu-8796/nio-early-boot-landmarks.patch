@@ -21,16 +21,10 @@ in 130 bytes.
 
 ---
 diff --git a/bsd/kern/source_pthread_bootstrap.c b/bsd/kern/source_pthread_bootstrap.c
-index 86a48e9..9d4ba9c 100644
+index 40427eb..6f08d76 100644
 --- a/bsd/kern/source_pthread_bootstrap.c
 +++ b/bsd/kern/source_pthread_bootstrap.c
-@@ -1,4 +1,5 @@
- /* SPDX-License-Identifier: BSD-2-Clause-Patent */
-+#include <kern/misc_protos.h>
- #include <kern/startup.h>
- #include <kern/debug.h>
- #include <libkern/section_keywords.h>
-@@ -10,6 +11,7 @@ SECURITY_READ_ONLY_LATE(kern_return_t) source_pthread_status = KERN_FAILURE;
+@@ -11,6 +11,7 @@ SECURITY_READ_ONLY_LATE(kern_return_t) source_pthread_status = KERN_FAILURE;
  static void
  source_pthread_bootstrap(void)
  {
