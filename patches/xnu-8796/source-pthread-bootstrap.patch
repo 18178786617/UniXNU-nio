@@ -7,6 +7,7 @@ index 0000000..86a48e9
 +/* SPDX-License-Identifier: BSD-2-Clause-Patent */
 +#include <kern/startup.h>
 +#include <kern/debug.h>
++#include <kern/misc_protos.h>
 +#include <libkern/section_keywords.h>
 +#include <mach/kmod.h>
 +
