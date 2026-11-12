@@ -446,3 +446,5 @@ include_dirs = ["soc:dts"]
 # 6. keys: Vol+ on gpio-keys, Vol-/Power on PMIC PON.
 
 # nio: trigger after restoring R294 (00:17)
+
+# nio: rebuild after the run-187 failure with no published refs (11-13 01:11)
