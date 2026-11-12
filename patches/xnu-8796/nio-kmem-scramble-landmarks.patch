@@ -1,14 +1,13 @@
-Add landmarks inside kmem_scramble_ranges()
+Trace each kmem claim on both sides of vm_map_locate_space
 
-The console stops right after the kmem range table, and the series'
-"nio: kmem scramble done" never prints, so the stall is inside
-kmem_scramble_ranges() itself.  One landmark per step it takes
-(enter, kext_alloc_init, fuzz, shuffle, every claim) makes the next boot
-name the step that hangs instead of the function.
-
+The startup token [13.0] is kmem_range_init and the last claim printed is 9 of 17,
+so the boot hangs inside vm_map_locate_space for that claim.  Print the claim's
+size, range pointer and name before the call and the address it chose after it:
+the next boot then separates a hang inside the search from a hang after it, and
+shows whether the claim descriptor itself is garbage.
 ---
 diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
-index 2927d4b..0ed6090 100644
+index 2927d4b..d0c007e 100644
 --- a/osfmk/vm/vm_kern.c
 +++ b/osfmk/vm/vm_kern.c
 @@ -3546,6 +3546,8 @@ kmem_scramble_ranges(void)
@@ -44,12 +43,18 @@ index 2927d4b..0ed6090 100644
  
  	/*
  	 * Apply restrictions and determine range for each claim
-@@ -3590,6 +3595,8 @@ kmem_scramble_ranges(void)
+@@ -3590,11 +3595,14 @@ kmem_scramble_ranges(void)
  		vm_map_offset_t end = 0;
  		struct kmem_range_startup_spec sp = kmem_claims[i];
  		struct mach_vm_range *sp_range = sp.kc_range;
-+		printf("nio: claim %u/%u size %#llx\n", i, kmem_claim_count,
-+		    (unsigned long long)sp.kc_size);
++		printf("nio: C%u pre size=%#llx rng=%p name=%s\n", i,
++		    (unsigned long long)sp.kc_size, (void *)sp_range, sp.kc_name);
  		if (vm_map_locate_space(kernel_map, sp.kc_size, 0,
  		    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL) != KERN_SUCCESS) {
  			panic("kmem_range_init: vm_map_locate_space failing for claim %s",
+ 			    sp.kc_name);
+ 		}
++		printf("nio: C%u got %#llx\n", i, (unsigned long long)start);
+ 
+ 		end = start + sp.kc_size;
+ 		/*
