@@ -13,10 +13,10 @@ the pair, the last enter without its exit is the function that stopped.
 
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..6e10447 100644
+index bec97fb..2a98ac1 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -407,7 +407,15 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -407,6 +407,10 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		}
  		startup_phase = cur->subsystem - 1;
  		kernel_startup_log(cur->subsystem);
@@ -25,10 +25,5 @@ index bec97fb..6e10447 100644
 +			    2 * (unsigned)(cur - startup_entries));
 +		}
  		cur->func(cur->arg);
-+		if (cur->subsystem >= 15) {
-+			printf("nio: %u\n",
-+			    2 * (unsigned)(cur - startup_entries) + 1);
-+		}
  		startup_entry_cur = ++cur;
  	}
- 	kernel_startup_log(upto);

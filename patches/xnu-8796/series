@@ -1,5 +1,3 @@
-nio-startup-trace.patch
-nio-post-startup-landmarks.patch
 apple-only-cpu-tunables.patch
 architectural-timer-entry.patch
 armvirt-platform-personality.patch
@@ -60,6 +58,8 @@ native-smp-secondary.patch
 native-smp-type-clusters.patch
 sheng-platform-power.patch
 zzz-boot-progress.patch
+nio-startup-trace.patch
+nio-post-startup-landmarks.patch
 xnu-8796.101.5-security-init.patch
 xnu-8796.101.5-sparse-index.patch
 linux-clang-auto-var-init.patch
