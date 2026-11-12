@@ -17,7 +17,7 @@ index bec97fb..d796dc1 100644
 +		 * runs.  The last token on the glass is the entry that hangs.
 +		 */
 +		if (cur->subsystem >= STARTUP_SUB_KPRINTF) {
-+			kprintf("[%d.%d]", cur->subsystem, cur->rank);
++			kprintf("\n[%d.%d]", cur->subsystem, cur->rank);
 +		}
  		cur->func(cur->arg);
  		startup_entry_cur = ++cur;
