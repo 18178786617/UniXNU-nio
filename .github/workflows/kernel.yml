@@ -545,7 +545,21 @@ jobs:
           # tree under out/, so a failure in the plan or in the driver was
           # invisible to everything that reads those logs.
           set -o pipefail
-          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log"
+          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
+
+          # The kernel, not unixnu's exit code, decides whether this step
+          # failed.  Run 157 built the kernel and the recipe still returned
+          # nonzero, so the step failed, the artifact upload was skipped and
+          # the kernel was lost even though it was sitting in the tree the
+          # whole time.  The kernel is the thing the round is for, and it is
+          # on the disk, so its presence is the verdict.  A round that
+          # produced no kernel still fails here.
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "::error title=no kernel::the build produced no kernel.macho"
+            exit 1
+          fi
+          echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
 
       - name: Collect the logs
         # The logs are collected before anything reports on them, so that a
@@ -852,14 +866,19 @@ jobs:
           echo "the failure was explained in the run summary and on the ci-diagnostics branch"
 
       - name: Upload the kernel
-        if: success()
+        # always(), not success(): the artifact is one of the two ways the
+        # kernel leaves the runner, and the step before it now fails only
+        # when there is no kernel at all, so the artifact and the branch
+        # are published together.
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nio-kernel
           path: |
             out/*/*/*/kernel/kernel.macho
             out/*/*/*/kernel/*.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       # The kernel is the one thing a person needs to get at, and the
@@ -912,13 +931,25 @@ jobs:
           cd device
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan ci-kernel
+          # The checkout is not clean: the steps before this one wrote into
+          # the device tree, and `git checkout --orphan` refuses to switch
+          # over those changes.  The step has `set +e`, so the failure went
+          # unnoticed, the commit that followed carried the whole device
+          # checkout instead of the kernel alone, and the push was turned
+          # down for its size -- which is why run 157 built the kernel and
+          # left nothing behind.  The tree is thrown away first: what goes
+          # on the branch is the kernel and nothing else.
+          git checkout --orphan ci-kernel >/dev/null 2>&1 || git checkout -B ci-kernel
           git rm -rf --cached . >/dev/null 2>&1 || true
+          git clean -fdx >/dev/null 2>&1 || true
           mkdir -p ci-kernel
-          rm -rf ci-kernel/*
           cp -rf "$stage/ci-kernel/." ci-kernel/ 2>/dev/null
           git add -f ci-kernel
           git commit -q -m "ci: the kernel of run $GITHUB_RUN_NUMBER" || true
+          # Only the kernel is on the branch; a commit that carries more than
+          # that is turned down by the remote for its size, so what is about
+          # to be pushed is named before the push, not after it.
+          echo "the branch carries $(git ls-files | wc -l) file(s)"
           if ! out=$(git push origin HEAD:refs/heads/ci-kernel/run-$GITHUB_RUN_NUMBER 2>&1); then
             echo "::error title=the kernel branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
           else
