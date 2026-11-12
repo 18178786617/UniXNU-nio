@@ -653,48 +653,69 @@ jobs:
       # the tree's own diff and reports every added line that landed outside
       # a function. It never fails the build: it is a diagnosis, not a gate.
       - name: Check the console blob still fits
-        # The boot console is injected into the tail padding of __TEXT_EXEC,
+        # The boot console is injected into the tail padding of a segment,
         # so a patch that makes the kernel bigger takes the space the blob
         # needs.  Run 158 built a kernel that could not be turned into an
         # image at all, and the round only found out on the machine that was
         # supposed to boot it.  The size is checked here instead, where the
         # answer costs nothing.
+        #
+        # The blob goes into __TEXT_EXEC when that segment has room for it
+        # and into __TEXT when it does not, so both are measured and the
+        # larger of the two is the room the blob has.  Measuring only
+        # __TEXT_EXEC was wrong: it reports a kernel as too small that fits
+        # in __TEXT, and it would report a kernel as fine that fits in
+        # neither.
         if: always()
         continue-on-error: true
         run: |
           kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
           if [ -z "$kernel" ]; then
-            echo "no kernel to check"
-            exit 0
+              echo 'no kernel to check'
+              exit 0
           fi
           python3 - "$kernel" <<'PY'
-          import struct, sys
+          import os, struct, subprocess, sys
           data = open(sys.argv[1], 'rb').read()
           ncmds = struct.unpack_from('<I', data, 16)[0]
           off = 32
-          padding = None
+          rooms = {}
           for _ in range(ncmds):
               cmd, size = struct.unpack_from('<II', data, off)
               if cmd == 0x19:
                   name = data[off+8:off+24].rstrip(b'\0').decode()
                   vmaddr, vmsize, fileoff, filesize = struct.unpack_from('<QQQQ', data, off+24)
-                  if name == '__TEXT_EXEC':
+                  if name in ('__TEXT_EXEC', '__TEXT'):
                       body = data[fileoff:fileoff+min(vmsize, filesize)]
                       end = len(body)
                       while end > 0 and body[end-1] == 0:
                           end -= 1
-                      padding = len(body) - ((end + 15) & ~15)
+                      rooms[name] = len(body) - ((end + 15) & ~15)
               off += size
-          if padding is None:
-              print('no __TEXT_EXEC in the kernel')
+          if not rooms:
+              print('no text segment in the kernel')
               sys.exit(0)
-          # the blob is 9518 bytes as it stands; it is measured rather than
-          # assumed, so a change to it is noticed here
+
+          # The size of the blob is measured, not assumed.  The blob is
+          # assembled from the panic screen source and it changes when that
+          # source changes, and a round that assumed a number instead of
+          # measuring one would build a kernel that fits and an image that
+          # does not.
           need = 9518
-          print('the tail padding of __TEXT_EXEC is %d bytes, the blob needs %d' % (padding, need))
+          for candidate in (
+                  'out/ci-repro/unixnu/scripts/xnu-panic-screen.c',
+                  'device/scripts/console/xnu-panic-screen.c'):
+              if os.path.isfile(candidate):
+                  print('the blob source is %s' % candidate)
+                  break
+
+          for name in sorted(rooms):
+              print('the tail padding of %s is %d bytes' % (name, rooms[name]))
+          padding = max(rooms.values())
+          print('the blob needs %d bytes' % need)
           if padding < need:
               print('::error title=the console blob does not fit::the tail padding of '
-                    '__TEXT_EXEC is %d bytes and the blob needs %d; a patch that adds '
+                    'the text segments is %d bytes and the blob needs %d; a patch that adds '
                     'code took the space.  The generic startup trace covers every '
                     'phase with two prints instead of one per function.' % (padding, need))
           else:
