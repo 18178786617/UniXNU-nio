@@ -1,0 +1,1036 @@
+name: Build nio kernel
+
+# Builds kernel.macho from Apple's XNU source on a macOS 26 (arm64) runner
+# and publishes it as an artifact. This repository is the device repository;
+# the UniXNU build system is checked out beside it.
+#
+# The host architecture does not decide the product architecture: clang
+# cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
+# arm64.
+#
+# The runner is macos-26, and the Xcode is pinned to 26.6, because that is the
+# pair UniXNU develops against. Upstream says so in its own workflow:
+#
+#   "Pinned: macos-latest moves between images (macos-15 had an Xcode whose
+#    clang rejects the warning options the build passes with -Werror).
+#    macos-26 is arm64 and carries the Xcode 26 line the build is developed
+#    with."
+#
+# This workflow ran on macos-15-intel with the newest Xcode the image carried
+# (26.3) until run 23, and it never produced a kernel. The build reached the
+# XNU compile and the libpthread archive, and each of them reported a failure
+# that a newer clang does not report: the tree's own -Werror turned warnings
+# into errors, and the libpthread compile ended with "22 warnings and 1 error
+# generated" whose error line the recipe had already cut out of its own log.
+# The "Match the warning flags to this clang" step existed to paper over the
+# difference instead of removing it: it trimmed the option list the build
+# passes, so the tree compiled with fewer warnings than it was written for,
+# and the warning that became the error was still there.
+#
+# macos-26 and Xcode 26.6 are the pair the upstream build is tested on. The
+# macos-15 path is kept as an input for a machine that cannot reach the arm64
+# image, and it is not the one the kernel is built with.
+#
+# It is the nio counterpart of UniXNU's own "macOS build" workflow with one
+# deliberate difference: that workflow publishes text logs only. Here the kernel
+# is the deliverable the phone needs, so the artifact carries kernel.macho and
+# its prelink record. Run this from a private repository if that matters.
+
+on:
+  workflow_dispatch:
+    inputs:
+      unixnu_ref:
+        description: UniXNU commit to build with
+        required: true
+        default: "04573c510c5fd4892ca6948739389141cc9e05f5"
+      defconfig:
+        description: Defconfig name from configs/
+        required: true
+        default: "nio_defconfig"
+      runner:
+        description: >-
+          Runner image. macos-15 is arm64 and is the one that is actually
+          scheduled: macos-26 sits in the queue for hours on this account, and
+          a build that never starts says nothing about the kernel.
+          macos-15-intel keeps the x86_64 path available.
+        required: false
+        default: "macos-15"
+      xcode:
+        description: Xcode version, or "auto" for the newest installed on the image
+        required: false
+        default: "auto"
+      ipsw_url:
+        description: IPSW URL (empty uses board.toml)
+        required: false
+        default: ""
+      kernelcache_url:
+        description: >-
+          URL of the gzipped donor kernelcache (the arm64 slice of the iOS
+          16.5 kernelcache). Empty uses the release asset of this repository.
+        required: false
+        default: ""
+  # A push to main also builds, but only when something the kernel is made of
+  # changed. The bring-up loop commits one board change at a time and needs the
+  # artifact of every one of them, and dispatching by hand each time is the
+  # step that gets forgotten. The path filter keeps the UEFI-side commits
+  # (rootfs/, which carry their own image and their own build) from spending
+  # macOS runner minutes on a kernel that did not change.
+  #
+  # The scripts are named one by one, because scripts/ holds two kinds: the
+  # ones the kernel is built from (the archives, the link stubs, the prelink
+  # record, the reference table the libpthread build compares against) and
+  # the ones that make the images around it (the ADT, the packaging). A
+  # change to the second kind does not touch the kernel, and building it
+  # anyway spends a runner on a build that says the same thing twice.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/kernel.yml"
+      - "board.toml"
+      - "configs/**"
+      # drivers/ is the kernel's own source on this board. NioUfs is compiled
+      # into the kernel link (build-nio-ufs-archive.py copies libNioUfs.a to
+      # the path build-xnu-4k-baseline.sh force-loads as libShengUfs.a), so a
+      # driver change is a kernel change. R243 changed only NioUfs.cpp and no
+      # run started: the filter listed the scripts that build the kernel but
+      # not the directory the board's kernel code lives in.
+      - "drivers/**"
+      - "donor/**"
+      - "os-profiles/**"
+      - "package/**"
+      - "patches/**"
+      # Every recipe that compiles something into the kernel or its archives,
+      # by pattern rather than by name. The names were listed one at a time and
+      # the list kept falling behind: R247 and R248 fixed
+      # build-storage-family.py and neither started a run, so two fixes sat on
+      # main while the last visible run was still the one before them.
+      - "scripts/build-*.py"
+      - "scripts/emit-prelink-nio.py"
+      - "scripts/reference/**"
+      # The device tree is compiled into the ADT the kernel boots from, so a node
+      # that is enabled there changes the kernel image. It was missing from this
+      # list: R257 enabled UFS in dts/nio.dts, which is what makes the storage
+      # driver probe at all.
+      - "dts/**"
+      # Measured tables the archives are built from -- the prelink pin the
+      # storage bindings write their absolute symbols from, and the recipe that
+      # measures it. A pin change is a kernel change; a .json under scripts/ was
+      # not covered by any pattern here.
+      - "scripts/*.json"
+      - "scripts/pin-*.py"
+
+permissions:
+  # read is enough for the build itself. The one write is for the
+  # ci-diagnostics branch, which carries the failure report so that a
+  # broken build can be read without a GitHub account: the artifact that
+  # holds the same logs needs one to download.
+  #
+  # There is no "workflows" key here on purpose. It reads like it belongs,
+  # and GitHub does not accept it: the whole workflow file is refused with
+  # "Unexpected value 'workflows'" and the run never starts. The diagnostics
+  # branch needs no such permission, because it is built as an orphan branch
+  # whose commits carry the report and nothing else.
+  contents: write
+
+concurrency:
+  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kernel:
+    # macos-26 is the arm64 image with the Xcode 26 line the build is developed
+    # against; upstream pins it and pins the Xcode version, and the reason it
+    # gives is that macos-15's clang rejects the warning options the build
+    # passes with -Werror. The Intel image stays available as a fallback for a
+    # machine that cannot reach the arm64 one, and the Xcode is pinned there
+    # too: "auto" picks whatever the image carries, and that is how this build
+    # ended up on a clang that its own tree does not compile with.
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    timeout-minutes: 360
+    env:
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+      UNIXNU_IPSW: ${{ inputs.ipsw_url || '' }}
+      DEFCONFIG: ${{ inputs.defconfig || 'nio_defconfig' }}
+
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: UniXNU/UniXNU
+          ref: ${{ inputs.unixnu_ref || '04573c510c5fd4892ca6948739389141cc9e05f5' }}
+          path: .
+          persist-credentials: false
+
+      - name: Check out the device repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: device
+          # The credentials are kept so that the failure report can be
+          # pushed onto the ci-diagnostics branch of THIS repository. The
+          # token is written into device/.git/config and is used by nothing
+          # else: the build reads the tree and never talks to the network.
+          persist-credentials: true
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Select Xcode
+        env:
+          XCODE_INPUT: ${{ inputs.xcode || 'auto' }}
+        run: |
+          echo "host: $(uname -m) $(sw_vers -productVersion)"
+          echo "installed on this image:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none)"
+          # The version is picked, not guessed. "auto" is the newest that is
+          # installed, and the newest is not necessarily the one the build was
+          # written for: this build ran on the Intel image, where "auto" picked
+          # Xcode 26.3, and the tree did not compile with it. The number comes
+          # from the workflow input, and the input names the version upstream
+          # develops against.
+          if [ "$XCODE_INPUT" = "auto" ] || [ -z "$XCODE_INPUT" ]; then
+            app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          else
+            app=""
+            for candidate in "/Applications/Xcode_${XCODE_INPUT}.app" "/Applications/Xcode${XCODE_INPUT}.app" \
+                             "/Applications/Xcode_${XCODE_INPUT}_Release.app" "/Applications/Xcode${XCODE_INPUT}_Release.app"; do
+              [ -d "$candidate" ] && { app="$candidate"; break; }
+            done
+            # The image carries the versions it carries; if the pinned one is
+            # not there, the newest one is used and the fact is said out loud,
+            # because a build on another clang is a build that has to be read
+            # differently.
+            if [ -z "$app" ]; then
+              app=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+              echo "::warning title=the pinned Xcode is not on this image::$XCODE_INPUT was asked for, $(basename "${app:-none}") is used"
+            fi
+          fi
+          if [ -z "$app" ] || [ ! -d "$app" ]; then
+            echo "::error::no usable Xcode; installed: $(printf '%s ' /Applications/Xcode*.app)"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
+          echo "XCODE_APP=$app" >> "$GITHUB_ENV"
+          echo "selected: $app"
+          xcrun clang++ --version | head -2
+
+      - name: Check the inputs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f device/board.toml ] || fail "the device repository has no board.toml"
+          [ -f "device/configs/$DEFCONFIG" ] || fail "device/configs/$DEFCONFIG not found"
+          [ -d "$DEVELOPER_DIR" ] || fail "Xcode not found at $DEVELOPER_DIR; installed: $(printf '%s ' /Applications/Xcode_*.app)"
+          grep -q '^schema_version = 2' device/board.toml || fail "board.toml must be schema_version 2"
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install host tools
+        run: |
+          # cmake and ninja come with the image. Homebrew LLVM stays keg-only:
+          # the archive builders find it themselves, the rest uses Xcode clang.
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+          for tool in git make clang cmake ninja unifdef ld.lld mformat mcopy; do
+            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          done
+
+      - name: Match the warning flags to this clang
+        run: |
+          # The component builders pass a long -Wno-* list next to -Werror, so one option
+          # this clang does not know is a hard error:
+          #   error: unknown warning option '-Wno-unnecessary-virtual-specifier'
+          #   [-Werror,-Wunknown-warning-option]
+          # Upstream pins macos-26 because of this; on any image whose Xcode is older the
+          # list has to be trimmed. Ask clang which options it knows rather than guessing.
+          #
+          # scripts/unixnu/ is deliberately left alone. The framework hands its flags to
+          # clang through CCC_OVERRIDE_OPTIONS and the XNU build runs with BUILD_WERROR=0,
+          # so an unknown option there is a plain warning; rewriting a Python string in
+          # that directory is how an earlier version of this step turned a warning into a
+          # SyntaxError in the middle of the checkout.
+          xcrun clang++ --version | head -1
+          probe="$RUNNER_TEMP/flagprobe.cpp"
+          printf 'int main() { return 0; }\n' > "$probe"
+          build_scripts=$(find scripts -path scripts/unixnu -prune -o -type f \( -name '*.py' -o -name '*.sh' \) -print)
+          candidates=$(grep -hoE -- '-Wno-[A-Za-z0-9_+.-]+' $build_scripts | sort -u || true)
+          dropped=""
+          for flag in $candidates; do
+            if xcrun clang++ -Werror "$flag" -c "$probe" -o "$RUNNER_TEMP/flagprobe.o" >/dev/null 2>&1; then
+              continue
+            fi
+            dropped="$dropped $flag"
+          done
+          if [ -z "$dropped" ]; then
+            echo "every -Wno-* option in the build scripts is accepted by this clang"
+            exit 0
+          fi
+          echo "unknown to this clang:$dropped"
+          python3 - $dropped <<'PY'
+          import pathlib, re, subprocess, sys
+
+          flags = sys.argv[1:]
+          pattern = '|'.join(re.escape(flag) for flag in flags)
+
+          # Three shapes only, and every one of them keeps quotes paired: a quote may
+          # only go away together with the flag it wraps.
+          #   ['-Wall', '-Wno-x', '-Wextra']    the whole list element
+          #   CFLAGS="-O2 -Wno-x"              the bare token inside a string
+          #   '# +-Wno-x +-Wno-y'              the '+flag' form CCC_OVERRIDE uses
+          element = re.compile(r"(['\"])(?:%s)\1[ \t]*,?[ \t]*" % pattern)
+          addition = re.compile(r"\+[ \t]*(?:%s)(?=[\s'\"]|$)" % pattern)
+          token = re.compile(r"(?<=[\s'\"])(?:%s)(?=[\s'\"]|$)" % pattern)
+
+          def _shell_ok(path):
+              try:
+                  return subprocess.run(['bash', '-n', str(path)], capture_output=True).returncode == 0
+              except OSError:
+                  return True
+
+
+          changed = []
+          for path in sorted(pathlib.Path('scripts').rglob('*')):
+              if path.suffix not in ('.py', '.sh') or not path.is_file():
+                  continue
+              if 'unixnu' in path.parts:
+                  continue
+              text = path.read_text()
+              new = token.sub('', addition.sub('', element.sub('', text)))
+              if new != text:
+                  path.write_text(new)
+                  changed.append(path)
+                  print(f'trimmed {path}')
+
+          # A trimmed file that no longer parses would be worse than the error this step
+          # sets out to fix, so each one is checked and put back if the edit broke it.
+          for path in changed:
+              if path.suffix == '.py':
+                  try:
+                      compile(path.read_text(), str(path), 'exec')
+                      continue
+                  except SyntaxError as exc:
+                      print(f'{path}: {exc}')
+              elif _shell_ok(path):
+                  continue
+              subprocess.run(['git', 'checkout', '--', str(path)], check=False)
+              print(f'::warning::reverted {path}, the edit broke its syntax')
+          PY
+          echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
+
+      # board.os_profile names a directory under UniXNU/profiles/os/. The iOS
+      # 16.5 profile this port targets does not exist upstream yet, so it
+      # ships in this repository (os-profiles/ios-16.5-20F66/) and is installed
+      # into the checkout before the configuration is resolved. The step reads
+      # the name out of board.toml, so it does the right thing for whichever
+      # profile the board currently names: the 16.5 one is installed from this
+      # repository, and a profile that is upstream is used as it is.
+      - name: Install the OS profile
+        run: |
+          profile=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['board']['os_profile'])")
+          echo "os profile: $profile"
+          if [ -d "device/os-profiles/$profile" ]; then
+            mkdir -p "profiles/os"
+            cp -R "device/os-profiles/$profile" "profiles/os/$profile"
+            echo "installed device-provided profile"
+          else
+            echo "using the profile already in UniXNU"
+          fi
+          test -f "profiles/os/$profile/profile.toml"
+
+      # The prelink step needs the donor kernelcache, and the donor for a 16.5
+      # build is the arm64 slice of the iOS 16.5 kernelcache. The restore image
+      # is not redistributable, so it cannot be downloaded here the way the
+      # 17.7.11 one was.
+      #
+      # The donor lives in this repository under donor/. It is checked here
+      # against board.toml's pin before the build uses it, so a truncated or
+      # substituted file cannot reach the prelink.
+      #
+      # UNIXNU_KERNELCACHE makes scripts/unixnu/kernel.py:prelink() take the
+      # donor from this path instead of from an IPSW, so no IPSW is fetched at
+      # all.
+      #
+      # The kernelcache_url input overrides the file: a build that wants a
+      # different donor points it at one.
+      - name: Fetch the donor kernelcache
+        env:
+          KERNELCACHE_URL: ${{ inputs.kernelcache_url || '' }}
+        run: |
+          pin=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['kernel']['prelink']['kernelcache_sha256'])")
+          echo "pin: $pin"
+          mkdir -p out/kernelcache
+          if [ -n "$KERNELCACHE_URL" ]; then
+            echo "fetching $KERNELCACHE_URL"
+            curl -fsSL --retry 3 -o out/kernelcache/kernelcache.gz "$KERNELCACHE_URL"
+          else
+            echo "using the donor in the repository"
+            cp device/donor/kernelcache.decompressed.gz out/kernelcache/kernelcache.gz
+          fi
+          ls -la out/kernelcache/kernelcache.gz
+          gzip -t out/kernelcache/kernelcache.gz
+          gzip -dc out/kernelcache/kernelcache.gz > out/kernelcache/kernelcache.decompressed
+          got=$(shasum -a 256 out/kernelcache/kernelcache.decompressed | cut -d' ' -f1)
+          echo "sha256: $got"
+          if [ "$got" != "$pin" ]; then
+            echo "::error::the kernelcache does not match board.toml's pin"
+            exit 1
+          fi
+          echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/out/kernelcache/kernelcache.decompressed" >> "$GITHUB_ENV"
+
+      - name: Register the board's own components
+        run: |
+          # The component catalog lives in the UniXNU checkout (components.toml
+          # at its root) and this repository is not allowed to change that
+          # repository. A component that is written here -- drivers/NioUfs --
+          # would therefore be unknown to "unixnu build", which refuses any
+          # identifier the catalog does not list.
+          #
+          # The entry is appended to the catalog before the configuration is
+          # resolved, so the board can select it like any other component.
+          # It names no repository: the driver is in this repository, and the
+          # build finds it through the device repository's own drivers/ folder,
+          # which the source resolver scans.
+          if [ -f device/drivers/NioUfs/NioUfs.cpp ]; then
+            cat >> components.toml <<'CATALOG'
+
+          # nio's own UFS driver, ported from the sheng SM8550 one. The GCC
+          # register offsets are kona's; see drivers/NioUfs/GccUfs.h.
+          [[component]]
+          id = "NioUfs"
+          kind = "driver"
+          function = "SM8250 UFS transport and nio persistent storage"
+          scope = "board"
+          path = "drivers/NioUfs"
+          hardware = ["SM8250 UFS controller"]
+          os_abi = ["ios-16.5-20F66"]
+          board_dependencies = ["nio userdata layout", "SM8250 clocks and SMMU"]
+          verified_devices = ["nio"]
+          dependencies = []
+          source_files = ["NioUfs.cpp"]
+          runtime_identifiers = ["NioUfs", "NioUfs.cpp", "org.unixnu.nio.NioUfs"]
+          build_stage = "kernel"
+          build = ["build-arm-driver.py", "NioUfs"]
+          outputs = ["build/nio-ufs/libNioUfs.a"]
+          CATALOG
+            echo "registered the board component NioUfs"
+            # The catalog entry names the source path relative to the UniXNU
+            # checkout root ("drivers/NioUfs"), and the source resolver looks
+            # for a board component in exactly that place. The driver lives in
+            # this repository, so it is placed there before the configuration
+            # is resolved.
+            mkdir -p drivers
+            cp -r device/drivers/NioUfs drivers/NioUfs
+            ls drivers/NioUfs
+          fi
+
+      - name: Let the owner-root gate see the board's UFS transport
+        run: |
+          # build-xnu-4k-baseline.sh refuses CONFIG_XNU_OWNER_ROOT_AUDIT and
+          # CONFIG_XNU_OWNER_ROOT_TRUST unless the storage transport is
+          # NativeVirtioBlock or the source-storage runtime. What that check is
+          # really asking is whether the root came from media the kernel can
+          # name, and this board answers it from NativeUfs: drivers/NioUfs
+          # publishes the read-only root windows and binds the answer to the
+          # live IORegistry (the owner-root binding at the bottom of
+          # NioUfs.cpp). The change is one condition per gate entry, and it is
+          # applied here rather than in a fork because the gate lives in a
+          # repository this board does not own.
+          python3 - <<'PY'
+          import pathlib
+          path = pathlib.Path('scripts/build-xnu-4k-baseline.sh')
+          text = path.read_text()
+          edits = [
+              ('[ "$OWNER_ROOT_PROBE" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; then',
+               '[ "$OWNER_ROOT_PROBE" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; then'),
+              ('{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; }; }; then',
+               '{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; }; }; then'),
+          ]
+          for old, new in edits:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('the gate condition matched %d times, expected exactly 1: %s'
+                                   % (count, old[:70]))
+              text = text.replace(old, new)
+          path.write_text(text)
+          print('owner-root gate: NativeUfs is accepted as mounted-media binding')
+          PY
+          bash -n scripts/build-xnu-4k-baseline.sh
+
+      - name: Let the storage recipe see the IOStorageFamily headers
+        run: |
+          # build-arm-driver.py compiles a driver by replaying one of the XNU
+          # build's own compile records (IOPlatformExpert.cpo.json). That record
+          # carries the include paths the kernel build needs, and the kernel does
+          # not build IOStorageFamily: it is a separate Apple project, linked
+          # into the kernel as a kext, so <IOKit/storage/IOBlockStorageDevice.h>
+          # is in none of those paths. The script already knows this and adds
+          # build/storage-abi/include -- the public header set
+          # prepare-storage-headers.py just built out of the pinned
+          # IOStorageFamily checkout -- but only for the component ids it was
+          # written with. This board's transport is NioUfs, which is not one of
+          # them, so run 32 stopped at:
+          #
+          #   NioUfs.cpp:24:10: fatal error:
+          #   'IOKit/storage/IOBlockStorageDevice.h' file not found
+          #
+          # The second condition is the one that turns owner verification on for
+          # the transport. NioUfs authenticates every root window against a
+          # signed bundle (vr_open, SHA-384, the trusted key), so it needs
+          # kits/VerifiedRoot/include and -DNATIVE_VERIFIED_BLOCK=1 exactly as
+          # the transports the pipeline knows about do. Run 45 would stop at
+          #   'verified_root.h' file not found
+          # without it. The policy table itself comes from
+          # scripts/build-verified-root.py; this board has no signed bundle, so
+          # that table is empty and the driver says so instead of pretending.
+          python3 - <<'PY'
+          import pathlib
+          path = pathlib.Path('scripts/build-arm-driver.py')
+          text = path.read_text()
+          edits = [
+              ("if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):",
+               "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs', 'NioUfs'):"),
+              ("if component == 'NativeUfs':",
+               "if component in ('NativeUfs', 'NioUfs'):"),
+          ]
+          for old, new in edits:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit('the condition %r matched %d times, expected exactly 1'
+                                   % (old[:50], count))
+              text = text.replace(old, new)
+          path.write_text(text)
+          compile(path.read_text(), str(path), 'exec')
+          print('storage headers: NioUfs is given build/storage-abi/include')
+          print('owner verification: NioUfs compiles with -DNATIVE_VERIFIED_BLOCK=1')
+          PY
+
+      - name: Resolve the configuration
+        run: |
+          ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
+          # `unixnu status` is not run here on purpose. It resolves the patch
+          # series, `component:XnuPrelink/...` included, and that kit is a git
+          # submodule of the UniXNU checkout. actions/checkout leaves submodule
+          # directories empty, and they are only filled by `unixnu build` ->
+          # update_submodules(). Asking for status first fails with
+          # "patch missing: .../kits/XnuPrelink/patches/...". The build reports
+          # the same series (one "kernel: patch" line per patch) and the status
+          # table is collected afterwards, in "Show the result".
+          config=$(ls -1 out/*/*/*/.config 2>/dev/null | head -1)
+          switches=$(grep -c '^CONFIG_' "$config" || true)
+          echo "merged config: $config ($switches switches)"
+
+      - name: Build the kernel
+        env:
+          # prepare-xnu-source.py lists Apple sources through the GitHub API;
+          # anonymous calls from hosted runners hit the shared rate limit.
+          # This step also fetches the pinned sources (no separate fetch step).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # The build's own output is kept in a file as well as on the
+          # console. The output of the pipeline itself -- the "kernel: ..."
+          # lines and any Python error it ends with -- never reaches the log
+          # tree under out/, so a failure in the plan or in the driver was
+          # invisible to everything that reads those logs.
+          set -o pipefail
+          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log"
+
+      - name: Collect the logs
+        # The logs are collected before anything reports on them, so that a
+        # report can read the whole set. Two kinds of log exist and both are
+        # needed:
+        #
+        #   * out/<board>/<os>/<config>/logs/*.log -- what the recipes wrote.
+        #   * out/<board>/<os>/<config>/tree/build/<component>/*.log -- the
+        #     compiler's own output for one source file. This is the only
+        #     place the whole output is kept: a recipe that ends a failed
+        #     compile with SystemExit(output[-4500:]) cuts the beginning away,
+        #     and the beginning is where the error is. Run 23 said "22
+        #     warnings and 1 error generated" and the error itself was in no
+        #     log at all.
+        if: always()
+        continue-on-error: true
+        run: |
+          rm -rf "$RUNNER_TEMP/ci-logs"
+          mkdir -p "$RUNNER_TEMP/ci-logs"
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            cp "$log" "$RUNNER_TEMP/ci-logs/$(basename "$log")" 2>/dev/null || true
+          done
+          find out -path '*/tree/build/*' -name '*.log' -type f 2>/dev/null | head -100 | while IFS= read -r log; do
+            [ -f "$log" ] || continue
+            name=$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')
+            head -c 262144 "$log" > "$RUNNER_TEMP/ci-logs/build-$name" 2>/dev/null || true
+          done
+          [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$RUNNER_TEMP/ci-logs/status.txt" || true
+          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$RUNNER_TEMP/ci-logs/build-console.log" || true
+          echo "collected:"
+          ls -1 "$RUNNER_TEMP/ci-logs" | sed 's/^/  /'
+
+      - name: Report the failure in the annotations
+        # The annotations are the one channel that needs no account. The API
+        # answers an anonymous request for them, while the artifact that
+        # holds the same logs answers 401 and the job log answers 403. A
+        # broken build that only lives in those two places is a broken build
+        # nobody can read, which is what run 19 and run 20 were: both failed,
+        # and both left nothing behind.
+        #
+        # So the error lines of every log are copied into annotations here.
+        # The newest log comes first, because the last recipe to run is the
+        # deepest cause.
+        if: failure()
+        continue-on-error: true
+        run: |
+          set +e
+          scan() {
+            local name="$1" file="$2"
+            [ -f "$file" ] || return 0
+            local body
+            body=$(grep -E '(^|[^a-z])error:|fatal error|Undefined symbols|ld: error|ld: symbol|Error[ :]?[0-9]|Traceback|Exception|Trace/BPT|no such file|No such file' "$file" 2>/dev/null | head -20)
+            [ -z "$body" ] && return 0
+            # An annotation is one line: the newlines become %0A, and a stray
+            # percent would otherwise be read as an escape.
+            local msg
+            msg=$(printf '%s\n' "$body" | sed 's/%/%25/g; s/\r/%0D/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=$name::$msg"
+          }
+          # The console of the build comes first: it is where the pipeline's
+          # own error is.
+          scan build-console "$RUNNER_TEMP/build-console.log"
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            scan "$(basename "$log")" "$log"
+          done
+          # The size of the logs, because a push that carries a file over
+          # 100 MB is turned down and the XNU build log is that big. This
+          # says whether that is what happened.
+          sizes=$(for log in out/*/*/*/logs/*.log; do
+                    [ -f "$log" ] || continue
+                    printf '%s %s\n' "$(wc -c < "$log")" "$(basename "$log")"
+                  done | sort -rn | head -6 | sed 's/%/%25/g' | tr '\n' ' ')
+          [ -n "$sizes" ] && echo "::warning title=the size of the logs::$sizes"
+          # The step's own exit code must not be the report's business.
+          exit 0
+
+      - name: Show the result
+        if: always()
+        run: |
+          # The kit submodules exist by now, so the status table (patch order
+          # included) is meaningful; its failure must not hide the build result.
+          ./unixnu status > "$RUNNER_TEMP/status.txt" 2>&1 || true
+          find out -path '*/kernel/*' -maxdepth 6 -type f 2>/dev/null | sort || true
+          find out -name 'kernel.macho' -exec ls -la {} \; 2>/dev/null || true
+          du -sh out 2>/dev/null || true
+
+      # A hand-made rebase can move a patch block out of the function it
+      # belongs to: the patch still applies, because git matches the context
+      # lines and not the structure, and the compiler then rejects a `for`
+      # loop or a bare `return;` that sits at file scope. The checker reads
+      # the tree's own diff and reports every added line that landed outside
+      # a function. It never fails the build: it is a diagnosis, not a gate.
+      - name: Check the patch series for rebase damage
+        if: always()
+        continue-on-error: true
+        run: |
+          tree=$(find out -type d -name xnu-work -path '*/.cache/*' 2>/dev/null | head -1)
+          if [ -z "$tree" ]; then
+            echo "no patched tree: the build did not get as far as patching"
+            exit 0
+          fi
+          python3 device/tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
+
+      # The display hand-off of nio carries one set of numbers, and they are
+      # the panel's: 1080x2520 at 32 bits, 4320 bytes a row, on the region
+      # uefiplat.cfg reserves at 0x9C000000. Every stage that touches the
+      # display has to agree with them, and a disagreement does not fail
+      # loudly -- the kernel comes up and the screen is black or shows
+      # garbage, with nothing in the log. The check reads the numbers out of
+      # package/nio-hardware.json, which is their one source, and compares
+      # them against the loader's boot arguments when the build produced
+      # them. It never fails the build: it is a diagnosis, not a gate.
+      - name: Check the display hand-off
+        if: always()
+        continue-on-error: true
+        run: |
+          boot_args=""
+          for candidate in $(find out -name 'boot-args*' -o -name 'bootargs*' 2>/dev/null | head -5); do
+            [ -f "$candidate" ] && { boot_args="$candidate"; break; }
+          done
+          if [ -n "$boot_args" ]; then
+            python3 device/tools/check-display-handoff.py --boot-args "$boot_args" | tee "$RUNNER_TEMP/display.txt"
+          else
+            python3 device/tools/check-display-handoff.py | tee "$RUNNER_TEMP/display.txt"
+            echo "no boot-arguments file was produced; only the panel's own numbers were checked"
+          fi
+
+      # The build log is the thing that says why the build failed, and it is
+      # 22 MB: too big to read, and the artifact it rides in needs a GitHub
+      # account to download. So the lines that matter are copied out of it,
+      # twice, into two places that need no account:
+      #
+      #   * the run summary, which anyone can read on the run page
+      #   * the ci-diagnostics branch of this repository, which anyone can
+      #     clone over SSH
+      #
+      # The branch is the reliable one: the run summary is rendered by
+      # javascript, so a reader that does not run javascript sees nothing
+      # there. The branch is plain git.
+      #
+      # What matters is the tail of the step that failed: the compiler's or
+      # the linker's own words, not the recipe's summary line. The recipes
+      # print one "unixnu: <recipe> failed (n)" line at the end, which names
+      # the recipe but not the reason, so the log file it points at is what
+      # gets read here.
+      - name: Explain the failure
+        if: failure()
+        # This step must never be the reason the job fails, and it must never
+        # fail: a step that dies leaves no explanation of the failure that
+        # came before it. Run 19 ended with no report on the branch because
+        # this step died on its own path -- the build's log tree is at
+        # ../out after `cd device`, not at out, so the copy found nothing and
+        # the step ended on an error before it could push anything.
+        continue-on-error: true
+        run: |
+          report="$RUNNER_TEMP/failure-report.md"
+          {
+            echo "# Why the build failed"
+            echo
+            echo "run: $GITHUB_RUN_NUMBER, commit $GITHUB_SHA"
+            echo
+            # Every log the build wrote, newest name first, so the deepest
+            # cause (the last recipe to run) is read first.
+            #
+            # A tail is not enough: the compiler puts the error at the point
+            # of the failure, and a file with twenty warnings around it
+            # pushes that line past the last eighty. So the errors come
+            # first, with the lines around them, and the tail is only the
+            # closing paragraph.
+            for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+              name=$(basename "$log")
+              echo "## $name"
+              echo
+              if grep -qE '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error|Error [0-9]' "$log"; then
+                echo "### the errors"
+                echo
+                echo '```'
+                grep -nE '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error|Error [0-9]|ld: symbol' "$log" | head -40 || true
+                echo '```'
+                echo
+                echo "### around them"
+                echo
+                echo '```'
+                grep -nE -B6 -A10 '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error' "$log" | head -120 || true
+                echo '```'
+                echo
+              fi
+              echo "### the tail"
+              echo
+              echo '```'
+              tail -n 40 "$log" || true
+              echo '```'
+              echo
+            done
+            # The per-file compile logs, which the recipe cut the head off. The
+            # error of a failed compile is at the point of the failure, and a
+            # file with twenty warnings around it pushes that line out of any
+            # tail. These are the logs that still have it.
+            for log in $(ls -1 "$RUNNER_TEMP/ci-logs/"build-* 2>/dev/null); do
+              [ -f "$log" ] || continue
+              if ! grep -qE '(^|[^a-z])error:|fatal error' "$log"; then
+                continue
+              fi
+              echo "## $(basename "$log")"
+              echo
+              echo "### the errors"
+              echo
+              echo '```'
+              grep -nE '(^|[^a-z])error:|fatal error' "$log" | head -30 || true
+              echo '```'
+              echo
+              echo "### around them"
+              echo
+              echo '```'
+              grep -nE -B8 -A12 '(^|[^a-z])error:|fatal error' "$log" | head -100 || true
+              echo '```'
+              echo
+            done
+            echo "## status.txt"
+            echo
+            echo '```'
+            tail -n 60 "$RUNNER_TEMP/status.txt" 2>/dev/null || echo "(no status)" || true
+            echo '```'
+            if [ -f "$RUNNER_TEMP/scope.txt" ]; then
+              echo
+              echo "## patch scope"
+              echo
+              echo '```'
+              cat "$RUNNER_TEMP/scope.txt"
+              echo '```'
+            fi
+          } > "$report"
+          {
+            echo "## Why the build failed"
+            echo
+            echo "The full report is on the \`ci-diagnostics\` branch: \`ci-diagnostics/report.md\`."
+            echo
+            cat "$report"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Push the report onto its own branch. A branch and not the main
+          # one: this is a machine-written note about a broken build, and it
+          # must not land in the history of the source.
+          #
+          # The push happens in the device checkout, because that is the
+          # repository the branch belongs to; the checkout's token is what
+          # authorizes it.
+          #
+          # The logs are collected BEFORE the checkout moves, because after
+          # `cd device` the build's output tree is at ../out, not at out.
+          # Getting that wrong is how run 19 ended with no report at all:
+          # the step failed, and a step that fails leaves no explanation.
+          # The logs were collected in the "Collect the logs" step, before
+          # anything reported on them and before this step moves into the
+          # device checkout. After `cd device` the build's output tree is at
+          # ../out, not at out, and getting that wrong is how run 19 ended
+          # with no report at all.
+          if [ ! -d "$RUNNER_TEMP/ci-logs" ]; then
+            echo "::warning::the logs were not collected"
+            mkdir -p "$RUNNER_TEMP/ci-logs"
+          fi
+
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # An orphan branch, not a checkout of the remote one. Switching to
+          # the remote branch removes the repository's own files from the
+          # working tree, and the commit that follows then deletes the
+          # workflow file -- and a token without the workflows permission may
+          # not push that. The orphan keeps the working tree and empties only
+          # the index, so the commit carries the report and nothing else.
+          # This is the shape that pushed the reports of runs 17 and 18; the
+          # checkout shape is what made runs 19 and 20 push nothing at all.
+          git checkout --orphan ci-diagnostics
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p ci-diagnostics
+          cp "$report" ci-diagnostics/report.md
+          git add -f ci-diagnostics/report.md
+          # The complete log of every step, next to the report. The report
+          # quotes the interesting lines, but a quote can still be the wrong
+          # lines: a compiler error that sits above a wall of warnings is
+          # missed by a grep for "error:" when the message does not carry
+          # that word. The whole file does not have that problem.
+          # The logs go into the branch as one compressed archive, and the
+          # loose copies are cut to a megabyte each. GitHub refuses a push
+          # that carries a file over 100 MB, and the XNU build log is that
+          # big -- which is why runs 19 and 20 pushed nothing at all: the
+          # report step added the raw logs and the push was turned down.
+          rm -rf ci-diagnostics/logs
+          mkdir -p ci-diagnostics/logs
+          for log in "$RUNNER_TEMP/ci-logs/"*; do
+            [ -f "$log" ] || continue
+            head -c 1048576 "$log" > "ci-diagnostics/logs/$(basename "$log")"
+          done
+          (cd ci-diagnostics/logs && tar czf ../logs.tar.gz .) 2>/dev/null || true
+          git add -f ci-diagnostics/logs ci-diagnostics/logs.tar.gz
+          git commit -q -m "ci: the failure report for run $GITHUB_RUN_NUMBER" || true
+          # The push is the step that can fail silently, so its own error is
+          # made an annotation: a warning that says the branch could not be
+          # pushed says nothing about why.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-diagnostics 2>&1); then
+            echo "::error title=the diagnostics branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
+          echo "the failure was explained in the run summary and on the ci-diagnostics branch"
+
+      - name: Upload the kernel
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel
+          path: |
+            out/*/*/*/kernel/kernel.macho
+            out/*/*/*/kernel/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+      # The kernel is the one thing a person needs to get at, and the
+      # artifact that carries it answers 401 to an anonymous download: the
+      # API wants an account. A branch is plain git and it is readable over
+      # SSH without one, so the kernel is put on a branch of its own, named
+      # after the run. The machine that drives the build fetches it from
+      # there and puts it on the phone; nobody has to download anything by
+      # hand and the loop does not stop on a login.
+      #
+      # The branch is an orphan, like the diagnostics one: it carries the
+      # kernel and its record and nothing else, and it never touches the
+      # history of the source.
+      - name: Publish the kernel on a branch
+        if: success()
+        continue-on-error: true
+        run: |
+          set +e
+          stage="$RUNNER_TEMP/ci-kernel"
+          rm -rf "$stage"
+          mkdir -p "$stage/ci-kernel"
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "::warning title=no kernel::the build produced no kernel.macho"
+            exit 0
+          fi
+          cp "$kernel" "$stage/ci-kernel/kernel.macho"
+          for record in $(find out -path '*/kernel/*.json' -type f 2>/dev/null | head -5); do
+            cp "$record" "$stage/ci-kernel/$(basename "$record")"
+          done
+          # The size and the digest go with it, so that what was fetched can
+          # be checked against what was built without the build machine.
+          python3 - "$stage/ci-kernel/kernel.macho" > "$stage/ci-kernel/SHA256SUMS" <<'PY'
+          import hashlib, sys
+          data = open(sys.argv[1], 'rb').read()
+          print("%s  kernel.macho" % hashlib.sha256(data).hexdigest())
+          print("%d bytes" % len(data))
+          PY
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-kernel
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p ci-kernel
+          rm -rf ci-kernel/*
+          cp -rf "$stage/ci-kernel/." ci-kernel/ 2>/dev/null
+          git add -f ci-kernel
+          git commit -q -m "ci: the kernel of run $GITHUB_RUN_NUMBER" || true
+          if ! out=$(git push origin HEAD:refs/heads/ci-kernel/run-$GITHUB_RUN_NUMBER 2>&1); then
+            echo "::error title=the kernel branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          else
+            echo "the kernel is on ci-kernel/run-$GITHUB_RUN_NUMBER"
+          fi
+          # The newest run also answers to one name that does not change, so
+          # that a fetch does not have to know the run number.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-kernel/latest 2>&1); then
+            echo "::warning title=the latest kernel branch::$(printf '%s' "$out" | head -4 | tr '\n' ' ')"
+          fi
+
+      - name: Upload the build logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nio-kernel-logs
+          path: |
+            out/*/*/*/logs/*.log
+            ${{ runner.temp }}/status.txt
+            ${{ runner.temp }}/build-console.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Publish the build logs on the diagnostics branch
+        # Always, not only on failure. The artifact that carries the logs
+        # needs an account to download (the API answers 401 to an anonymous
+        # request), and a failed "Explain the failure" step leaves nothing
+        # at all -- run 19 ended with neither. The branch is readable over
+        # SSH with no account, so it is the one place the logs can be read
+        # from without one.
+        if: always()
+        continue-on-error: true
+        run: |
+          set +e
+          stage="$RUNNER_TEMP/ci-publish"
+          rm -rf "$stage"
+          mkdir -p "$stage/ci-diagnostics/logs"
+          # The logs are the whole point; they are big, so they travel as one
+          # compressed archive next to the report.
+          for log in $(ls -1t out/*/*/*/logs/*.log 2>/dev/null); do
+            cp "$log" "$stage/ci-diagnostics/logs/$(basename "$log")" 2>/dev/null
+          done
+          # The archive and component recipes keep the compiler's whole output
+          # next to the object (tree/build/<component>/compile.log), and that is
+          # the only copy of it: a recipe that fails raises with the last 3500
+          # characters of it, so run 33 said "12 warnings and 3 errors generated"
+          # and showed none of the three. This is where the rest of them live.
+          for log in out/*/*/*/tree/build/*/compile.log; do
+            [ -f "$log" ] || continue
+            cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
+          for log in out/*/*/*/tree/build/io-storage-family/*.log out/*/*/*/tree/build/verified-root/*.log; do
+            [ -f "$log" ] || continue
+            cp "$log" "$stage/ci-diagnostics/logs/build-$(echo "$log" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
+          for command in out/*/*/*/tree/build/*/compile-command.json; do
+            [ -f "$command" ] || continue
+            cp "$command" "$stage/ci-diagnostics/logs/build-$(echo "$command" | sed 's|.*/tree/build/||; s|/|_|g')" 2>/dev/null
+          done
+          [ -f "$RUNNER_TEMP/status.txt" ] && cp "$RUNNER_TEMP/status.txt" "$stage/ci-diagnostics/logs/status.txt"
+          [ -f "$RUNNER_TEMP/build-console.log" ] && cp "$RUNNER_TEMP/build-console.log" "$stage/ci-diagnostics/logs/build-console.log"
+          [ -f "$RUNNER_TEMP/failure-report.md" ] && cp "$RUNNER_TEMP/failure-report.md" "$stage/ci-diagnostics/report.md"
+          if [ -d "$stage/ci-diagnostics/logs" ] && [ -n "$(ls -A "$stage/ci-diagnostics/logs" 2>/dev/null)" ]; then
+            (cd "$stage/ci-diagnostics/logs" && tar czf ../logs.tar.gz .)
+            echo "the logs are in ci-diagnostics/logs.tar.gz"
+            # The archive holds the whole log; the loose copies are cut to a
+            # megabyte each, because a push that carries a file over 100 MB
+            # is turned down and the XNU build log is that big.
+            for log in "$stage/ci-diagnostics/logs/"*; do
+              [ -f "$log" ] || continue
+              head -c 1048576 "$log" > "$log.cut" && mv "$log.cut" "$log"
+            done
+          fi
+
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # A second orphan branch: the report step above already made one,
+          # and a branch name cannot be taken twice in one job.
+          git checkout --orphan ci-diagnostics-publish
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          mkdir -p ci-diagnostics
+          rm -rf ci-diagnostics/logs ci-diagnostics/logs.tar.gz
+          cp -rf "$stage/ci-diagnostics/." ci-diagnostics/ 2>/dev/null
+          git add -f ci-diagnostics
+          git commit -q -m "ci: the build logs for run $GITHUB_RUN_NUMBER" || true
+          # Two channels, because one failing must not lose the logs again:
+          # ci-diagnostics is the branch that is read, and the per-run branch
+          # keeps every round's logs even when the first one is overwritten.
+          if ! out=$(git push -f origin HEAD:refs/heads/ci-diagnostics 2>&1); then
+            echo "::error title=the diagnostics branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
+          if ! out=$(git push origin HEAD:refs/heads/ci-logs/run-$GITHUB_RUN_NUMBER 2>&1); then
+            echo "::error title=the per-run log branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+          fi
+          echo "the build logs are on the ci-diagnostics branch"
+
+      - name: Summary
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: |
+          {
+            echo "## nio kernel: $RESULT"
+            echo
+            echo "- defconfig: \`$DEFCONFIG\`"
+            echo "- UniXNU: \`${{ inputs.unixnu_ref || '04573c510c5fd4892ca6948739389141cc9e05f5' }}\`"
+            echo "- host: \`$(uname -m)\` on macOS \`$(sw_vers -productVersion)\`"
+            echo "- Xcode: \`${XCODE_APP:-unknown}\`"
+            if [ -n "${DROPPED_FLAGS:-}" ]; then
+              echo "- warning flags this Xcode did not know: \`$DROPPED_FLAGS\`"
+            fi
+            echo
+            if [ "$RESULT" = success ]; then
+              echo "Download **nio-kernel**, unzip, and put \`kernel.macho\` and \`kernel.macho.json\` into the local \`out/\` directory next to \`nio.adt\`."
+            else
+              echo "The reason is in **Why the build failed** above -- it is the tail of the log of the step that failed, so no download is needed to read it."
+              echo "The full logs are in the **nio-kernel-logs** artifact (\`kernel.log\`, \`kernel-bootstrap.log\`, \`archive-*.log\`); downloading it needs a GitHub account."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove proprietary inputs
+        if: always()
+        run: |
+          rm -rf out/ipsw out/feeds 2>/dev/null || true
+          rm -rf out/*/*/*/tree/.cache/firmware 2>/dev/null || true

@@ -1,13 +1,13 @@
-Trace each kmem claim on both sides of vm_map_locate_space
+Fail instead of sleeping when a claim does not fit
 
-The startup token [13.0] is kmem_range_init and the last claim printed is 9 of 17,
-so the boot hangs inside vm_map_locate_space for that claim.  Print the claim's
-size, range pointer and name before the call and the address it chose after it:
-the next boot then separates a hang inside the search from a hang after it, and
-shows whether the claim descriptor itself is garbage.
+kernel_map carries wait_for_space for the ipc copy map, and vm_map_locate_space
+then sleeps in thread_block() waiting for space to appear.  Nothing else is alive
+during boot to wake it, which is the silent stop after the ipc_kernel_copy_map
+claim.  Clear the flag for the call, restore it, and panic with the claim name and
+the return code so the next boot says whether the claim simply does not fit.
 ---
 diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
-index 2927d4b..d0c007e 100644
+index 2927d4b..676d0ef 100644
 --- a/osfmk/vm/vm_kern.c
 +++ b/osfmk/vm/vm_kern.c
 @@ -3546,6 +3546,8 @@ kmem_scramble_ranges(void)
@@ -43,18 +43,32 @@ index 2927d4b..d0c007e 100644
  
  	/*
  	 * Apply restrictions and determine range for each claim
-@@ -3590,11 +3595,14 @@ kmem_scramble_ranges(void)
+@@ -3590,10 +3595,24 @@ kmem_scramble_ranges(void)
  		vm_map_offset_t end = 0;
  		struct kmem_range_startup_spec sp = kmem_claims[i];
  		struct mach_vm_range *sp_range = sp.kc_range;
+-		if (vm_map_locate_space(kernel_map, sp.kc_size, 0,
+-		    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL) != KERN_SUCCESS) {
+-			panic("kmem_range_init: vm_map_locate_space failing for claim %s",
+-			    sp.kc_name);
 +		printf("nio: C%u pre size=%#llx rng=%p name=%s\n", i,
 +		    (unsigned long long)sp.kc_size, (void *)sp_range, sp.kc_name);
- 		if (vm_map_locate_space(kernel_map, sp.kc_size, 0,
- 		    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL) != KERN_SUCCESS) {
- 			panic("kmem_range_init: vm_map_locate_space failing for claim %s",
- 			    sp.kc_name);
++		/*
++		 * nio: kernel_map carries wait_for_space for the ipc copy map, so the
++		 * locate below sleeps in thread_block() and nothing is left alive to
++		 * wake it.  Boot is single threaded: fail instead of sleeping.
++		 */
++		{
++			boolean_t nio_wait = kernel_map->wait_for_space;
++			kern_return_t nio_kr;
++			kernel_map->wait_for_space = FALSE;
++			nio_kr = vm_map_locate_space(kernel_map, sp.kc_size, 0,
++			    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL);
++			kernel_map->wait_for_space = nio_wait;
++			if (nio_kr != KERN_SUCCESS) {
++				panic("nio: claim %s size %#llx does not fit, kr=%d",
++				    sp.kc_name, (unsigned long long)sp.kc_size, nio_kr);
++			}
  		}
-+		printf("nio: C%u got %#llx\n", i, (unsigned long long)start);
  
  		end = start + sp.kc_size;
- 		/*

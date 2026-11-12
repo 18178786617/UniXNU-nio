@@ -1,0 +1,34 @@
+version = 1
+
+# Menu the payload volume ships for UniXNU. It sits at \EFI\UniXNU\unixnu.toml
+# because that is the only path the loader reads.
+
+[boot]
+timeout = 3
+default = "xnu"
+
+[ui]
+title = "Edge S - UniXNU iOS 16.5"
+
+[[entry]]
+id = "tools"
+title = "UniXNU tools (menu test)"
+type = "action"
+action = "tools"
+
+[[entry]]
+id = "xnu"
+title = "iOS 16.5 kernel"
+type = "xnu"
+# Supplied by the packer once a kernel.macho exists; until then this entry is
+# the placeholder that proves the menu and the file path are wired.
+path = "Payloads/kernel.macho"
+# initrd: the N4KROOT rootfs image. DarwinBoot copies it into memory and fills
+# the ADT /chosen/memory-map RAMDisk placeholder with {base,size}; the kernel's
+# memdev then exposes it as md0 and mockfs_mountroot reads the N4KROOT header
+# off it. rd=md0 makes IOFindBSDRoot pick that memory device as the root.
+initrd = "Payloads/rootfs.img"
+# amfi_get_out_of_my_way=1: the standard AMFI bypass boot-arg (rmx1971 device
+# record uses it too); launchd has no code signature and AMFI would otherwise
+# refuse it.
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam startup_debug=1 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1"
