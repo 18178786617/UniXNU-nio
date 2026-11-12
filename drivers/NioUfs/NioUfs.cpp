@@ -1194,7 +1194,27 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) return false;
-  printf ("nio: queue ready hcs=%08x\n", read32 (gHost.hc, 0x30));
+  /* nio R296: HCS.DP is the one bit that says whether the controller sees the
+   * device at all.  Sample it for 20 ms right after the queue is up, so the next
+   * run tells power/clock/reset problems (DP never sets) apart from link
+   * problems (DP set and lost).
+   *
+   * nio R300: the samples go into the diagnostic record, not into a printf.
+   * The driver's printf does not reach the console on this board, so a
+   * printed sample says nothing to the person reading the screen; the
+   * record is what the panic prints when the bring-up fails further down.
+   */
+  for (int sample = 0; sample < 20; ++sample) {
+    uint32_t cs = read32 (gHost.hc, 0x30);
+    gRootDiagnostic.hcs = cs;
+    gRootDiagnostic.polls = (uint32_t) sample;
+    if (cs & 0x1) {
+      gRootDiagnostic.isSeen = 1;
+      IODelay (1000);
+      break;
+    }
+    IODelay (1000);
+  }
   /* nio R294: the UniPro link is not touched unless the transport itself
    * fails.
    *
