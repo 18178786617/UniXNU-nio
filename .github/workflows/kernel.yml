@@ -54,7 +54,7 @@ on:
           a build that never starts says nothing about the kernel.
           macos-15-intel keeps the x86_64 path available.
         required: false
-        default: "macos-15-intel"
+        default: "macos-15"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
