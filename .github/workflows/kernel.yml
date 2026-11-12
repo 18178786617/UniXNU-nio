@@ -685,7 +685,7 @@ jobs:
               if cmd == 0x19:
                   name = data[off+8:off+24].rstrip(b'\0').decode()
                   vmaddr, vmsize, fileoff, filesize = struct.unpack_from('<QQQQ', data, off+24)
-                  if name in ('__TEXT_EXEC', '__TEXT'):
+                  if name in ('__TEXT_EXEC', '__PLK_TEXT_EXEC'):
                       body = data[fileoff:fileoff+min(vmsize, filesize)]
                       end = len(body)
                       while end > 0 and body[end-1] == 0:
@@ -693,7 +693,7 @@ jobs:
                       rooms[name] = len(body) - ((end + 15) & ~15)
               off += size
           if not rooms:
-              print('no text segment in the kernel')
+              print('no executable text segment in the kernel')
               sys.exit(0)
 
           # The size of the blob is measured, not assumed.  The blob is
@@ -711,6 +711,10 @@ jobs:
 
           for name in sorted(rooms):
               print('the tail padding of %s is %d bytes' % (name, rooms[name]))
+          # __PLK_TEXT_EXEC is the prelink image of the same segment and the
+          # kernel maps it executable, so the blob's real home is whichever
+          # of the two has more room.  __TEXT is r-- and code put there can
+          # never run: run-176 died that way with nothing on the screen.
           padding = max(rooms.values())
           print('the blob needs %d bytes' % need)
           if padding < need:

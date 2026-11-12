@@ -1,0 +1,88 @@
+Landmark the path from the NVRAM image dump to bsd_init
+
+The console shows IONVRAMCHRPHandler's partition dump and then the
+panel goes dark, which leaves a stretch of silent code between that
+dump and the first print of bsd_init.  This patch puts a short line
+at every step of the way so the last visible line names the function
+the boot died in:
+
+    nio: uv in     unserializeVariables entry
+    nio: uv out    unserializeVariables about to return
+    nio: uv done   initImageFormat, variables parsed
+    nio: dd done   initImageFormat, dumpDict finished
+    nio: iif done  IODTNVRAM::start, initImageFormat returned
+    nio: nv out    IODTNVRAM::start about to return
+    nio: lock in   PE_lockdown_iokit, before StartIOKitMatching
+    nio: match in  StartIOKitMatching entry
+    nio: match done  startIOServiceMatching returned
+    nio: lock out  PE_lockdown_iokit, matching finished
+
+diff --git a/iokit/Kernel/IONVRAM.cpp b/iokit/Kernel/IONVRAM.cpp
+--- a/iokit/Kernel/IONVRAM.cpp+++ b/iokit/Kernel/IONVRAM.cpp@@ -1278,6 +1278,7 @@
+ 	// This will load the proxied variable data which will call back into
+ 	// IODTNVRAM for the variable sets which will also update the system/common services
+ 	initImageFormat();
++	IOLog("nio: iif done\n");
+ 
+ 	version = OSNumber::withNumber(_format->getVersion(), 32);
+ 	_diags->setProperty(kCurrentNVRAMVersionKey, version.get());
+@@ -1332,6 +1333,7 @@
+ 	}
+ 
+ no_common:
++	IOLog("nio: nv out\n");
+ 	return true;
+ 
+ fail:
+@@ -1381,8 +1383,10 @@
+ 	}
+ 
+ 	_format->unserializeVariables();
++	IOLog("nio: uv done\n");
+ 
+ 	dumpDict(_varDict.get());
++	IOLog("nio: dd done\n");
+ 
+ #if defined(RELEASE)
+ 	if (entry != nullptr) {
+diff --git a/iokit/Kernel/IONVRAMCHRPHandler.cpp b/iokit/Kernel/IONVRAMCHRPHandler.cpp
+--- a/iokit/Kernel/IONVRAMCHRPHandler.cpp+++ b/iokit/Kernel/IONVRAMCHRPHandler.cpp@@ -498,6 +498,7 @@
+ 							  { kIONVRAMPartitionSystem, _systemPartitionOffset, _systemPartitionSize} };
+ 
+ 	DEBUG_INFO("...\n");
++	IOLog("nio: uv in\n");
+ 
+ 	for (regionIndex = 0; regionIndex < ARRAY_SIZE(variableRegions); regionIndex++) {
+ 		currentRegion = &variableRegions[regionIndex];
+@@ -608,6 +609,7 @@
+ 	}
+ 
+ 	_newData = true;
++	IOLog("nio: uv out\n");
+ 
+ 	DEBUG_INFO("%s _varDict=%p\n", __FUNCTION__, _varDict ? _varDict.get() : nullptr);
+ 
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp+++ b/iokit/Kernel/IOStartIOKit.cpp@@ -181,8 +181,10 @@
+ StartIOKitMatching(void)
+ {
+ 	SOCD_TRACE_XNU(START_IOKIT);
++	IOLog("nio: match in\n");
+ 	assert(gRootNub != NULL);
+ 	bool ok = gRootNub->startIOServiceMatching();
++	IOLog("nio: match done\n");
+ 	if (__improbable(!ok)) {
+ 		panic("Failed to start IOService matching");
+ 	}
+Only in b: iokit-chrp.cpp
+diff --git a/pexpert/arm/pe_init.c b/pexpert/arm/pe_init.c
+--- a/pexpert/arm/pe_init.c+++ b/pexpert/arm/pe_init.c@@ -376,7 +376,9 @@
+ 	 * against a kernel which has not yet enabled the full set of available
+ 	 * hardware protections.
+ 	 */
++	printf("nio: lock in\n");
+ 	StartIOKitMatching();
++	printf("nio: lock out\n");
+ }
+ 
+ void
