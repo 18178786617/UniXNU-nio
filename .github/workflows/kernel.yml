@@ -712,6 +712,28 @@ jobs:
           fi
           python3 device/tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
 
+      # A hunk header says how many lines the hunk has, and patch reads
+      # exactly that many.  A patch whose header counts fewer lines than
+      # the hunk holds loses the rest, silently: the file it writes is
+      # still valid C, it compiles, it links, and the function that was
+      # dropped from the end of it is simply never called.
+      #
+      # Run-170 built such a kernel.  The lost line was
+      #   STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, source_pthread_bootstrap);
+      # and the boot died in bsd_init with "pthread kernel extension not
+      # loaded (function table is NULL)", because the function that
+      # registers libpthread's function table was never entered.
+      #
+      # The check reads every patch in the series and compares each hunk
+      # header's count with the lines the hunk actually holds.  It never
+      # fails the build: it is a diagnosis, not a gate.
+      - name: Check the patch series for hunk counts
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 device/tools/check-patch-hunks.py device/patches/xnu-8796 \
+            | tee "$RUNNER_TEMP/hunks.txt"
+
       # The display hand-off of nio carries one set of numbers, and they are
       # the panel's: 1080x2520 at 32 bits, 4320 bytes a row, on the region
       # uefiplat.cfg reserves at 0x9C000000. Every stage that touches the
