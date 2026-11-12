@@ -1,8 +1,6 @@
 diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
---- a/osfmk/arm64/arm_vm_init.c
-+++ b/osfmk/arm64/arm_vm_init.c
 @@ -1754,7 +1754,36 @@
  	 */
  #endif

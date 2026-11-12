@@ -20,11 +20,29 @@ import sys
 HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
+def structure_problems(lines):
+    """Catch the header damage git apply reports as "git diff header lacks ...".
+
+    A patch whose ---, +++ and @@ lines were joined by an editing tool still counts
+    its hunks correctly, so the build was the first place it failed.
+    """
+    problems = []
+    for n, l in enumerate(lines):
+        if l.startswith('--- ') and l.find('+++') >= 0:
+            problems.append('line %d: --- and +++ on one line' % (n + 1))
+        if l.startswith('+++ ') and '@@' in l:
+            problems.append('line %d: +++ and @@ on one line' % (n + 1))
+        if l.startswith('--- a/') and n + 1 < len(lines) and not lines[n + 1].startswith('+++ b/'):
+            problems.append('line %d: --- not followed by +++' % (n + 1))
+        if l.startswith('+++ b/') and n + 1 < len(lines) and not lines[n + 1].startswith('@@'):
+            problems.append('line %d: +++ not followed by @@' % (n + 1))
+    return problems
+
 def check(path):
     """Return (hunks, problems) for one patch file."""
     lines = path.read_text(errors='replace').split('\n')
     last = len(lines) - 1
-    problems, hunks, current, i = [], 0, None, 0
+    problems, hunks, current, i = structure_problems(lines), 0, None, 0
 
     def close(state):
         # A hunk body that ran out before its header said it would is the
