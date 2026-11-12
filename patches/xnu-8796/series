@@ -58,7 +58,7 @@ native-smp-secondary.patch
 native-smp-type-clusters.patch
 sheng-platform-power.patch
 zzz-boot-progress.patch
-nio-startup-trace.patch
+nio-early-boot-landmarks.patch
 nio-post-startup-landmarks.patch
 xnu-8796.101.5-security-init.patch
 xnu-8796.101.5-sparse-index.patch
