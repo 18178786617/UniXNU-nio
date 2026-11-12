@@ -77,7 +77,6 @@ nio-port-command-line.patch
 nio-boot-args-fallback.patch
 nio-kmem-range-landmarks.patch
 nio-kmem-scramble-landmarks.patch
-nio-kalloc-init-landmarks.patch
 nio-sysctl-walk-guard.patch
 nio-compressor-landmarks.patch
 nio-heartbeat.patch
@@ -99,3 +98,4 @@ nio-first-thread-kernel-stack.patch
 nio-bsd-init-trace.patch
 nio-ionvram-missing-partition.patch
 nio-nvram-to-bsd-landmarks.patch
+nio-startup-tokens.patch

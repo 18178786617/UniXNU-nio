@@ -1,0 +1,24 @@
+Print one short token per startup entry
+
+The console is about forty lines and new lines overwrite old ones, so long prints
+bury each other.  Print a four to six character token for every entry of the start
+up table before it runs: the last token visible is the entry that hung.
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index bec97fb..d796dc1 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -407,6 +407,13 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 		}
+ 		startup_phase = cur->subsystem - 1;
+ 		kernel_startup_log(cur->subsystem);
++		/*
++		 * nio: one short token per startup entry, printed before the entry
++		 * runs.  The last token on the glass is the entry that hangs.
++		 */
++		if (cur->subsystem >= STARTUP_SUB_KPRINTF) {
++			kprintf("[%d.%d]", cur->subsystem, cur->rank);
++		}
+ 		cur->func(cur->arg);
+ 		startup_entry_cur = ++cur;
+ 	}
