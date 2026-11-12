@@ -1,4 +1,5 @@
 nio-startup-trace.patch
+nio-post-startup-landmarks.patch
 apple-only-cpu-tunables.patch
 architectural-timer-entry.patch
 armvirt-platform-personality.patch
