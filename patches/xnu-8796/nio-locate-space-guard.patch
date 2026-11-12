@@ -1,0 +1,31 @@
+Turn the locate space spin into a panic
+
+The claim trace shows claim ipc_kernel_copy_map, size 8 MB, never returning from
+vm_map_locate_space.  Count the times the search starts over and panic with the
+size and the window it is searching: a silent spin becomes a readable message.
+---
+diff --git a/osfmk/vm/vm_map.c b/osfmk/vm/vm_map.c
+index 3a29bf4..9575b9f 100644
+--- a/osfmk/vm/vm_map.c
++++ b/osfmk/vm/vm_map.c
+@@ -2041,6 +2041,20 @@ vm_map_locate_space(
+ #endif /* XNU_TARGET_OS_OSX */
+ 
+ again:
++	{
++		/*
++		 * nio: the boot hangs while this function looks for room for the
++		 * 8 MB ipc_kernel_copy_map claim, and a silent spin on the glass
++		 * says nothing about which window it is spinning in.
++		 */
++		static uint32_t nio_locate_spins;
++		if (++nio_locate_spins > 200000) {
++			panic("nio: locate space spins size=%#llx min=%#llx max=%#llx map=%p",
++			    (unsigned long long)size,
++			    (unsigned long long)effective_range.min_address,
++			    (unsigned long long)effective_range.max_address, map);
++		}
++	}
+ 	if (vmk_flags.vmkf_last_free) {
+ 		hint = *start_inout;
+ 
