@@ -40,18 +40,14 @@ import tempfile
 # The calls, in the order the source has them.
 STEPS = [
     ('vm_commpage_init();', 'commpage'),
-    ('vm_commpage_text_init();', 'commpage_text'),
     ('mac_policy_initmach();', 'mac_policy'),
     ('vnguard_policy_init();', 'vnguard_policy'),
     ('dtrace_early_init();', 'dtrace_early'),
-    ('sdt_early_init();', 'sdt_early'),
     ('trust_cache_runtime_init();', 'trust_cache'),
     ('load_static_trust_cache();', 'static_trust_cache'),
     ('OSKextRemoveKextBootstrap();', 'kext_bootstrap_removed'),
     ('machine_lockdown();', 'machine_lockdown'),
     ('PE_lockdown_iokit();', 'pe_lockdown_iokit'),
-    ('vm_set_restrictions(machine_info.max_cpus);', 'vm_restrictions'),
-    ('kperf_init_early();', 'kperf'),
     ('bsd_init();', 'bsd_init'),
 ]
 
@@ -132,12 +128,11 @@ def main():
             'The numbers are counted from 9000 in the order the source has\n'
             'the calls in:\n'
             '\n'
-            '    9000 commpage             9006 kext_bootstrap_removed\n'
-            '    9001 commpage_text        9007 machine_lockdown\n'
-            '    9002 mac_policy           9008 pe_lockdown_iokit\n'
-            '    9003 dtrace_early         9009 vm_restrictions\n'
-            '    9004 trust_cache          9010 kperf\n'
-            '    9005 static_trust_cache   9011 bsd_init\n'
+            '    9000 commpage             9005 static_trust_cache\n'
+            '    9001 mac_policy           9006 kext_bootstrap_removed\n'
+            '    9002 vnguard_policy       9007 machine_lockdown\n'
+            '    9003 dtrace_early         9008 pe_lockdown_iokit\n'
+            '    9004 trust_cache          9009 bsd_init\n'
             '\n'
             'One format string for all of them: the compiler merges the\n'
             'identical literals, so a marker costs the instructions and\n'

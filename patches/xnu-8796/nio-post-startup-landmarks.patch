@@ -9,12 +9,11 @@ patch puts a number on each of them.
 The numbers are counted from 9000 in the order the source has
 the calls in:
 
-    9000 commpage             9006 kext_bootstrap_removed
-    9001 commpage_text        9007 machine_lockdown
-    9002 mac_policy           9008 pe_lockdown_iokit
-    9003 dtrace_early         9009 vm_restrictions
-    9004 trust_cache          9010 kperf
-    9005 static_trust_cache   9011 bsd_init
+    9000 commpage             9005 static_trust_cache
+    9001 mac_policy           9006 kext_bootstrap_removed
+    9002 vnguard_policy       9007 machine_lockdown
+    9003 dtrace_early         9008 pe_lockdown_iokit
+    9004 trust_cache          9009 bsd_init
 
 One format string for all of them: the compiler merges the
 identical literals, so a marker costs the instructions and
@@ -24,87 +23,72 @@ fit into.
 
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index b790d0d..2d694d7 100644
+index b790d0d..9a66186 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -712,21 +712,27 @@ kernel_bootstrap_thread(void)
+@@ -712,20 +712,24 @@ kernel_bootstrap_thread(void)
  	 *	Initialize the shared region module.
  	 */
  	vm_commpage_init();
 +	printf("nio: %u\n", 9000);
  	vm_commpage_text_init();
-+	printf("nio: %u\n", 9001);
  
  #if CONFIG_MACF
  	kernel_bootstrap_log("mac_policy_initmach");
  	mac_policy_initmach();
-+	printf("nio: %u\n", 9002);
++	printf("nio: %u\n", 9001);
  #if CONFIG_VNGUARD
  	kernel_bootstrap_log("vnguard_policy_init");
  	vnguard_policy_init();
-+	printf("nio: %u\n", 9003);
++	printf("nio: %u\n", 9002);
  #endif
  #endif
  
  #if CONFIG_DTRACE
  	kernel_bootstrap_log("dtrace_early_init");
  	dtrace_early_init();
-+	printf("nio: %u\n", 9004);
++	printf("nio: %u\n", 9003);
  	sdt_early_init();
-+	printf("nio: %u\n", 9005);
  #endif
  
- #if CODE_SIGNING_MONITOR
-@@ -739,9 +745,11 @@ kernel_bootstrap_thread(void)
+@@ -739,9 +743,11 @@ kernel_bootstrap_thread(void)
  
  	/* Initialize the runtime for the trust cache interface */
  	trust_cache_runtime_init();
-+	printf("nio: %u\n", 9006);
++	printf("nio: %u\n", 9004);
  
  	/* Load the static and engineering trust caches */
  	load_static_trust_cache();
-+	printf("nio: %u\n", 9007);
++	printf("nio: %u\n", 9005);
  #endif
  
  	kernel_startup_initialize_upto(STARTUP_SUB_LOCKDOWN);
-@@ -754,10 +762,12 @@ kernel_bootstrap_thread(void)
+@@ -754,10 +760,12 @@ kernel_bootstrap_thread(void)
  	 */
  	kernel_bootstrap_log("OSKextRemoveKextBootstrap");
  	OSKextRemoveKextBootstrap();
-+	printf("nio: %u\n", 9008);
++	printf("nio: %u\n", 9006);
  
  	/* No changes to kernel text and rodata beyond this point. */
  	kernel_bootstrap_log("machine_lockdown");
  	machine_lockdown();
-+	printf("nio: %u\n", 9009);
++	printf("nio: %u\n", 9007);
  
  #ifdef CONFIG_XNUPOST
  	kern_return_t result = kernel_list_tests();
-@@ -771,16 +781,19 @@ kernel_bootstrap_thread(void)
+@@ -771,6 +779,7 @@ kernel_bootstrap_thread(void)
  #ifdef  IOKIT
  	kernel_bootstrap_log("PE_lockdown_iokit");
  	PE_lockdown_iokit();
-+	printf("nio: %u\n", 9010);
++	printf("nio: %u\n", 9008);
  #endif
  	/*
  	 * max_cpus must be nailed down by the time PE_lockdown_iokit() finishes,
- 	 * at the latest
- 	 */
- 	vm_set_restrictions(machine_info.max_cpus);
-+	printf("nio: %u\n", 9011);
- 
- 
- #if KPERF
- 	kperf_init_early();
-+	printf("nio: %u\n", 9012);
- #endif
- 
- 	/*
-@@ -788,6 +801,7 @@ kernel_bootstrap_thread(void)
+@@ -788,6 +797,7 @@ kernel_bootstrap_thread(void)
  	 */
  #ifdef  MACH_BSD
  	bsd_init();
-+	printf("nio: %u\n", 9013);
++	printf("nio: %u\n", 9009);
  #endif
  
  
