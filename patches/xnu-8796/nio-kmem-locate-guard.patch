@@ -1,0 +1,30 @@
+Break the retry loop in kmem_locate_space
+
+When kmem_get_new_chunk() returns NULL the function jumps back to again with
+nothing changed, so a range that cannot supply a chunk spins forever and the boot
+stops without a message.  Count the retries, print the size and range, then panic.
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..8b9f432 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3065,6 +3065,19 @@ kmem_locate_space(
+ 
+ 	assert(size <= sizeclass->ks_size);
+ again:
++	{
++		/*
++		 * nio: kmem_get_new_chunk() returning NULL goes back to again with
++		 * nothing changed, so an exhausted range spins here forever and the
++		 * boot just stops.  Count the retries and say what is exhausted.
++		 */
++		static uint32_t nio_chunk_retries;
++		if (++nio_chunk_retries > 100000u) {
++			printf("\nnio: kmem_locate_space stuck size=%#llx range=%d idx=%u\n",
++			    (unsigned long long)size, range_id, size_idx);
++			panic("nio: kmem_locate_space out of chunks");
++		}
++	}
+ 	if ((meta = LIST_FIRST(&sizeclass->ks_partial_head[front])) != NULL) {
+ 		*start_inout = kmem_get_addr_from_meta(meta, range_id, *sizeclass, &entry);
+ 		/*
