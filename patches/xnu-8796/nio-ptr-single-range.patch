@@ -1,0 +1,25 @@
+Use a single pointer range
+
+kmem_large_ranges shows the three pointer ranges as zero bytes long, so every
+pointer allocation fails in kmem_get_new_chunk and the boot spins.  One pointer
+range is the layout the configurations without TRR use and it cannot divide to zero.
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..86e86ae 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3483,9 +3483,12 @@ kmem_add_extra_claims(void)
+ 	 * kasan and configs w/o *TRR need to have just one ptr range due to
+ 	 * resource constraints.
+ 	 */
+-#if !ZSECURITY_CONFIG(KERNEL_PTR_SPLIT)
++	/*
++	 * nio: with three pointer ranges the split leaves each of them zero sized on
++	 * this board, so every pointer allocation fails and the boot spins.  One
++	 * pointer range is what the non-TRR configurations use.
++	 */
+ 	kmem_ptr_ranges = 1;
+-#endif
+ 	/*
+ 	 * Determine size of data and pointer kmem_ranges
+ 	 */

@@ -103,3 +103,4 @@ nio-space-walk-count.patch
 nio-kmem-locate-guard.patch
 nio-ptr-range-cap.patch
 nio-meta-budget.patch
+nio-ptr-single-range.patch
