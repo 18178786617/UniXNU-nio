@@ -1,31 +1,31 @@
-Stop the retry loop in kmem_locate_space after eight attempts
-
-kmem_get_new_chunk() returning NULL jumps back to again with nothing changed, so an
-exhausted range spins forever and the watchdog hides it.  Eight attempts is already
-more than the working path needs, and printing at that point fits before the reset.
+Count chunk failures inside one call, not across the whole boot
 ---
 diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
-index 2927d4b..6a6df69 100644
+index 2927d4b..50f707b 100644
 --- a/osfmk/vm/vm_kern.c
 +++ b/osfmk/vm/vm_kern.c
-@@ -3065,6 +3065,20 @@ kmem_locate_space(
- 
- 	assert(size <= sizeclass->ks_size);
- again:
-+	{
-+		/*
-+		 * nio: kmem_get_new_chunk() returning NULL goes back to again with
-+		 * nothing changed, so an exhausted range spins here forever.  The
-+		 * legitimate path retries at most a handful of times, so say so
-+		 * early enough to be seen before the watchdog fires.
-+		 */
-+		static uint32_t nio_chunk_retries;
-+		if (++nio_chunk_retries > 8u) {
-+			printf("\nnio: kmem_locate_space stuck size=%#llx range=%d idx=%u\n",
-+			    (unsigned long long)size, range_id, size_idx);
-+			panic("nio: kmem_locate_space out of chunks");
-+		}
-+	}
- 	if ((meta = LIST_FIRST(&sizeclass->ks_partial_head[front])) != NULL) {
+@@ -3057,6 +3057,12 @@ kmem_locate_space(
+ 	vm_map_offset_t        *start_inout,
+ 	vm_map_entry_t         *entry_out)
+ {
++	/*
++	 * nio: counts consecutive chunk failures inside this call only.  A static
++	 * counter at the again label counted every entry to this function, so the
++	 * ninth ordinary allocation panicked and the message blamed a chunk.
++	 */
++	uint32_t nio_retries = 0;
+ 	vm_map_entry_t entry;
+ 	uint32_t size_idx = kmem_get_idx_from_size(size);
+ 	uint32_t front = kmem_get_front(range_id, from_right);
+@@ -3086,6 +3092,11 @@ again:
+ 	} else {
+ 		meta = kmem_get_new_chunk(range_id, from_right, size_idx);
+ 		if (meta == NULL) {
++			if (++nio_retries > 8u) {
++				printf("\nnio: kmem_locate_space stuck size=%#llx range=%d idx=%u\n",
++				    (unsigned long long)size, range_id, size_idx);
++				panic("nio: kmem_locate_space out of chunks");
++			}
+ 			goto again;
+ 		}
  		*start_inout = kmem_get_addr_from_meta(meta, range_id, *sizeclass, &entry);
- 		/*
