@@ -1,0 +1,24 @@
+Print the metadata budget of every chunk request
+
+A three page request in the pointer range cannot get a chunk even though the
+metadata claim is a hundred megabytes, so print how many slots the range owns, how
+many the request wants and the total budget.  That separates a range divided to zero
+from a size class asking for the wrong number of slots.
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..2ed9250 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -2844,6 +2844,12 @@ kmem_get_new_chunk(
+ 		meta = from_right ? metab : metaf;
+ 		meta_num = kmem_get_additional_meta(meta, meta_req, from_right,
+ 		    &adj_free_meta);
++		/*
++		 * nio: a three page request cannot get a chunk, so print what the range
++		 * owns, what this request wants and the total metadata budget.
++		 */
++		printf("\nM r=%d num=%u span=%ld barea=%#llx", range_id, meta_num,
++		    (long)(metab - metaf), (unsigned long long)kmem_meta_size);
+ 
+ 		if (metaf + meta_num >= metab) {
+ 			kmem_range_out_of_va(range_id, meta_num);
