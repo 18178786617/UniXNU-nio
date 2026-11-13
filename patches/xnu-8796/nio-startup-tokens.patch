@@ -1,21 +1,22 @@
-Number the startup tokens so one entry can be told from another
+Print the address of every startup entry so the last one resolves to a function
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..841b5ca 100644
+index bec97fb..8f13a6f 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -407,6 +407,15 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -407,6 +407,16 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		}
  		startup_phase = cur->subsystem - 1;
  		kernel_startup_log(cur->subsystem);
 +		/*
-+		 * nio: one short token per startup entry, before it runs.  Many entries
-+		 * share subsystem and rank, so carry a running number as well: the last
-+		 * token on the glass then names exactly which entry did not return.
++		 * nio: number and address of every startup entry, printed before it
++		 * runs.  The last line on the glass is the entry that did not return,
++		 * and its address resolves to a function with kernel-symbols.py.
 +		 */
 +		if (cur->subsystem >= STARTUP_SUB_KPRINTF) {
 +			static uint32_t nio_entry_no;
-+			printf("\n[%d.%d#%u]", cur->subsystem, cur->rank, ++nio_entry_no);
++			printf("\n[#%u:%llx]", ++nio_entry_no,
++			    (unsigned long long)(uintptr_t)cur->func);
 +		}
  		cur->func(cur->arg);
  		startup_entry_cur = ++cur;
