@@ -99,3 +99,4 @@ nio-bsd-init-trace.patch
 nio-ionvram-missing-partition.patch
 nio-startup-tokens.patch
 nio-locate-space-guard.patch
+nio-space-walk-count.patch

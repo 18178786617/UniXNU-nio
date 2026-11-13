@@ -1,0 +1,39 @@
+Count the two walks inside the space search
+
+The claim for ipc_kernel_copy_map never comes back and the wait_for_space change
+did not help, so the search itself is not terminating.  Count the hole walk and
+the space walk and print every few hundred steps: the next boot shows which of the
+two spins and with what start and limit.
+---
+diff --git a/osfmk/vm/vm_map_store.c b/osfmk/vm/vm_map_store.c
+index 97bedbc..2d5baf5 100644
+--- a/osfmk/vm/vm_map_store.c
++++ b/osfmk/vm/vm_map_store.c
+@@ -453,6 +453,12 @@ vm_map_store_find_space_forward(
+ 		}
+ 
+ 		while (entry->vme_end <= start) {
++			{
++				static uint32_t nio_hole_walk;
++				if ((++nio_hole_walk & 0x3ffu) == 0) {
++					printf("\nH%u", nio_hole_walk);
++				}
++			}
+ 			entry = entry->vme_next;
+ 
+ 			if (entry == CAST_TO_VM_MAP_ENTRY(map->holes_list)) {
+@@ -483,6 +489,14 @@ vm_map_store_find_space_forward(
+ 	}
+ 
+ 	for (;;) {
++		{
++			static uint32_t nio_space_walk;
++			if ((++nio_space_walk & 0x1ffu) == 0) {
++				printf("\nW%u s=%#llx l=%#llx", nio_space_walk,
++				    (unsigned long long)start,
++				    (unsigned long long)highest_addr);
++			}
++		}
+ 		vm_map_offset_t orig_start = start;
+ 		vm_map_offset_t end, desired_empty_end;
+ 
