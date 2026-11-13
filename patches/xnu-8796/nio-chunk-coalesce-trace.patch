@@ -1,22 +1,30 @@
-Print the coalescing equation when a chunk cannot be grown
+Take a fresh chunk when the adjacent free run no longer matches
 
-The HWM retry did not change the outcome: there is no "chunk high watermark
-keeps moving" panic, so that branch now passes and the NULL comes from the
-adjacent-free-run check.  q is the size class request, n is what is left after
-merging, f is the real length of the adjacent free run and m its marker.  The
-check requires f == q - n; printing all four turns the guess into a reading.
+kmem_get_additional_meta samples the adjacent free run, then the code populates the
+metadata around the watermark, which rewrites those markers.  The equality checked
+afterwards can then never hold, so kmem_get_new_chunk returns NULL on every call and
+the pointer range never gets a chunk.  Print the four numbers and drop the merge
+instead, so the allocation proceeds at the watermark.
 ---
 diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..8889e1c 100644
 --- a/osfmk/vm/vm_kern.c
 +++ b/osfmk/vm/vm_kern.c
-@@ -3024,7 +3024,10 @@
- 		if (adj_free_meta) {
+@@ -2891,7 +2891,16 @@ kmem_get_new_chunk(
  			if (adj_free_meta->km_page_marker != KMEM_META_FREE ||
  			    kmem_get_free_chunk_len(adj_free_meta) !=
  			    meta_req - meta_num) {
+-				return NULL;
++				/*
++				 * nio: the adjacent free run was sampled before the populate above
++				 * rewrote the surrounding metadata, so the equality can no longer
++				 * hold and every call gives up here.  Drop the merge and take a
++				 * fresh chunk at the watermark instead of failing forever.
++				 */
 +				printf("\nA q=%u n=%u f=%u m=%x\n", meta_req, meta_num,
 +				    kmem_get_free_chunk_len(adj_free_meta),
 +				    adj_free_meta->km_page_marker);
- 				return NULL;
++				adj_free_meta = NULL;
  			}
  		}
+ 
