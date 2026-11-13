@@ -101,3 +101,4 @@ nio-startup-tokens.patch
 nio-locate-space-guard.patch
 nio-space-walk-count.patch
 nio-kmem-locate-guard.patch
+nio-ptr-range-cap.patch

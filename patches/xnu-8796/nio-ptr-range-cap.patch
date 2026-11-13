@@ -1,0 +1,27 @@
+Cap the pointer range so its metadata fits
+
+The pointer range is half of the free kernel VA, and with 4 KiB pages every 128 KiB
+of it needs a kmem_page_meta entry.  The metadata claim cannot cover that, so
+kmem_get_new_chunk() finds the high watermarks met and returns NULL forever, which
+is the spin at kmem_locate_space.  Cap the pointer range at 64 GiB.
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..c3289dd 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3501,6 +3501,15 @@ kmem_add_extra_claims(void)
+ 	 * ranges divide the available VA by 8.
+ 	 */
+ 	ptr_range_size = largest_free_size / ((kmem_ptr_ranges + 1) * 2);
++	/*
++	 * nio: this divides the whole free kernel VA, which with 4 KiB pages needs
++	 * one kmem_page_meta per 128 KiB of pointer range and cannot be mapped, so
++	 * the very first chunk request runs out of meta and spins.  Sixty-four
++	 * gigabytes of pointer VA is far more than an eight gigabyte board uses.
++	 */
++	if (ptr_range_size > (vm_map_size_t)64 * 1024 * 1024 * 1024) {
++		ptr_range_size = (vm_map_size_t)64 * 1024 * 1024 * 1024;
++	}
+ 	sprayqtn_range_size = ptr_range_size;
+ 
+ 	if (sprayqtn_range_size > (sane_size / 2)) {
