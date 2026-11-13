@@ -1,0 +1,44 @@
+Trace the three per-cpu steps inside scalable_counter_static_init
+
+run-223 stopped right after the entry whose func is this one, with no panic and
+no further token.  The body touches per-cpu memory three times: it reads the
+mangled pointer, allocates a permanent per-cpu slot, and stores into it.  Three
+prints bracket those steps, so the next photo says which of the three is the one
+that does not come back:
+
+  S<n> c=...   the raw value of *counter, before zpercpu_get decodes it
+  S<n> v=...   the value read through the per-cpu mapping
+  S<n> p=...   the pointer returned by zalloc_percpu_permanent
+
+Only the first six calls print: there are hundreds of these counters and the
+panel keeps forty lines.
+---
+diff --git a/osfmk/kern/counter_common.c b/osfmk/kern/counter_common.c
+--- a/osfmk/kern/counter_common.c
++++ b/osfmk/kern/counter_common.c
+@@ -62,12 +62,25 @@ scalable_counter_static_init(scalable_counter_t *counter)
+ {
++	static uint32_t nio_s_trace;
++	uint32_t nio_s_this = nio_s_trace++;
++	if (nio_s_this < 6u) {
++		printf("\nS%u c=%llx\n", nio_s_this,
++		    (unsigned long long)(uintptr_t)(*counter));
++	}
+ 	/*
+ 	 * We pointed the counter to a single global value during early boot.
+ 	 * Grab that value now. We'll store it in our current CPU's value
+ 	 */
+ 	uint64_t current_value = os_atomic_load_wide(zpercpu_get(*counter), relaxed);
++	if (nio_s_this < 6u) {
++		printf("\nS%u v=%llx\n", nio_s_this, (unsigned long long)current_value);
++	}
+ 	/*
+ 	 * This counter can't be freed so we allocate it out of the permanent zone rather than
+ 	 * our counter zone.
+ 	 */
+ 	*counter = zalloc_percpu_permanent(sizeof(uint64_t), ZALIGN_64);
++	if (nio_s_this < 6u) {
++		printf("\nS%u p=%llx\n", nio_s_this,
++		    (unsigned long long)(uintptr_t)(*counter));
++	}
+ 	os_atomic_store_wide(zpercpu_get(*counter), current_value, relaxed);
