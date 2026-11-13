@@ -1,0 +1,28 @@
+x
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..93f63f4 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -2882,7 +2882,20 @@ kmem_get_new_chunk(
+ 		metaf = kmem_meta_hwm[kmem_get_front(range_id, 0)];
+ 		metab = kmem_meta_hwm[kmem_get_front(range_id, 1)];
+ 		if (meta != (from_right ? metab : metaf)) {
+-			return NULL;
++			/*
++			 * nio: the watermark moved because this call populated it; handing
++			 * NULL back makes the caller retry two empty free lists and land
++			 * here again forever.  Stay in the loop, bounded.
++			 */
++			{
++				static uint32_t nio_hwm_moves;
++				if (++nio_hwm_moves > 8u) {
++					printf("\nH r=%d num=%u span=%ld", range_id, meta_num,
++					    (long)(metab - metaf));
++					panic("nio: chunk high watermark keeps moving");
++				}
++			}
++			continue;
+ 		}
+ 		if (metaf + meta_num >= metab) {
+ 			kmem_range_out_of_va(range_id, meta_num);

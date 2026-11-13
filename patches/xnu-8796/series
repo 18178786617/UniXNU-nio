@@ -104,3 +104,4 @@ nio-kmem-locate-guard.patch
 nio-ptr-range-cap.patch
 nio-meta-budget.patch
 nio-ptr-single-range.patch
+nio-chunk-hwm-retry.patch
