@@ -11,12 +11,6 @@ default = "xnu"
 title = "Edge S - UniXNU iOS 16.5"
 
 [[entry]]
-id = "tools"
-title = "UniXNU tools (menu test)"
-type = "action"
-action = "tools"
-
-[[entry]]
 id = "xnu"
 title = "iOS 16.5 kernel"
 type = "xnu"
@@ -48,3 +42,10 @@ initrd = "Payloads/rootfs.img"
 # the panic happens before AMFI reads that argument. The kernel patch of the
 # same name makes the bootstrap skip the load when this is present.
 args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam native-ufs-root=1 native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 startup_debug=1 wdt=-1"
+
+[[entry]]
+id = "tools"
+title = "UniXNU tools (menu test)"
+type = "action"
+action = "tools"
+
