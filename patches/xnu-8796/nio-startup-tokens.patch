@@ -1,26 +1,28 @@
-Print every eighth startup entry with its address
+Print only the late startup entries and mark the end of the table
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..c25e3e7 100644
+index bec97fb..fba4ae1 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -407,6 +407,19 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -407,10 +407,21 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		}
  		startup_phase = cur->subsystem - 1;
  		kernel_startup_log(cur->subsystem);
 +		/*
-+		 * nio: only every eighth entry prints, because the panel keeps forty
-+		 * lines and a token per entry buries itself.  The number and the low
-+		 * bits of the function address bracket the entry that does not return.
++		 * nio: only the late subsystems print, so the list stays ordered and fits
++		 * on the forty line panel.  The last line is the entry that did not
++		 * return; its address resolves with tools/kernel-symbols.py.
 +		 */
-+		if (cur->subsystem >= STARTUP_SUB_KPRINTF) {
-+			static uint32_t nio_entry_no;
-+			uint32_t nio_this = ++nio_entry_no;
-+			if ((nio_this & 7u) == 0u) {
-+				printf("\n[#%u:%.7llx]", nio_this,
-+				    (unsigned long long)(uintptr_t)cur->func & 0xfffffffu);
-+			}
++		if (cur->subsystem >= STARTUP_SUB_MACH_IPC &&
++		    cur->subsystem != STARTUP_SUB_LOCKDOWN) {
++			printf("\n[%u.%d:%llx]", cur->subsystem, (int)cur->rank,
++			    (unsigned long long)(uintptr_t)cur->func);
 +		}
  		cur->func(cur->arg);
  		startup_entry_cur = ++cur;
  	}
+ 	kernel_startup_log(upto);
++	printf("\n[STARTUP-END %u]\n", (unsigned)upto);
+ 
+ 	if ((startup_debug & STARTUP_DEBUG_VERBOSE) &&
+ 	    upto >= STARTUP_SUB_KPRINTF) {
