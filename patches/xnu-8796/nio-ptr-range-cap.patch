@@ -17,11 +17,11 @@ index 2927d4b..3afcc4b 100644
 +	 * nio: this is every free byte of kernel VA, tens of terabytes, and the
 +	 * three ranges derived from it then need far more kmem_page_meta entries
 +	 * than the metadata claim can hold, so the first chunk request runs out
-+	 * of meta and spins.  A hundred and twenty-eight gigabytes of free VA is
++	 * of meta and spins.  Thirty-two gigabytes of free VA is
 +	 * more than this board can ever use.
 +	 */
-+	if (largest_free_size > (vm_map_size_t)128 * 1024 * 1024 * 1024) {
-+		largest_free_size = (vm_map_size_t)128 * 1024 * 1024 * 1024;
++	if (largest_free_size > (vm_map_size_t)32 * 1024 * 1024 * 1024) {
++		largest_free_size = (vm_map_size_t)32 * 1024 * 1024 * 1024;
 +	}
  
  	/*
