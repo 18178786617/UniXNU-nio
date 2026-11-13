@@ -1,0 +1,509 @@
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:49:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/system.h:52:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/task.h:104:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/cs_blobs.h:199:2: warning: array designators are a C99 extension [-Wc99-designator]
+  199 |         [CS_LINKAGE_APPLICATION_OOPJIT_INVALID] = NULL,
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: warning: nested designators are a C99 extension [-Wc99-designator]
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: note: previous initialization for field 'kt_size' is here
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: warning: nested designators are a C99 extension [-Wc99-designator]
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:980:2: note: previous initialization for field 'kt_size' is here
+  980 |         IOOverrideTypedOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:946:2: note: expanded from macro 'IOOverrideTypedOperators'
+  946 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_flags' will be initialized after field 'kt_size_hdr' [-Wreorder-init-list]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:949:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  949 |         __IOOverrideTypedArrayOperators(type);                     \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:875:2: note: expanded from macro '__IOOverrideTypedArrayOperators'
+  875 |         __IOTypedOperatorNewArrayImpl(type, count)   \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:828:17: note: expanded from macro '__IOTypedOperatorNewArrayImpl'
+  828 |                 static KALLOC_TYPE_VAR_DEFINE(kt_view_var,                 \
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  829 |                     hdr_ty, type, KT_SHARED_ACCT);                         \
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 3 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/bsd/sys/cdefs.h:113:26: note: expanded from macro '__CONCAT'
+  113 | #define __CONCAT(x, y)   x ## y
+      |                          ^
+<scratch space>:683:1: note: expanded from here
+  683 | KALLOC_TYPE_VAR_DEFINE_4
+      | ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1544:21: note: expanded from macro 'KALLOC_TYPE_VAR_DEFINE_4'
+ 1544 |             .kt_size_hdr = sizeof(hdr),                                 \
+      |             ~~~~~~~~~~~~~~~^~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: note: previous initialization for field 'kt_flags' is here
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:949:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  949 |         __IOOverrideTypedArrayOperators(type);                     \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:875:2: note: expanded from macro '__IOOverrideTypedArrayOperators'
+  875 |         __IOTypedOperatorNewArrayImpl(type, count)   \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:828:17: note: expanded from macro '__IOTypedOperatorNewArrayImpl'
+  828 |                 static KALLOC_TYPE_VAR_DEFINE(kt_view_var,                 \
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  829 |                     hdr_ty, type, KT_SHARED_ACCT);                         \
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 5 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1543:18: note: expanded from macro 'KALLOC_TYPE_VAR_DEFINE_4'
+ 1543 |             .kt_flags = KALLOC_TYPE_ADJUST_FLAGS(flags, hdr, type),     \
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1506:2: note: expanded from macro 'KALLOC_TYPE_ADJUST_FLAGS'
+ 1506 |         KALLOC_TYPE_CAST_FLAGS((flags | KT_CHANGED | KT_CHANGED2 |               \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1507 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, __VA_ARGS__)? KT_DATA_ONLY: 0) |\
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1508 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_PTR, __VA_ARGS__)? KT_PTR_ARRAY: 0) | \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1509 |         (KALLOC_TYPE_VM_SIZE_CHECK(__VA_ARGS__)? KT_VM : 0)))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1483:39: note: expanded from macro 'KALLOC_TYPE_CAST_FLAGS'
+ 1483 | #define KALLOC_TYPE_CAST_FLAGS(flags) static_cast<kalloc_type_flags_t>(flags)
+      |                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_flags' will be initialized after field 'kt_size_hdr' [-Wreorder-init-list]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:949:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  949 |         __IOOverrideTypedArrayOperators(type);                     \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:877:2: note: expanded from macro '__IOOverrideTypedArrayOperators'
+  877 |         __IOTypedOperatorDeleteArrayImpl(type, ptr)  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:847:17: note: expanded from macro '__IOTypedOperatorDeleteArrayImpl'
+  847 |                 static KALLOC_TYPE_VAR_DEFINE(kt_view_var,            \
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  848 |                     hdr_ty, type, KT_SHARED_ACCT);                    \
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 3 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/bsd/sys/cdefs.h:113:26: note: expanded from macro '__CONCAT'
+  113 | #define __CONCAT(x, y)   x ## y
+      |                          ^
+<scratch space>:24:1: note: expanded from here
+   24 | KALLOC_TYPE_VAR_DEFINE_4
+      | ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1544:21: note: expanded from macro 'KALLOC_TYPE_VAR_DEFINE_4'
+ 1544 |             .kt_size_hdr = sizeof(hdr),                                 \
+      |             ~~~~~~~~~~~~~~~^~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: note: previous initialization for field 'kt_flags' is here
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:949:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  949 |         __IOOverrideTypedArrayOperators(type);                     \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:877:2: note: expanded from macro '__IOOverrideTypedArrayOperators'
+  877 |         __IOTypedOperatorDeleteArrayImpl(type, ptr)  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:847:17: note: expanded from macro '__IOTypedOperatorDeleteArrayImpl'
+  847 |                 static KALLOC_TYPE_VAR_DEFINE(kt_view_var,            \
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  848 |                     hdr_ty, type, KT_SHARED_ACCT);                    \
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 5 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1543:18: note: expanded from macro 'KALLOC_TYPE_VAR_DEFINE_4'
+ 1543 |             .kt_flags = KALLOC_TYPE_ADJUST_FLAGS(flags, hdr, type),     \
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1506:2: note: expanded from macro 'KALLOC_TYPE_ADJUST_FLAGS'
+ 1506 |         KALLOC_TYPE_CAST_FLAGS((flags | KT_CHANGED | KT_CHANGED2 |               \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1507 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, __VA_ARGS__)? KT_DATA_ONLY: 0) |\
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1508 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_PTR, __VA_ARGS__)? KT_PTR_ARRAY: 0) | \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1509 |         (KALLOC_TYPE_VM_SIZE_CHECK(__VA_ARGS__)? KT_VM : 0)))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1483:39: note: expanded from macro 'KALLOC_TYPE_CAST_FLAGS'
+ 1483 | #define KALLOC_TYPE_CAST_FLAGS(flags) static_cast<kalloc_type_flags_t>(flags)
+      |                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: nested designators are a C99 extension [-Wc99-designator]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: note: previous initialization for field 'kt_size' is here
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:865:17: note: expanded from macro '__IOOverrideTypedOperators'
+  865 |                 return IOMallocType(type);                        \
+      |                        ^~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: nested designators are a C99 extension [-Wc99-designator]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:23:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:985:2: note: previous initialization for field 'kt_size' is here
+  985 |         IOOverrideTypedOperatorsSupportingArrayOperators(T);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:950:2: note: expanded from macro 'IOOverrideTypedOperatorsSupportingArrayOperators'
+  950 |         __IOOverrideTypedOperators(type)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:869:10: note: expanded from macro '__IOOverrideTypedOperators'
+  869 |                 IOFreeType(mem, type);                            \
+      |                 ^~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:24:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOUserClient.h:37:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOService.h:44:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IORegistryEntry.h:40:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSContainers.h:46:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:472:10: warning: nested designators are a C99 extension [-Wc99-designator]
+  472 |                 data = IOMallocType(T);
+      |                        ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:24:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOUserClient.h:37:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOService.h:44:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IORegistryEntry.h:40:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSContainers.h:46:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:472:10: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  472 |                 data = IOMallocType(T);
+      |                        ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:472:10: note: previous initialization for field 'kt_size' is here
+  472 |                 data = IOMallocType(T);
+      |                        ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:330:9: note: expanded from macro 'IOMallocType'
+  330 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  331 |             KT_SHARED_ACCT);                                \
+      |             ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:24:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOUserClient.h:37:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOService.h:44:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IORegistryEntry.h:40:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSContainers.h:46:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:487:2: warning: nested designators are a C99 extension [-Wc99-designator]
+  487 |         IOFreeType(data, T);
+      |         ^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:24:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOUserClient.h:37:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOService.h:44:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IORegistryEntry.h:40:
+In file included from /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSContainers.h:46:
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:487:2: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+  487 |         IOFreeType(data, T);
+      |         ^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSValueObject.h:487:2: note: previous initialization for field 'kt_size' is here
+  487 |         IOFreeType(data, T);
+      |         ^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOLib.h:336:9: note: expanded from macro 'IOFreeType'
+  336 |         static _KALLOC_TYPE_DEFINE(kt_view_var, type,       \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  337 |            KT_SHARED_ACCT);                                 \
+      |            ~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:28:1: warning: nested designators are a C99 extension [-Wc99-designator]
+   28 | OSDefineMetaClassAndAbstractStructors(IOBlockStorageDevice,IOService)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2384:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructors'
+ 2384 |         OSDefineMetaClassAndAbstractStructorsWithInit (className,   \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2385 |                         superclassName, )
+      |                         ~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2223:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructorsWithInit'
+ 2223 |         OSDefineOperatorMethods(className)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2079:9: note: expanded from macro 'OSDefineOperatorMethods'
+ 2079 |         static KALLOC_TYPE_DEFINE(className ## _ktv, className,     \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2080 |             KT_DEFAULT);                                            \
+      |             ~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:456:2: note: expanded from macro 'KALLOC_TYPE_DEFINE'
+  456 |         _KALLOC_TYPE_DEFINE(var, type, flags); \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1516:6: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1516 |             .kt_zv.zv_name = "site." #type,                             \
+      |             ^~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:28:1: warning: ISO C++ requires field designators to be specified in declaration order; field 'kt_size' will be initialized after field 'kt_signature' [-Wreorder-init-list]
+   28 | OSDefineMetaClassAndAbstractStructors(IOBlockStorageDevice,IOService)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2384:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructors'
+ 2384 |         OSDefineMetaClassAndAbstractStructorsWithInit (className,   \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2385 |                         superclassName, )
+      |                         ~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2223:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructorsWithInit'
+ 2223 |         OSDefineOperatorMethods(className)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2079:9: note: expanded from macro 'OSDefineOperatorMethods'
+ 2079 |         static KALLOC_TYPE_DEFINE(className ## _ktv, className,     \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2080 |             KT_DEFAULT);                                            \
+      |             ~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:456:2: note: expanded from macro 'KALLOC_TYPE_DEFINE'
+  456 |         _KALLOC_TYPE_DEFINE(var, type, flags); \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1519:22: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1519 |             .kt_signature = KALLOC_TYPE_EMIT_SIG(type),                 \
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1497:2: note: expanded from macro 'KALLOC_TYPE_EMIT_SIG'
+ 1497 |         (KALLOC_TYPE_CHECK(KT_SUMMARY_MASK_DATA, sig_type, ##__VA_ARGS__) || \
+      |         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:28:1: note: previous initialization for field 'kt_size' is here
+   28 | OSDefineMetaClassAndAbstractStructors(IOBlockStorageDevice,IOService)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2384:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructors'
+ 2384 |         OSDefineMetaClassAndAbstractStructorsWithInit (className,   \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2385 |                         superclassName, )
+      |                         ~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2223:2: note: expanded from macro 'OSDefineMetaClassAndAbstractStructorsWithInit'
+ 2223 |         OSDefineOperatorMethods(className)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/libkern/libkern/c++/OSMetaClass.h:2079:9: note: expanded from macro 'OSDefineOperatorMethods'
+ 2079 |         static KALLOC_TYPE_DEFINE(className ## _ktv, className,     \
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2080 |             KT_DEFAULT);                                            \
+      |             ~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:456:2: note: expanded from macro 'KALLOC_TYPE_DEFINE'
+  456 |         _KALLOC_TYPE_DEFINE(var, type, flags); \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/EXPORT_HDRS/osfmk/kern/kalloc.h:1518:17: note: expanded from macro '_KALLOC_TYPE_DEFINE'
+ 1518 |             .kt_size = sizeof(type),                                    \
+      |                        ^~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/refer/IOStorageFamily/IOBlockStorageDevice.cpp:209:12: warning: 'doSynchronizeCache' is deprecated [-Wdeprecated-declarations]
+  209 |     return(doSynchronizeCache());
+      |            ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/storage-abi/include/IOKit/storage/IOBlockStorageDevice.h:234:63: note: 'doSynchronizeCache' has been explicitly marked deprecated here
+  234 |     virtual IOReturn    doSynchronizeCache(void) __attribute__ ((deprecated));
+      |                                                                  ^
+18 warnings generated.
