@@ -1,0 +1,51 @@
+Mirror the console into ramoops
+
+The loader now prints the ramoops pstore console record, but the kernel never wrote
+to it: the record still held the five byte marker an old probe left behind.  Mirror
+every console character into 0xAF040000 so the next boot can print the whole log.
+---
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+index e5b23f2..4781269 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -598,9 +598,40 @@ console_write_unbuffered(char c)
+  *
+  * @param c The character to print.
+  */
++/*
++ * nio: mirror every console character into the ramoops pstore console record
++ * at 0xAF040000 so the loader can print the whole log on the next boot.  The
++ * record is { u32 sig = 'DBGC', u32 start, u32 size } followed by the ring.
++ * DarwinBoot reads exactly that layout.
++ */
++#define NIO_RAMOOPS_CONSOLE 0xAF040000ull
++#define NIO_RAMOOPS_RING    0x3F000u
++#define NIO_RAMOOPS_SIG     0x43474244u
++
++static void
++nio_ramoops_putc(char c)
++{
++	volatile uint32_t *hdr = (volatile uint32_t *)(uintptr_t)NIO_RAMOOPS_CONSOLE;
++	volatile char     *ring = (volatile char *)(uintptr_t)(NIO_RAMOOPS_CONSOLE + 12);
++	static uint32_t    off;
++
++	if (hdr[0] != NIO_RAMOOPS_SIG) {
++		hdr[0] = NIO_RAMOOPS_SIG;
++		off = 0;
++	}
++	if (off >= NIO_RAMOOPS_RING) {
++		off = 0;
++	}
++	ring[off] = c;
++	off++;
++	hdr[1] = off;
++	hdr[2] = off;
++}
++
+ void
+ console_write_char(char c)
+ {
++	nio_ramoops_putc(c);
+ 	console_write(&c, 1);
+ }
+ 
