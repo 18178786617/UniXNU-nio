@@ -1,0 +1,25 @@
+Count the zone registrations so the one that does not return is known
+
+The panel shows the last token at subsystem 7 (ZALLOC), rank LAST, and the table
+holds exactly 644 entries pointing at __zone_site_register in that slot.  That
+function does one thing -- vm_tag_alloc(site) -- so the stall is inside one of
+those 644 calls.
+
+Print every 32nd call with the low bits of its site pointer.  The site pointer is
+unique per entry, so the last line names the exact row even when the symbol
+table has no name for it, and the count says how far into the batch it got.
+---
+diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
+--- a/osfmk/kern/zalloc.c
++++ b/osfmk/kern/zalloc.c
+@@ -2301,4 +2301,9 @@ __zone_site_register(vm_allocation_site_t *site)
+ {
++	static uint32_t nio_zreg;
++	uint32_t nio_z = nio_zreg++;
++	if ((nio_z & 31u) == 0u) {
++		printf("\nZ%u:%llx", nio_z, (unsigned long long)(uintptr_t)site & 0xfffffffu);
++	}
+ 	if (zone_tagging_on) {
+ 		vm_tag_alloc(site);
+ 	}
+
