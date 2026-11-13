@@ -1,22 +1,25 @@
-Print the address of every startup entry so the last one resolves to a function
+Print every eighth startup entry with its address
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..8f13a6f 100644
+index bec97fb..c25e3e7 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -407,6 +407,16 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -407,6 +407,19 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		}
  		startup_phase = cur->subsystem - 1;
  		kernel_startup_log(cur->subsystem);
 +		/*
-+		 * nio: number and address of every startup entry, printed before it
-+		 * runs.  The last line on the glass is the entry that did not return,
-+		 * and its address resolves to a function with kernel-symbols.py.
++		 * nio: only every eighth entry prints, because the panel keeps forty
++		 * lines and a token per entry buries itself.  The number and the low
++		 * bits of the function address bracket the entry that does not return.
 +		 */
 +		if (cur->subsystem >= STARTUP_SUB_KPRINTF) {
 +			static uint32_t nio_entry_no;
-+			printf("\n[#%u:%llx]", ++nio_entry_no,
-+			    (unsigned long long)(uintptr_t)cur->func);
++			uint32_t nio_this = ++nio_entry_no;
++			if ((nio_this & 7u) == 0u) {
++				printf("\n[#%u:%.7llx]", nio_this,
++				    (unsigned long long)(uintptr_t)cur->func & 0xfffffffu);
++			}
 +		}
  		cur->func(cur->arg);
  		startup_entry_cur = ++cur;
