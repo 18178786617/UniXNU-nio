@@ -1,0 +1,24 @@
+Print the sizes the three kmem ranges are built from
+
+kmem_large_ranges shows the pointer range as zero bytes, so the boot cannot allocate
+a single pointer chunk.  Print the free VA, the three computed sizes and the number of
+pointer ranges right after they are derived: the next boot names the step that zeroes
+it.
+---
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+index 2927d4b..1b75db8 100644
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3514,6 +3514,12 @@ kmem_add_extra_claims(void)
+ 	data_range_size = largest_free_size
+ 	    - (ptr_range_size * kmem_ptr_ranges)
+ 	    - sprayqtn_range_size;
++	/* nio: the pointer range comes out zero bytes long, so print the inputs. */
++	printf("\nR free=%#llx ptr=%#llx spray=%#llx data=%#llx n=%u",
++	    (unsigned long long)largest_free_size,
++	    (unsigned long long)ptr_range_size,
++	    (unsigned long long)sprayqtn_range_size,
++	    (unsigned long long)data_range_size, kmem_ptr_ranges);
+ 
+ 	/*
+ 	 * Add claims for kmem's ranges
