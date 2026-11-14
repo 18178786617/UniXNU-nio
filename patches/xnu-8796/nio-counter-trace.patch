@@ -16,12 +16,13 @@ panel keeps forty lines.
 diff --git a/osfmk/kern/counter_common.c b/osfmk/kern/counter_common.c
 --- a/osfmk/kern/counter_common.c
 +++ b/osfmk/kern/counter_common.c
-@@ -62,12 +62,26 @@ scalable_counter_static_init(scalable_counter_t *counter)
+@@ -62,12 +62,27 @@ scalable_counter_static_init(scalable_counter_t *counter)
  {
 +	static uint32_t nio_s_trace;
 +	uint32_t nio_s_this = nio_s_trace++;
 +	if (nio_s_this < 6u) {
-+		printf("\nS%u c=%llx d=%llx\n", nio_s_this,
++		printf("\nS%u a=%llx c=%llx d=%llx\n", nio_s_this,
++		    (unsigned long long)(uintptr_t)counter,
 +		    (unsigned long long)(uintptr_t)(*counter),
 +		    (unsigned long long)((uintptr_t)(*counter) | 0xc0c0000000000000ull));
 +	}
