@@ -19,7 +19,7 @@ index bec97fb..527d654 100644
 +	unsigned n = 0;
 +	for (;;) {
 +		delay(100);
-+		printf("nio: hb %u\n", ++n);
++		if ((++n % 5000u) == 0) { printf("nio: hb %u\n", n); }
 +	}
 +}
 +
