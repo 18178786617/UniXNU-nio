@@ -244,3 +244,4 @@ nio-kext-load-executable.patch
 nio-kext-loaded-label.patch
 nio-no-personality-for-skipped.patch
 nio-candidate-done.patch
+nio-bsdinit-narrates.patch
