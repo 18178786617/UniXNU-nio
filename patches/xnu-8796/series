@@ -32,6 +32,7 @@ non-apple-cache-monitor.patch
 non-apple-iommu-bootstrap.patch
 non-apple-pmap-field.patch
 null-root-media.patch
+nio-iokit-registry-trace.patch
 offline-component-load-probes.patch
 offline-legacy-start.patch
 gpu-probe-start.patch

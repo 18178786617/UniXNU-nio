@@ -1,0 +1,67 @@
+Name the service that cannot reach the registry root
+
+run-287 prints the four kext load stages and apfs finishes its sysctl
+registration, then the console shows exactly one IOKit line:
+
+  ...UninterruptController: not registry member at registerService()
+
+That line is IOService.cpp:1047, taken when the walk up the IOService
+plane from the object never reaches the registry root.  The early return
+is silent: it does not say which object failed, how far the walk got, or
+where the plane broke, so the same screenshot can mean three different
+things (no root at all, a child attached to the wrong parent, or a
+provider that never registered).  Print those three facts instead, plus
+one R0 line with the root and the platform expert the first time
+registerService runs.
+
+R0 is once, S1 carries the failing object and the three counters, U1..U3
+are its first three ancestors and stop at NULL.  All tokens are two or
+three characters, so a 40 row console keeps them readable.
+
+---
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1037,13 +1037,41 @@ IOService::registerService( IOOptionBits options )
+ 	enum { kMaxPathLen  = 256 };
+ 	enum { kMaxChars    = 63 };
+ 
++	{
++		static bool nio_r0 = false;
++		if (!nio_r0) {
++			nio_r0 = true;
++			IOLog("nio: R0 root=%p plat=%p\n",
++			    (void *)getRegistryRoot(), (void *)gIOPlatform);
++		}
++	}
+ 	IORegistryEntry * parent = this;
+ 	IORegistryEntry * root = getRegistryRoot();
++	int nio_up = 0;
+ 	while (parent && (parent != root)) {
+ 		parent = parent->getParentEntry( gIOServicePlane);
++		nio_up++;
+ 	}
+ 
+ 	if (parent != root) {
++		/* nio: the silent early return hid which object could not reach the
++		 * root, and where the service plane broke.  Say both: the object, how
++		 * many levels the walk climbed, and the first three ancestors.  Three
++		 * short lines fit the 40 row console, and a break shows up as a NULL
++		 * or as an ancestor that is not the object's real provider. */
++		const char *nio_n = getName();
++		IORegistryEntry *nio_q;
++		unsigned nio_k;
++
++		IOLog("nio: S1 %s up=%d p=%p r=%p g=%p\n",
++		    nio_n ? nio_n : "?", nio_up, (void *)parent, (void *)root,
++		    (void *)gIOPlatform);
++		for (nio_q = getParentEntry(gIOServicePlane), nio_k = 1;
++		    nio_q != NULL && nio_k <= 3;
++		    nio_q = nio_q->getParentEntry(gIOServicePlane), nio_k++) {
++			const char *nio_pn = nio_q->getName();
++			IOLog("nio: U%u %s\n", nio_k, nio_pn ? nio_pn : "?");
++		}
+ 		IOLog("%s: not registry member at registerService()\n", getName());
+ 		return;
+ 	}
