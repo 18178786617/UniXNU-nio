@@ -105,7 +105,6 @@ nio-meta-budget.patch
 nio-range-sizes.patch
 nio-chunk-hwm-retry.patch
 nio-chunk-coalesce-trace.patch
-nio-counter-trace.patch
 nio-console-to-ramoops.patch
 nio-zone-register-trace.patch
 nio-counter-storage-in-data.patch
