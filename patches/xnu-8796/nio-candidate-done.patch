@@ -1,0 +1,20 @@
+Mark the end of one candidate's instantiation
+
+run-282 stops with M34 printed and no further entry: the panel's last two lines are
+the two classes that could not be allocated.  The do-while around that allocation
+cannot loop (its condition is false), so the question is whether the block itself
+finishes.  One line after it answers that.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..c7d80b1 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4068,6 +4068,8 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 				if (startList) {
+ 					startList->setObject( newInst );
+ 				}
++				printf("nio: cand done %s\n",
++				    (symbol != NULL) ? symbol->getCStringNoCopy() : "(null)");
+ 			} while (false);
+ 
+ 			props->release();
