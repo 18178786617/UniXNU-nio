@@ -1,0 +1,43 @@
+Return early from initialize_screen() with no video info
+
+kernel_bootstrap_thread() calls initialize_screen(NULL, kPEAcquireScreen).  With
+a NULL boot_vinfo the setup block that maps the framebuffer and assigns gc_ops is
+skipped, so the kPEAcquireScreen branch runs vc_progress_set() and gc_enable()
+with gc_ops still at its defaults.
+
+That call is where run-253 stops: Q2 prints and Q3 never does, with nothing else
+between them.  run-253 also carried a guard on vinfo.v_depth == 0, which did not
+fire, so the depth is non-zero and the branch was taken.
+
+Nothing in this function can work without boot_vinfo, and this port's console is
+the injected blob, so return immediately.  The call site stays, so the symbol
+stays referenced (dropping it broke the bsd link in run-254).
+---
+diff --git a/osfmk/console/video_console.c b/osfmk/console/video_console.c
+index 384118e..9fcc340 100644
+--- a/osfmk/console/video_console.c
++++ b/osfmk/console/video_console.c
+@@ -2792,6 +2792,23 @@ void
+ initialize_screen(PE_Video * boot_vinfo, unsigned int op)
+ {
+ 	unsigned int newMapSize = 0;
++
++	/*
++	 * nio: called once from kernel_bootstrap_thread() with a NULL boot_vinfo.
++	 *
++	 * With no boot_vinfo the setup block below is skipped entirely: no mapping
++	 * is made, gc_ops is never assigned and gc_initialize() never runs, so vinfo
++	 * keeps whatever the console blob left there.  The kPEAcquireScreen branch
++	 * then runs vc_progress_set() and gc_enable() anyway, and that is where the
++	 * boot stops -- Q2 prints, Q3 never does, with this call as the only
++	 * statement in between.
++	 *
++	 * There is nothing to initialise without boot_vinfo, and this port's console
++	 * is the injected blob, so return before touching any of it.
++	 */
++	if (boot_vinfo == NULL) {
++		return;
++	}
+ 	vm_offset_t newVideoVirt = 0;
+ 	boolean_t graphics_now;
+ 	uint32_t delay;

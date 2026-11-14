@@ -1,89 +1,70 @@
-Mark the steps after E16 and stop calling initialize_screen
+Mark every step between E16 and bsd_init
 
-E16 is STARTUP_SUB_EARLY_BOOT, the last phase.  Everything after it had no
-marker, so a photo could not say which call held the boot.
+E16 is STARTUP_SUB_EARLY_BOOT, the last startup phase, and nothing after it was
+marked: a photo could not say which call held the boot.
 
-run-253's video answers it: Q2 prints and Q3 never does, and between those two
-markers there is exactly one statement -- initialize_screen(NULL,
-kPEAcquireScreen).  With a NULL boot_vinfo that function skips its entire setup
-block and all that is left is the Apple-logo progress meter plus gc_enable();
-this port's console is the injected blob and needs none of it, so the call is
-replaced by a Q3 marker that says it was skipped.
-
-Q4..QA then tag the commpage, MACF, dtrace, trust cache, kext bootstrap removal
-and lockdown, so the next photo names the call after that.
+run-253's video says Q2 prints and Q3 never does, and the only statement between
+those markers is initialize_screen(NULL, kPEAcquireScreen).  Keep the call (the
+fix for it lives in nio-screen-init-null.patch) and tag the calls that follow:
+commpage, MACF, dtrace, trust cache, kext bootstrap removal, lockdown.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..bc25438 100644
+index bec97fb..94158ad 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -702,21 +702,34 @@ kernel_bootstrap_thread(void)
+@@ -702,21 +702,26 @@ kernel_bootstrap_thread(void)
  	ml_spin_debug_clear_self();
  #endif
  	(void) spllo();         /* Allow interruptions */
-+	printf("\n
-+Q2");
++	printf("\nQ2");
  
  	/*
--	 * This will start displaying progress to the user, start as early as possible
-+	 * nio: initialize_screen() is skipped.  Called with a NULL boot_vinfo it
-+	 * skips its whole setup block (no mapping, no gc_ops, no gc_initialize) and
-+	 * only runs the Apple-logo progress meter and gc_enable() -- and that call
-+	 * is where run-253 stopped: Q2 printed, Q3 never did, with nothing else
-+	 * between them.  This port draws its console with the injected blob, which
-+	 * needs none of it.
+ 	 * This will start displaying progress to the user, start as early as possible
  	 */
--	initialize_screen(NULL, kPEAcquireScreen);
-+	printf("\nQ3 screen init skipped");
+ 	initialize_screen(NULL, kPEAcquireScreen);
++	printf("\nQ3");
  
  	/*
  	 *	Initialize the shared region module.
  	 */
  	vm_commpage_init();
-+	printf("\n
-+Q4");
++	printf("\nQ4");
  	vm_commpage_text_init();
-+	printf("\n
-+Q5");
++	printf("\nQ5");
  
  #if CONFIG_MACF
  	kernel_bootstrap_log("mac_policy_initmach");
  	mac_policy_initmach();
-+	printf("\n
-+Q6");
++	printf("\nQ6");
  #if CONFIG_VNGUARD
  	kernel_bootstrap_log("vnguard_policy_init");
  	vnguard_policy_init();
-@@ -727,6 +740,8 @@ kernel_bootstrap_thread(void)
+@@ -727,6 +732,7 @@ kernel_bootstrap_thread(void)
  	kernel_bootstrap_log("dtrace_early_init");
  	dtrace_early_init();
  	sdt_early_init();
-+	printf("\n
-+Q7");
++	printf("\nQ7");
  #endif
  
  #if CODE_SIGNING_MONITOR
-@@ -739,6 +754,8 @@ kernel_bootstrap_thread(void)
+@@ -739,6 +745,7 @@ kernel_bootstrap_thread(void)
  
  	/* Initialize the runtime for the trust cache interface */
  	trust_cache_runtime_init();
-+	printf("\n
-+Q8");
++	printf("\nQ8");
  
  	/* Load the static and engineering trust caches */
  	load_static_trust_cache();
-@@ -754,10 +771,14 @@ kernel_bootstrap_thread(void)
+@@ -754,10 +761,12 @@ kernel_bootstrap_thread(void)
  	 */
  	kernel_bootstrap_log("OSKextRemoveKextBootstrap");
  	OSKextRemoveKextBootstrap();
-+	printf("\n
-+Q9");
++	printf("\nQ9");
  
  	/* No changes to kernel text and rodata beyond this point. */
  	kernel_bootstrap_log("machine_lockdown");
  	machine_lockdown();
-+	printf("\n
-+QA");
++	printf("\nQA");
  
  #ifdef CONFIG_XNUPOST
  	kern_return_t result = kernel_list_tests();
