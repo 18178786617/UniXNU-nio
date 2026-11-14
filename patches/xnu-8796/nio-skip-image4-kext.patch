@@ -98,7 +98,7 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * constructors already ran during load; img4if stays NULL, which the
 +	 * trust-cache path already tolerates). */
 +	if (strncmp(getIdentifierCString(), "com.apple.filesystems.apfs", 26) == 0 ||
-+	    0) {
++	    strncmp(getIdentifierCString(), "com.apple.security.AppleImage4", 30) == 0) {
 +		/* nio: only apfs stays skipped; the rest get a manifest node */
 +		printf("nio: skipping apfs start\n");
 +		result = kOSReturnSuccess;
