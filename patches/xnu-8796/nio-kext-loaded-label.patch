@@ -1,0 +1,21 @@
+Say when a load reaches the loaded label
+
+run-277's panel ends on 'load> com.apple.driver.AppleARMPPlatform' with no ldx>
+after it, so the stall is in load() before the executable is touched.  Every
+early exit in that stretch funnels through the loaded: label; one line there
+splits 'stuck in the checks' from 'stuck after them'.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..fb84c95 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -6633,6 +6633,9 @@ OSKext::load(
+ 	}
+ 
+ loaded:
++	printf("nio: ldl> %s started=%d\n",
++	    (getIdentifierCString() != NULL) ? getIdentifierCString() : "(null)",
++	    (int)(flags.started ? 1 : 0));
+ 	if (isExecutable() && !flags.started) {
+ 		if (startOpt == kOSKextExcludeNone) {
+ 			result = start();
