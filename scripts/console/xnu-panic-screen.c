@@ -652,31 +652,12 @@ static u32 tp_text (u32 cx, u32 cy, const char *s)
  * always what is on screen. */
 static u32 zone_next (u8 *base, u32 rb, u32 w, u32 y, u32 y0, u32 y1)
 {
+  (void)base;
+  (void)rb;
+  (void)w;
   y += CONS_LINE;
   if (y + CONS_GLYPH > y1) {
-    /* nio: scroll the band instead of wrapping inside it.
-     *
-     * With a ring the row order under a photo is ambiguous: the newest line is
-     * wherever the cursor happens to be and the bottom line is the oldest, so a
-     * frozen screen was read as "the bottom line is the last output" for
-     * several rounds.  Move every text row up by one and keep writing on the
-     * last one, so the bottom line of the band is always the last thing
-     * printed. */
-    u32 yy, xx;
-    for (yy = y0; yy + CONS_LINE < y1; yy++) {
-      u32 *dst = (u32 *)(base + (u64)yy * rb);
-      u32 *src = (u32 *)(base + (u64)(yy + CONS_LINE) * rb);
-      for (xx = 0; xx < w; xx++) {
-        dst[xx] = src[xx];
-      }
-    }
-    for (; yy < y1; yy++) {
-      u32 *dst = (u32 *)(base + (u64)yy * rb);
-      for (xx = 0; xx < w; xx++) {
-        dst[xx] = 0;
-      }
-    }
-    return y0 + ((y1 - y0) / CONS_LINE - 1) * CONS_LINE;
+    y = y0;
   }
   return y;
 }
@@ -810,6 +791,26 @@ static void cons_putc_zone (char ch, u32 zone)
       u32 *row = (u32 *)(base + (u64)yy * rb);
       for (px = x; px < w; px++) {
         row[px] = 0;
+      }
+    }
+    /* nio: stamp the line number on the line that just ended, after the blank
+     * above (a stamp drawn on the *next* line would be wiped by that line's own
+     * blank when it ends).  The band wraps, so a photo cannot tell which row is
+     * newest by position -- but the highest number on the panel is always the
+     * last line finished. */
+    {
+      u32 *lc = (u32 *)(base + (u64)(lim - 1) * rb);
+      u32 n, d;
+      if (lc[0] != 0x4C4E4F43u) {          /* "CNOL" */
+        lc[0] = 0x4C4E4F43u;
+        lc[1] = 0;
+      }
+      lc[1]++;
+      n = lc[1] % 10000u;
+      for (d = 0; d < 4; d++) {
+        u32 digit = (n / (d == 0 ? 1000u : d == 1 ? 100u : d == 2 ? 10u : 1u)) % 10u;
+        cell (base, rb, w - (4 - d) * CONS_CELL - CONS_CELL / 2, y,
+              (u8)('0' + digit));
       }
     }
     st[1] = 0;
