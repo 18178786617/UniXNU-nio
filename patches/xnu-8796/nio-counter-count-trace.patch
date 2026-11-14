@@ -1,0 +1,25 @@
+Count the static counters, printing after each one is finished
+
+E7 on the panel proves the whole ZALLOC phase completed, so the zone
+registrations were never the problem.  The boot now stops at subsystem 9 rank 1,
+and that group is exactly the 49 scalable_counter_static_init entries.
+
+The earlier counter probe printed at the top of the function and destroyed the
+one counter it was measuring: a printf drains through the log queue, and a full
+queue calls counter_inc on log_queue_cnt_dropped_nomem, whose storage is being
+initialised at that very moment.  Print at the end instead -- by then the counter
+already points at its per-cpu slot, so the print cannot damage it.
+
+  C0 .. C48   the last one printed is the last counter that finished
+---
+diff --git a/osfmk/kern/counter_common.c b/osfmk/kern/counter_common.c
+--- a/osfmk/kern/counter_common.c
++++ b/osfmk/kern/counter_common.c
+@@ -73,2 +73,7 @@ scalable_counter_static_init(scalable_counter_t *counter)
+ 	os_atomic_store_wide(zpercpu_get(*counter), current_value, relaxed);
++	{
++		extern int printf(const char *, ...);
++		static uint32_t nio_ci;
++		printf("\nC%u", nio_ci++);
++	}
+ 	num_static_scalable_counters++;
