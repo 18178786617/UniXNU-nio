@@ -662,6 +662,79 @@ static u32 zone_next (u8 *base, u32 rb, u32 w, u32 y, u32 y0, u32 y1)
   return y;
 }
 
+/* ---- what the previous boot said ---------------------------------------
+ *
+ * The kernel keeps its console log in the ramoops record at 0xAF040000 and, on
+ * the first character of a boot, retires the previous boot's final write offset
+ * into the record's tag word (see nio-console-to-ramoops.patch).  That offset
+ * is the one thing the ring cannot give: it wraps several times before the boot
+ * dies, so its end is not the newest text.
+ *
+ * Draw the last kilobyte before that offset in zone 1 -- the band userspace
+ * owns and nothing writes until launchd -- as soon as this boot's first byte
+ * arrives.  The bottom of the panel then holds a fixed transcript of how the
+ * last boot ended, while the top band keeps showing this one.  One photo is
+ * enough to compare them.
+ */
+#define PREV_BASE 0xAF040000ull
+#define PREV_RING 0x3F000u
+#define PREV_SIG  0x43474244u           /* 'DBGC' */
+#define PREV_TAG  0x4F494E31u           /* '1NIO' */
+
+static void prev_boot_banner (u8 *base, u32 rb, u32 w, u32 y0, u32 y1)
+{
+  /* freestanding build: no uintptr_t, cast through an integer of pointer size */
+  volatile u32 *hdr = (volatile u32 *)(unsigned long long)PREV_BASE;
+  volatile char *ring = (volatile char *)(unsigned long long)(PREV_BASE + 12);
+  volatile u32 *tag = (volatile u32 *)(unsigned long long)(PREV_BASE + 12 + PREV_RING - 8);
+  u32 prev, n, i, x, y, col, lines, k;
+  char line[120];
+
+  if (tag[0] != PREV_TAG || hdr[0] != PREV_SIG) {
+    return;                            /* first boot after a flash */
+  }
+  prev = tag[1];
+  if (prev == 0 || prev > PREV_RING - 8u) {
+    return;
+  }
+  n = prev < 1024u ? prev : 1024u;     /* the tail is what matters */
+
+  x = 8;
+  y = y0;
+  col = 0;
+  lines = 0;
+  for (i = prev - n; i <= prev; i++) {
+    char c = (i < prev) ? ring[i] : '\n';
+    if (c == '\r') {
+      continue;
+    }
+    if (c == '\n' || col >= sizeof(line) - 1u) {
+      line[col] = 0;
+      if (col > 0) {
+        if (y + CONS_GLYPH > y1 || lines >= 12u) {
+          return;
+        }
+        k = 0;
+        while (k < col && x + CONS_CELL <= w) {
+          cell (base, rb, x, y, (u8)line[k]);
+          x += CONS_CELL + SCALE;
+          k++;
+        }
+        x = 8;
+        y += CONS_LINE;
+        lines++;
+      }
+      col = 0;
+      if (c == '\n') {
+        continue;
+      }
+    }
+    if (c >= 32 && c <= 126) {
+      line[col++] = c;
+    }
+  }
+}
+
 /* Two zones, because two writers share this screen and they were stepping on
  * each other: every kprintf byte lands in the top zone, every userspace
  * write(1) byte in the bottom one. They keep separate cursors, so neither can
@@ -755,6 +828,9 @@ static void cons_putc_zone (char ch, u32 zone)
       }
     }
     if (zone == 0) {
+      /* The record still holds the previous boot's tail at this instant; the
+       * bottom band is free until userspace writes, so draw it there once. */
+      prev_boot_banner (base, rb, w, split + 6, (rows - 1) * CONS_LINE);
       /* First byte we ever see: leave a red bar in the second row. Its presence
        * without text means the routine runs but the glyph path does not. */
       for (i = 0; i < 8 * CONS_CELL && i < w; i++) {
