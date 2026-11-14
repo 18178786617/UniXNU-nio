@@ -448,3 +448,5 @@ include_dirs = ["soc:dts"]
 # nio: trigger after restoring R294 (00:17)
 
 # nio: rebuild after the run-187 failure with no published refs (11-13 01:11)
+
+# touch: re-queue the kernel build, the previous push never got a runner
