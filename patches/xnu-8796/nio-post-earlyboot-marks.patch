@@ -1,0 +1,70 @@
+Mark the steps between E16 and bsd_init
+
+STARTUP_SUB_EARLY_BOOT is the last phase, and everything after it -- spllo,
+initialize_screen, the commpage, MACF/dtrace/trust-cache, kext bootstrap
+removal, lockdown and bsd_init -- had no marker at all.  run-251/252 stop at E16
+and the panel cannot say which of those held.
+
+Print one short Q-tag after each of them.  These are plain printf()s, not the
+gated kernel_bootstrap_log(), because that gate is exactly what is in doubt.
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index bec97fb..18da3ff 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -702,21 +702,26 @@ kernel_bootstrap_thread(void)
+ 	ml_spin_debug_clear_self();
+ #endif
+ 	(void) spllo();         /* Allow interruptions */
++	printf("\nQ2");          /* nio: Q2 spllo returned */
+ 
+ 	/*
+ 	 * This will start displaying progress to the user, start as early as possible
+ 	 */
+ 	initialize_screen(NULL, kPEAcquireScreen);
++	printf("\nQ3");          /* nio: Q3 screen acquire returned */
+ 
+ 	/*
+ 	 *	Initialize the shared region module.
+ 	 */
+ 	vm_commpage_init();
++	printf("\nQ4");          /* nio: Q4 commpage */
+ 	vm_commpage_text_init();
++	printf("\nQ5");          /* nio: Q5 commpage text */
+ 
+ #if CONFIG_MACF
+ 	kernel_bootstrap_log("mac_policy_initmach");
+ 	mac_policy_initmach();
++	printf("\nQ6");          /* nio: Q6 mac_policy_initmach */
+ #if CONFIG_VNGUARD
+ 	kernel_bootstrap_log("vnguard_policy_init");
+ 	vnguard_policy_init();
+@@ -727,6 +732,7 @@ kernel_bootstrap_thread(void)
+ 	kernel_bootstrap_log("dtrace_early_init");
+ 	dtrace_early_init();
+ 	sdt_early_init();
++	printf("\nQ7");          /* nio: Q7 dtrace */
+ #endif
+ 
+ #if CODE_SIGNING_MONITOR
+@@ -739,6 +745,7 @@ kernel_bootstrap_thread(void)
+ 
+ 	/* Initialize the runtime for the trust cache interface */
+ 	trust_cache_runtime_init();
++	printf("\nQ8");          /* nio: Q8 trust cache */
+ 
+ 	/* Load the static and engineering trust caches */
+ 	load_static_trust_cache();
+@@ -754,10 +761,12 @@ kernel_bootstrap_thread(void)
+ 	 */
+ 	kernel_bootstrap_log("OSKextRemoveKextBootstrap");
+ 	OSKextRemoveKextBootstrap();
++	printf("\nQ9");          /* nio: Q9 kext bootstrap removed */
+ 
+ 	/* No changes to kernel text and rodata beyond this point. */
+ 	kernel_bootstrap_log("machine_lockdown");
+ 	machine_lockdown();
++	printf("\nQA");          /* nio: QA machine lockdown */
+ 
+ #ifdef CONFIG_XNUPOST
+ 	kern_return_t result = kernel_list_tests();
