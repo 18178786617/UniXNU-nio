@@ -98,8 +98,8 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * constructors already ran during load; img4if stays NULL, which the
 +	 * trust-cache path already tolerates). */
 +	if (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0 ||
-+	    strncmp(getIdentifierCString(),
-+	    "com.apple.driver.AppleMobileFileIntegrity", 42) == 0) {
++	    strncmp(getIdentifierCString(), "com.apple.filesystems.apfs", 26) == 0 ||
++	    strncmp(getIdentifierCString(), "com.apple.driver.AppleMobileFileIntegrity", 42) == 0) {
 +		printf("nio: skipping start of %s\n", getIdentifierCString());
 +		result = kOSReturnSuccess;
 +		goto finish;
