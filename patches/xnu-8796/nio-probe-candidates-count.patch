@@ -22,7 +22,7 @@ index 6d7dd7e..7a92126 100644
 +	 * before this function; either way the ambiguity is gone. */
 +	{
 +		static uint32_t nio_probe_cand;
-+		if ((++nio_probe_cand & 0x3fu) == 0) {
++		if ((++nio_probe_cand & 0x0u) == 0) {
 +			printf("\nM%u", nio_probe_cand);
 +		}
 +		if (nio_probe_cand >= 200000u) {
