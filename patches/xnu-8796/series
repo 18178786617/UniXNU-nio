@@ -237,3 +237,4 @@ nio-dlil-wait-bounded.patch
 nio-kext-start-done.patch
 
 nio-kext-start-enter.patch
+nio-kext-load-enter.patch
