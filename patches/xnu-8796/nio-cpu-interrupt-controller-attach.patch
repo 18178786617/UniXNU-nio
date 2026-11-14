@@ -36,9 +36,9 @@ diff --git a/iokit/Kernel/IOCPU.cpp b/iokit/Kernel/IOCPU.cpp
 +
 +	if (getProvider() == NULL) {
 +		if (pe && attach(pe)) {
-+			IOLog("nio: AT cpuic");
++			IOLog("nio: AT cpuic\n");
 +		} else {
-+			IOLog("nio: AT cpuic fail pe=%p", pe);
++			IOLog("nio: AT cpuic fail pe=%p\n", pe);
 +		}
 +	}
  	setProperty(gPlatformInterruptControllerName, kOSBooleanTrue);
