@@ -1,0 +1,35 @@
+Turn the bootstrap step marks on by default
+
+kernel_bootstrap_log() and kernel_bootstrap_thread_log() mark every step of
+kernel_bootstrap() and of the bootstrap thread (bsd_init, kext loading, the
+launchd handoff), but both print only under startup_debug &
+STARTUP_DEBUG_VERBOSE, and this port leaves that at zero.
+
+run-251 therefore ends at E16 -- STARTUP_SUB_EARLY_BOOT, the last startup
+phase -- with nothing after it, which is the position the panel is missing.
+Default the tunable to STARTUP_DEBUG_VERBOSE instead of rewriting the two
+helpers: zzz-boot-progress.patch already edits both of them, and one edit to
+the tunable cannot fight with it.  A boot argument can still turn it off.
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index bec97fb..14e7ba5 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -216,7 +216,16 @@ SECURITY_READ_ONLY_LATE(startup_subsystem_id_t) startup_phase = STARTUP_SUB_NONE
+ 
+ extern int serverperfmode;
+ 
+-TUNABLE(startup_debug_t, startup_debug, "startup_debug", 0);
++/*
++ * nio: the bootstrap marks every step it takes through kernel_bootstrap_log()
++ * and kernel_bootstrap_thread_log(), but both are gated on
++ * startup_debug & STARTUP_DEBUG_VERBOSE and this port never sets it, so
++ * everything after STARTUP_SUB_EARLY_BOOT ran blind -- a boot that died in
++ * bsd_init, kext loading or the launchd handoff left the last marker at E16
++ * and nothing after it.  Default the mask on, so the last line of a photo is
++ * the last step that was reached.
++ */
++TUNABLE(startup_debug_t, startup_debug, "startup_debug", STARTUP_DEBUG_VERBOSE);
+ 
+ static inline void
+ kernel_bootstrap_log(const char *message)
