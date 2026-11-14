@@ -26,7 +26,7 @@ index 6d7dd7e..7a92126 100644
 +			printf("\nM%u", nio_probe_cand);
 +		}
 +		if (nio_probe_cand >= 200000u) {
-+			panic("nio: probeCandidates called %u times", nio_probe_cand);
++			panic("nio: probeCandidates entered %u times", nio_probe_cand);
 +		}
 +	}
  	OSDictionary        *       match = NULL;
