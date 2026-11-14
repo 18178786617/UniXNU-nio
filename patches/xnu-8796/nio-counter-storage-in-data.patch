@@ -1,0 +1,28 @@
+Keep the counter boot storage out of the recyclable segment
+
+SCALABLE_COUNTER_DEFINE puts __early_storage in __startup_data, which on arm64
+resolves to __BOOTDATA,__init.  __BOOTDATA is boot-only memory: pmap hands it
+back to kmem once the kernel's own allocator is up, and it is taken from the end
+of the segment first.
+
+scalable_counter_static_init reads that storage during PERCPU, which runs after
+KMEM.  run-236 puts the third counter's storage at 0x7bac008 -- inside the last
+page of __init, whose section ends at 0x7bac640 -- and the read there never
+returns, while the counters stored in earlier pages read fine.  That is the
+signature of a page that has already been handed out.
+
+Pin the counter's boot storage to __DATA instead.  It costs eight bytes per
+counter for the life of the kernel and removes the race entirely.
+---
+diff --git a/osfmk/kern/counter.h b/osfmk/kern/counter.h
+--- a/osfmk/kern/counter.h
++++ b/osfmk/kern/counter.h
+@@ -130,5 +130,6 @@
+ #define SCALABLE_COUNTER_DEFINE(name) \
+-	__startup_data uint64_t __ ##name##_early_storage = 0;                                   \
++	/* nio: __BOOTDATA is recycled by kmem before PERCPU reads it */                          \
++	__attribute__((section("__DATA,__data"))) uint64_t __ ##name##_early_storage = 0;         \
+ 	scalable_counter_t name = {&__##name##_early_storage};                                   \
+ 	STARTUP_ARG(TUNABLES, STARTUP_RANK_MIDDLE, scalable_counter_static_boot_mangle, &name);  \
+ 	STARTUP_ARG(PERCPU, STARTUP_RANK_SECOND, scalable_counter_static_init, &name);
+
