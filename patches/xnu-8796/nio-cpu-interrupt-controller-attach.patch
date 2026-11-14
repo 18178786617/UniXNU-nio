@@ -1,0 +1,46 @@
+Attach the CPU interrupt controller before registering it
+
+IOCPUInterruptController is created and initialised by a kext and then handed
+to registerCPUInterruptController(), but nothing ever attaches it.  Its
+parent chain on the service plane is empty, so registerService() throws it
+away as a non member -- that is the "not registry member" line, and the trace
+added earlier prints the same object as S1 IOCPUInterruptController up=1
+p=0, one hop and then NULL.
+
+Everything that later asks the platform expert for the interrupt controller
+therefore finds nothing.  Attach it first, to the platform expert: that is
+the object which adopts it on the very next line anyway, so the only
+behaviour this changes is that the registry finally holds it.
+
+attach(NULL) would replace the service root, hence the pe non NULL guard.
+
+AT prints on attach, AT cpuic fail prints the platform pointer if attach is
+refused or the platform expert does not exist yet.
+
+---
+
+diff --git a/iokit/Kernel/IOCPU.cpp b/iokit/Kernel/IOCPU.cpp
+--- a/iokit/Kernel/IOCPU.cpp
++++ b/iokit/Kernel/IOCPU.cpp
+@@ -590,6 +590,21 @@ IOCPUInterruptController::initCPUInterruptController(int sources, int cpus)
+ void
+ IOCPUInterruptController::registerCPUInterruptController(void)
+ {
++	/* nio: nothing in this tree attaches this controller, so it has no
++	 * parent in the service plane and registerService() throws it away as
++	 * a non member.  Every client that later looks the platform interrupt
++	 * controller up then waits forever.  Attach it to the platform expert
++	 * first: that is the object which adopts it on the next line anyway.
++	 * attach(NULL) is not an option, it would replace the service root. */
++	IOPlatformExpert * pe = getPlatform();
++
++	if (getProvider() == NULL) {
++		if (pe && attach(pe)) {
++			IOLog("nio: AT cpuic");
++		} else {
++			IOLog("nio: AT cpuic fail pe=%p", pe);
++		}
++	}
+ 	setProperty(gPlatformInterruptControllerName, kOSBooleanTrue);
+ 	registerService();
+ 

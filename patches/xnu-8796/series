@@ -67,6 +67,7 @@ non-apple-pmap-field.patch
 null-root-media.patch
 
 nio-iokit-registry-trace.patch
+nio-cpu-interrupt-controller-attach.patch
 
 offline-component-load-probes.patch
 
