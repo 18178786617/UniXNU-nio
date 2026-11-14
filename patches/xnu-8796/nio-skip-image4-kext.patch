@@ -69,11 +69,11 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +		 * kern_trustcache.c already tolerate (nio-trust-cache-without-
 +		 * security-extensions.patch), and kern_cs.c only reaches
 +		 * amfi->OSEntitlements_* with a blob AMFI alone would have set. */
-+		if (strncmp(nio_cid, "com.apple.security.", 19) == 0 ||
-+		    strncmp(nio_cid, "com.apple.driver.AppleMobileFileIntegrity",
-+		    42) == 0) {
-+			printf("nio: not loading %s, it needs /chosen/manifest-properties\n",
-+			    nio_cid);
++		if (strncmp(nio_cid, "com.apple.filesystems.apfs", 26) == 0 ||
++		    0) {
++			/* nio: the security family loads now; AppleImage4 has a node */
++			printf("nio: not loading apfs at load time\n");
++			(void)nio_cid;
 +			result = kOSKextReturnNotFound;
 +			goto finish;
 +		}
@@ -97,10 +97,10 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * every loaded kext passes through: skip the family here (their C++
 +	 * constructors already ran during load; img4if stays NULL, which the
 +	 * trust-cache path already tolerates). */
-+	if (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0 ||
-+	    strncmp(getIdentifierCString(), "com.apple.filesystems.apfs", 26) == 0 ||
-+	    strncmp(getIdentifierCString(), "com.apple.driver.AppleMobileFileIntegrity", 42) == 0) {
-+		printf("nio: skip-off start of %s\n", getIdentifierCString());
++	if (strncmp(getIdentifierCString(), "com.apple.filesystems.apfs", 26) == 0 ||
++	    0) {
++		/* nio: only apfs stays skipped; the rest get a manifest node */
++		printf("nio: skipping apfs start\n");
 +		result = kOSReturnSuccess;
 +		goto finish;
 +	}
