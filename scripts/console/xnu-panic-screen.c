@@ -650,11 +650,33 @@ static u32 tp_text (u32 cx, u32 cy, const char *s)
 /* Next row, wrapping to this zone's first row instead of scrolling: no memmove
  * of a 10 MB framebuffer per line, and the newest screenful of each zone is
  * always what is on screen. */
-static u32 zone_next (u32 y, u32 y0, u32 y1)
+static u32 zone_next (u8 *base, u32 rb, u32 w, u32 y, u32 y0, u32 y1)
 {
   y += CONS_LINE;
   if (y + CONS_GLYPH > y1) {
-    y = y0;
+    /* nio: scroll the band instead of wrapping inside it.
+     *
+     * With a ring the row order under a photo is ambiguous: the newest line is
+     * wherever the cursor happens to be and the bottom line is the oldest, so a
+     * frozen screen was read as "the bottom line is the last output" for
+     * several rounds.  Move every text row up by one and keep writing on the
+     * last one, so the bottom line of the band is always the last thing
+     * printed. */
+    u32 yy, xx;
+    for (yy = y0; yy + CONS_LINE < y1; yy++) {
+      u32 *dst = (u32 *)(base + (u64)yy * rb);
+      u32 *src = (u32 *)(base + (u64)(yy + CONS_LINE) * rb);
+      for (xx = 0; xx < w; xx++) {
+        dst[xx] = src[xx];
+      }
+    }
+    for (; yy < y1; yy++) {
+      u32 *dst = (u32 *)(base + (u64)yy * rb);
+      for (xx = 0; xx < w; xx++) {
+        dst[xx] = 0;
+      }
+    }
+    return y0 + ((y1 - y0) / CONS_LINE - 1) * CONS_LINE;
   }
   return y;
 }
@@ -791,7 +813,7 @@ static void cons_putc_zone (char ch, u32 zone)
       }
     }
     st[1] = 0;
-    st[2] = zone_next (y, y0, y1);
+    st[2] = zone_next (base, rb, w, y, y0, y1);
     return;
   }
   if (c < 32 || c > 126) {
@@ -799,7 +821,7 @@ static void cons_putc_zone (char ch, u32 zone)
   }
   if (x + CONS_CELL > w) {
     x = 0;
-    y = zone_next (y, y0, y1);
+    y = zone_next (base, rb, w, y, y0, y1);
   }
   cell (base, rb, x, y, c);
   st[1] = x + CONS_CELL;
