@@ -240,3 +240,4 @@ nio-kext-start-enter.patch
 nio-kext-load-enter.patch
 nio-probe-candidates-count.patch
 nio-kext-load-exit.patch
+nio-kext-load-executable.patch

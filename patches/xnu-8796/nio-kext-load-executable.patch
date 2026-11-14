@@ -1,0 +1,23 @@
+Name the kext whose executable is being loaded
+
+The dependency walk on run-276 closes: the panel's last line is a load< for
+com.apple.kpi.bsd.  The next thing a kext load does is map and link its own
+mach-o, which is a different function and had no probe at all.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..8424b24 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -6995,6 +6995,12 @@ finish:
+ OSReturn
+ OSKext::loadExecutable()
+ {
++	/* nio: every load> now has its load<, and run-276's panel ends on
++	 * "load< com.apple.kpi.bsd ret=0x0" -- the last dependency of some kext,
++	 * after which nothing.  What follows the dependency walk is this: reading
++	 * the kext's own mach-o and linking it in.  One line in, one line out. */
++	printf("nio: ldx> %s\n",
++	    (getIdentifierCString() != NULL) ? getIdentifierCString() : "(null)");
+ 	OSReturn              result             = kOSReturnError;
+ 	OSSharedPtr<OSArray>  linkDependencies;
+ 	uint32_t              num_kmod_refs      = 0;
