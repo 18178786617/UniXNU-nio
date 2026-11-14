@@ -50,6 +50,8 @@ struct vc_info {
 
 /* Defined further down, next to the R187 diagnostic ladder. */
 static u32 va_mapped (u64 a);
+/* R256: the console record that outlives the reset. */
+static void pstore_putc (char ch);
 
 static u64 fb_lazy_map (void)
 {
@@ -895,6 +897,7 @@ __attribute__((used)) void blob_stage2 (void)
 __attribute__((used)) void console_putc (char ch, unsigned int poll)
 {
   (void)poll;
+  pstore_putc (ch);           /* R256: keep the record even if drawing stops */
   cons_putc_zone (ch, 0);
 }
 
@@ -921,6 +924,80 @@ static u32 va_mapped (u64 a)
   __asm__ volatile ("at s1e1r, %1; isb; mrs %0, par_el1"
                     : "=r" (par) : "r" (a) : "memory");
   return (u32)(par & 1u) == 0u;
+}
+
+/* ---- R256: a console record that survives the reset ---------------------
+ *
+ * Every round so far ends the same way: the panel freezes somewhere past the
+ * fortieth line and the only witness is a ten second phone video, taken by a
+ * person who cannot know when the interesting line will appear.  The record
+ * below is the fix for that.  It is the ramoops console area DarwinBoot already
+ * knows how to read (0xAF040000, { u32 'DBGC', u32 size, u32 size } then text),
+ * so the next boot prints this one's tail above the kernel log, where it stays
+ * on screen for the whole of the following boot.
+ *
+ * Writing it needed one thing that the kernel-side attempt (serial_console.c)
+ * did not have: a virtual address.  That patch wrote to 0xAF040000 as if it
+ * were a pointer, which is a data abort anywhere past arm_vm_init(), and
+ * console_write_char() is not even on the printing path here -- the blob is.
+ * The kernel's physmap does carry DRAM, and gVirtBase/gPhysBase give the alias:
+ *
+ *     virt = gVirtBase + (0xAF040000 - gPhysBase)
+ *
+ * which is exactly phystokv() (arm_vm_init.c:387).  The blob no longer uses
+ * writable globals -- the injected segment has nowhere to put them -- so the
+ * whole state of this record lives in the record itself: the signature says
+ * whether it has been started, and its two counters say how far it got.
+ *
+ * va_mapped() guards the first store, so a physmap that does not cover the
+ * region costs nothing but the mirror.  When the ring fills, the last half is
+ * moved down, which keeps the record's tail (what DarwinBoot prints) real
+ * instead of leaving it stuck at the first 258 KB of a two minute boot. */
+#define PSTORE_PHYS   0xAF040000ull
+#define PSTORE_RING   0x3F000u
+#define PSTORE_SIG    0x43474244u    /* 'DBGC', the loader's magic */
+
+static void pstore_putc (char ch)
+{
+  u64 phys = *(volatile u64 *)(u64)GVPHYS_ADDR;
+  u64 virt = *(volatile u64 *)(u64)(GVPHYS_ADDR + 0x10u);
+  volatile u32 *h;
+  volatile char *ring;
+  u64 alias;
+  u32 off, i;
+
+  /* Both are set near the top of arm_vm_init(); before that the physmap does
+   * not exist yet and the record cannot be reached at all. */
+  if (phys == 0 || virt == 0) {
+    return;
+  }
+  alias = virt + (PSTORE_PHYS - phys);
+  if ((alias >> 48) != 0xffffu) {
+    return;
+  }
+  if (!va_mapped (alias)) {
+    return;
+  }
+
+  h = (volatile u32 *)alias;
+  ring = (volatile char *)(alias + 12u);
+  if (h[0] != PSTORE_SIG) {
+    h[0] = PSTORE_SIG;
+    h[1] = 0;
+    h[2] = 0;
+  }
+  off = h[1];
+  if (off >= PSTORE_RING) {
+    u32 keep = PSTORE_RING / 2u;
+    for (i = 0; i < keep; i++) {
+      ring[i] = ring[PSTORE_RING - keep + i];
+    }
+    off = keep;
+  }
+  ring[off] = ch;
+  off++;
+  h[1] = off;
+  h[2] = off;
 }
 
 /* R229: can this address actually be read?

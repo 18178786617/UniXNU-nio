@@ -2,8 +2,12 @@ Count the two walks inside the space search
 
 The claim for ipc_kernel_copy_map never comes back and the wait_for_space change
 did not help, so the search itself is not terminating.  Count the hole walk and
-the space walk and print every few hundred steps: the next boot shows which of the
-two spins and with what start and limit.
+the space walk.  Printing every 512 steps was not enough: run-269's photo shows
+W1536 with start ABOVE highest_addr (s=0xfffffffe5b12d000, l=0xfffffffa6047f000),
+which is a loop that cannot terminate, and the panel only ever holds the last
+forty lines of it.  Panic at a hundred thousand steps instead: the panic text
+carries the thread's backtrace, so the caller that asked for the impossible
+range is named in one boot.
 ---
 diff --git a/osfmk/vm/vm_map_store.c b/osfmk/vm/vm_map_store.c
 index 97bedbc..2d5baf5 100644
@@ -28,8 +32,8 @@ index 97bedbc..2d5baf5 100644
  	for (;;) {
 +		{
 +			static uint32_t nio_space_walk;
-+			if ((++nio_space_walk & 0x1ffu) == 0) {
-+				printf("\nW%u s=%#llx l=%#llx", nio_space_walk,
++			if (++nio_space_walk == 100000u) {
++				panic("nio: space walk stuck s=%#llx l=%#llx",
 +				    (unsigned long long)start,
 +				    (unsigned long long)highest_addr);
 +			}
