@@ -23,7 +23,7 @@ index 6d7dd7e..7a92126 100644
 +	{
 +		static uint32_t nio_probe_cand;
 +		if ((++nio_probe_cand & 0x0u) == 0) {
-+			printf("\nM%u", nio_probe_cand);
++			printf("\nM%u/%d", nio_probe_cand, matches ? matches->getCount() : -1);
 +		}
 +		if (nio_probe_cand >= 200000u) {
 +			panic("nio: probeCandidates entered %u times", nio_probe_cand);
