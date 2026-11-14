@@ -108,6 +108,5 @@ nio-console-to-ramoops.patch
 nio-counter-storage-in-data.patch
 nio-phase-done-trace.patch
 nio-counter-count-trace.patch
-nio-dump-prev-console.patch
 nio-fleh-early-fault.patch
 nio-nested-abort-report.patch
