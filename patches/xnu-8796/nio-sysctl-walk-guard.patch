@@ -1,11 +1,18 @@
-Catch the sysctl walk looping forever
+Catch every sysctl list walk that can loop forever
 
-sysctl_register_oid_locked() takes no lock on the early path: it only walks the
-parent list with SLIST_FOREACH_PREVPTR.  If that list is corrupt the walk never
-ends, which is exactly console
+run-255 gets past E16 and the whole early boot: kexts load, lo0 attaches, and the
+panel freezes on a sysctl_register_oid_locked() line.  The two walks in that
+function were only bounded in the OID_AUTO/parent case; the parent_rw walk and
+both ordered-insert walks could still spin on a corrupt list, and a spin there
+also blocks the heartbeat thread on the console lock, which is why the panel
+shows no further hb lines either.
+
+Bound all four walks (panic with which one and at what node), and print
+'nio: reg ok' after the insert so the next photo separates 'stuck in the walk'
+from 'stuck after it'.
 ---
 diff --git a/bsd/kern/kern_newsysctl.c b/bsd/kern/kern_newsysctl.c
-index fbb0b28..6567003 100644
+index fbb0b28..893cf59 100644
 --- a/bsd/kern/kern_newsysctl.c
 +++ b/bsd/kern/kern_newsysctl.c
 @@ -164,6 +164,8 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
@@ -17,16 +24,58 @@ index fbb0b28..6567003 100644
  	if (p && p->oid_number == OID_MUTABLE_ANCHOR) {
  		parent_rw = p->oid_arg1;
  	}
-@@ -177,7 +179,12 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+@@ -177,14 +179,22 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
  		 * OID_AUTO_START to leave space for pre-assigned oid numbers.
  		 */
  
 +		int nio_walk = 0;
  		SLIST_FOREACH_PREVPTR(p, prevp, parent, oid_link) {
 +			if (++nio_walk > 100000) {
-+				panic("nio: sysctl list cycle at %p (n=%d)",
-+				    (void *)p, n);
++				panic("nio: sysctl cycle (auto/parent) at %p", (void *)p);
 +			}
  			if (p->oid_number >= n) {
  				n = p->oid_number + 1;
  			}
+ 		}
+ 
+ 		if (parent_rw) {
++			int nio_walk_rw = 0;
+ 			SLIST_FOREACH_PREVPTR(p, prevp, parent_rw, oid_link) {
++				if (++nio_walk_rw > 100000) {
++					panic("nio: sysctl cycle (auto/rw) at %p", (void *)p);
++				}
+ 				if (p->oid_number >= n) {
+ 					n = p->oid_number + 1;
+ 				}
+@@ -200,7 +210,11 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 		/*
+ 		 * Insert the oid into the parent's list in order.
+ 		 */
++		int nio_walk_i = 0;
+ 		SLIST_FOREACH_PREVPTR(p, prevp, parent, oid_link) {
++			if (++nio_walk_i > 100000) {
++				panic("nio: sysctl cycle (insert/parent) at %p", (void *)p);
++			}
+ 			if (oidp->oid_number == p->oid_number) {
+ 				panic("attempting to register a sysctl at previously registered slot : %d",
+ 				    oidp->oid_number);
+@@ -210,7 +224,11 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 		}
+ 
+ 		if (parent_rw) {
++			int nio_walk_irw = 0;
+ 			SLIST_FOREACH_PREVPTR(p, prevp, parent_rw, oid_link) {
++				if (++nio_walk_irw > 100000) {
++					panic("nio: sysctl cycle (insert/rw) at %p", (void *)p);
++				}
+ 				if (oidp->oid_number == p->oid_number) {
+ 					panic("attempting to register a sysctl at previously registered slot : %d",
+ 					    oidp->oid_number);
+@@ -239,6 +257,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 
+ 	SLIST_NEXT(oidp, oid_link) = *prevp;
+ 	*prevp = oidp;
++	printf("nio: reg ok %p\n", (void *)new_oidp);
+ }
+ 
+ void
