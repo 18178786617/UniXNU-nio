@@ -42,11 +42,11 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +		const char *nio_id = kextIdentifier ?
 +		    kextIdentifier->getCStringNoCopy() : "(null)";
 +
-+		printf("nio: kext load id=[%s] cmd=[%s] raw=[%s] parsed=%d\n",
-+		    nio_id,
-+		    PE_boot_args(),
-+		    PE_boot_args_raw(),
-+		    PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0));
++		static bool nio_first = true;
++		printf("nio: kext id=[%s]%s\n", nio_id, nio_first ? " cmd:" : "");
++		if (nio_first) { nio_first = false; printf("  args=[%s][%s] p=%d\n",
++		    PE_boot_args(), PE_boot_args_raw(),
++		    PE_parse_boot_argn("nio_skip_security_extensions", NULL, 0)); }
 +	}
 +	if (kextIdentifier != NULL) {
 +		const char *nio_cid = kextIdentifier->getCStringNoCopy();
