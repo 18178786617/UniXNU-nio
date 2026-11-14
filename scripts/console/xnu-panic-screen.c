@@ -739,6 +739,19 @@ static void cons_putc_zone (char ch, u32 zone)
     st[1] = 0;
     st[2] = y0;
     if (zone == 0) {
+      /* nio: the panel keeps whatever the previous boot wrote, and that is
+       * what made the last few photos unreadable -- two boots interleaved in
+       * one band, with no way to tell which line came from which.  The first
+       * byte of this boot wipes the whole log zone. */
+      u32 yy, px;
+      for (yy = y0; yy < y1; yy++) {
+        u32 *row = (u32 *)(base + (u64)yy * rb);
+        for (px = 0; px < w; px++) {
+          row[px] = 0;
+        }
+      }
+    }
+    if (zone == 0) {
       /* First byte we ever see: leave a red bar in the second row. Its presence
        * without text means the routine runs but the glyph path does not. */
       for (i = 0; i < 8 * CONS_CELL && i < w; i++) {
@@ -767,6 +780,16 @@ static void cons_putc_zone (char ch, u32 zone)
     return;
   }
   if (c == '\n') {
+    /* nio: blank the rest of the line.  A shorter line used to leave the tail
+     * of a longer one behind, so a photo showed two messages sharing a row
+     * and the log could not be read. */
+    u32 yy, px;
+    for (yy = y; yy < y + CONS_GLYPH && yy < y1; yy++) {
+      u32 *row = (u32 *)(base + (u64)yy * rb);
+      for (px = x; px < w; px++) {
+        row[px] = 0;
+      }
+    }
     st[1] = 0;
     st[2] = zone_next (y, y0, y1);
     return;
