@@ -1,61 +1,65 @@
-Name the service that cannot reach the registry root
+Name the service that cannot reach the registry root, and bound the walk
 
-run-287 prints the four kext load stages and apfs finishes its sysctl
-registration, then the console shows exactly one IOKit line:
+apfs finishes its sysctl registration and the console then goes completely
+silent: no IOKit line, no kext line, nothing.  The earlier build at least
+printed "not registry member at registerService()" at that point; this one
+does not, and the only early return in that path is the one after the walk
+up the IOService plane.  A cyclic or dangling parent chain would spin in
+that while loop forever, print nothing, and look exactly like this.
 
-  ...UninterruptController: not registry member at registerService()
+So: bound the walk at 32 levels instead of trusting it to terminate, and
+report the object that hit the bound with a CYCLE token.  The early return
+now also carries the object name, the walk depth and its first three
+ancestors, so a plain refusal is distinguishable from a stalled chain.
 
-That line is IOService.cpp:1047, taken when the walk up the IOService
-plane from the object never reaches the registry root.  The early return
-is silent: it does not say which object failed, how far the walk got, or
-where the plane broke, so the same screenshot can mean three different
-things (no root at all, a child attached to the wrong parent, or a
-provider that never registered).  Print those three facts instead, plus
-one R0 line with the root and the platform expert the first time
-registerService runs.
-
-R0 is once, S1 carries the failing object and the three counters, U1..U3
-are its first three ancestors and stop at NULL.  All tokens are two or
-three characters, so a 40 row console keeps them readable.
+Rq is one receipt per 64 registerService calls, R0 is once with the root
+and the platform expert.  All tokens are two or three characters.
 
 ---
 
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -1037,13 +1037,41 @@ IOService::registerService( IOOptionBits options )
+@@ -1037,13 +1037,48 @@ IOService::registerService( IOOptionBits options )
  	enum { kMaxPathLen  = 256 };
  	enum { kMaxChars    = 63 };
  
 +	{
 +		static bool nio_r0 = false;
++		static unsigned nio_rq = 0;
 +		if (!nio_r0) {
 +			nio_r0 = true;
 +			IOLog("nio: R0 root=%p plat=%p\n",
 +			    (void *)getRegistryRoot(), (void *)gIOPlatform);
 +		}
++		/* nio: one receipt per 64 calls, so a stall inside registerService
++		 * still leaves a trace of how many services got processed. */
++		if (((++nio_rq) & 63u) == 0) {
++			const char *nio_rn = getName();
++			IOLog("nio: Rq %u %s\n", nio_rq, nio_rn ? nio_rn : "?");
++		}
 +	}
  	IORegistryEntry * parent = this;
  	IORegistryEntry * root = getRegistryRoot();
 +	int nio_up = 0;
++	/* nio: a cyclic or dangling parent chain spins here forever and never
++	 * reaches the early return, which is the silent stall seen right after
++	 * apfs registers its sysctls.  Bound the walk and break instead. */
  	while (parent && (parent != root)) {
++		if (++nio_up > 32) {
++			break;
++		}
  		parent = parent->getParentEntry( gIOServicePlane);
-+		nio_up++;
  	}
  
  	if (parent != root) {
-+		/* nio: the silent early return hid which object could not reach the
-+		 * root, and where the service plane broke.  Say both: the object, how
-+		 * many levels the walk climbed, and the first three ancestors.  Three
-+		 * short lines fit the 40 row console, and a break shows up as a NULL
-+		 * or as an ancestor that is not the object's real provider. */
 +		const char *nio_n = getName();
 +		IORegistryEntry *nio_q;
 +		unsigned nio_k;
 +
-+		IOLog("nio: S1 %s up=%d p=%p r=%p g=%p\n",
-+		    nio_n ? nio_n : "?", nio_up, (void *)parent, (void *)root,
-+		    (void *)gIOPlatform);
++		IOLog("nio: S1 %s up=%d%s p=%p r=%p g=%p\n",
++		    nio_n ? nio_n : "?", nio_up, (nio_up > 32) ? " CYCLE" : "",
++		    (void *)parent, (void *)root, (void *)gIOPlatform);
 +		for (nio_q = getParentEntry(gIOServicePlane), nio_k = 1;
 +		    nio_q != NULL && nio_k <= 3;
 +		    nio_q = nio_q->getParentEntry(gIOServicePlane), nio_k++) {
