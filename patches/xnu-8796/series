@@ -238,3 +238,4 @@ nio-kext-start-done.patch
 
 nio-kext-start-enter.patch
 nio-kext-load-enter.patch
+nio-probe-candidates-count.patch
