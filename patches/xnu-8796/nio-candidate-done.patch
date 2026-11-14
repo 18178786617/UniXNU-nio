@@ -1,20 +1,26 @@
-Mark the end of one candidate's instantiation
+Name each candidate before it is instantiated
 
-run-282 stops with M34 printed and no further entry: the panel's last two lines are
-the two classes that could not be allocated.  The do-while around that allocation
-cannot loop (its condition is false), so the question is whether the block itself
-finishes.  One line after it answers that.
+run-292 shows the batches are one or two candidates, so the stall is inside a
+single one.  Print the class name on the way in; the line after it is either
+'cand done' or nothing at all, which names the class that never comes back.
 ---
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
-index 6d7dd7e..c7d80b1 100644
+index 6d7dd7e..81fd162 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -4068,6 +4068,8 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3988,6 +3988,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 				//IOLog("%s alloc (symbol %p props %p)\n", symbol->getCStringNoCopy(), IOSERVICE_OBFUSCATE(symbol), IOSERVICE_OBFUSCATE(props));
+ 
+ 				// alloc the driver instance
++				printf("\nnio: C %s", symbol ? symbol->getCStringNoCopy() : "?");
+ 				inst = (IOService *) OSMetaClass::allocClassWithName( symbol);
+ 
+ 				if (!inst || !OSDynamicCast(IOService, inst)) {
+@@ -4068,6 +4069,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  				if (startList) {
  					startList->setObject( newInst );
  				}
-+				printf("nio: cand done %s\n",
-+				    (symbol != NULL) ? symbol->getCStringNoCopy() : "(null)");
++				printf("\nnio: cand done %s", symbol ? symbol->getCStringNoCopy() : "?");
  			} while (false);
  
  			props->release();
