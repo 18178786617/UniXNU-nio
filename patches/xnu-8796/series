@@ -112,4 +112,3 @@ nio-fleh-early-fault.patch
 nio-nested-abort-report.patch
 nio-step-marks.patch
 nio-post-earlyboot-marks.patch
-nio-skip-vc-acquire.patch

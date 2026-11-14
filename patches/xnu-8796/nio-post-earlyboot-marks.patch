@@ -1,70 +1,89 @@
-Mark the steps between E16 and bsd_init
+Mark the steps after E16 and stop calling initialize_screen
 
-STARTUP_SUB_EARLY_BOOT is the last phase, and everything after it -- spllo,
-initialize_screen, the commpage, MACF/dtrace/trust-cache, kext bootstrap
-removal, lockdown and bsd_init -- had no marker at all.  run-251/252 stop at E16
-and the panel cannot say which of those held.
+E16 is STARTUP_SUB_EARLY_BOOT, the last phase.  Everything after it had no
+marker, so a photo could not say which call held the boot.
 
-Print one short Q-tag after each of them.  These are plain printf()s, not the
-gated kernel_bootstrap_log(), because that gate is exactly what is in doubt.
+run-253's video answers it: Q2 prints and Q3 never does, and between those two
+markers there is exactly one statement -- initialize_screen(NULL,
+kPEAcquireScreen).  With a NULL boot_vinfo that function skips its entire setup
+block and all that is left is the Apple-logo progress meter plus gc_enable();
+this port's console is the injected blob and needs none of it, so the call is
+replaced by a Q3 marker that says it was skipped.
+
+Q4..QA then tag the commpage, MACF, dtrace, trust cache, kext bootstrap removal
+and lockdown, so the next photo names the call after that.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index bec97fb..18da3ff 100644
+index bec97fb..bc25438 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -702,21 +702,26 @@ kernel_bootstrap_thread(void)
+@@ -702,21 +702,34 @@ kernel_bootstrap_thread(void)
  	ml_spin_debug_clear_self();
  #endif
  	(void) spllo();         /* Allow interruptions */
-+	printf("\nQ2");          /* nio: Q2 spllo returned */
++	printf("\n
++Q2");
  
  	/*
- 	 * This will start displaying progress to the user, start as early as possible
+-	 * This will start displaying progress to the user, start as early as possible
++	 * nio: initialize_screen() is skipped.  Called with a NULL boot_vinfo it
++	 * skips its whole setup block (no mapping, no gc_ops, no gc_initialize) and
++	 * only runs the Apple-logo progress meter and gc_enable() -- and that call
++	 * is where run-253 stopped: Q2 printed, Q3 never did, with nothing else
++	 * between them.  This port draws its console with the injected blob, which
++	 * needs none of it.
  	 */
- 	initialize_screen(NULL, kPEAcquireScreen);
-+	printf("\nQ3");          /* nio: Q3 screen acquire returned */
+-	initialize_screen(NULL, kPEAcquireScreen);
++	printf("\nQ3 screen init skipped");
  
  	/*
  	 *	Initialize the shared region module.
  	 */
  	vm_commpage_init();
-+	printf("\nQ4");          /* nio: Q4 commpage */
++	printf("\n
++Q4");
  	vm_commpage_text_init();
-+	printf("\nQ5");          /* nio: Q5 commpage text */
++	printf("\n
++Q5");
  
  #if CONFIG_MACF
  	kernel_bootstrap_log("mac_policy_initmach");
  	mac_policy_initmach();
-+	printf("\nQ6");          /* nio: Q6 mac_policy_initmach */
++	printf("\n
++Q6");
  #if CONFIG_VNGUARD
  	kernel_bootstrap_log("vnguard_policy_init");
  	vnguard_policy_init();
-@@ -727,6 +732,7 @@ kernel_bootstrap_thread(void)
+@@ -727,6 +740,8 @@ kernel_bootstrap_thread(void)
  	kernel_bootstrap_log("dtrace_early_init");
  	dtrace_early_init();
  	sdt_early_init();
-+	printf("\nQ7");          /* nio: Q7 dtrace */
++	printf("\n
++Q7");
  #endif
  
  #if CODE_SIGNING_MONITOR
-@@ -739,6 +745,7 @@ kernel_bootstrap_thread(void)
+@@ -739,6 +754,8 @@ kernel_bootstrap_thread(void)
  
  	/* Initialize the runtime for the trust cache interface */
  	trust_cache_runtime_init();
-+	printf("\nQ8");          /* nio: Q8 trust cache */
++	printf("\n
++Q8");
  
  	/* Load the static and engineering trust caches */
  	load_static_trust_cache();
-@@ -754,10 +761,12 @@ kernel_bootstrap_thread(void)
+@@ -754,10 +771,14 @@ kernel_bootstrap_thread(void)
  	 */
  	kernel_bootstrap_log("OSKextRemoveKextBootstrap");
  	OSKextRemoveKextBootstrap();
-+	printf("\nQ9");          /* nio: Q9 kext bootstrap removed */
++	printf("\n
++Q9");
  
  	/* No changes to kernel text and rodata beyond this point. */
  	kernel_bootstrap_log("machine_lockdown");
  	machine_lockdown();
-+	printf("\nQA");          /* nio: QA machine lockdown */
++	printf("\n
++QA");
  
  #ifdef CONFIG_XNUPOST
  	kern_return_t result = kernel_list_tests();
