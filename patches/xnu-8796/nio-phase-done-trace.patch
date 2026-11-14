@@ -1,17 +1,27 @@
-Mark the end of each startup phase, but only once the console exists
+Mark the start and the end of each startup phase
 
-The first attempt printed after every phase, including TUNABLES, TIMEOUTS and
-LOCKS.  Those run before the console is initialised, so the printf took the
-kernel down before it could print anything at all -- the panel stayed on the
-DarwinBoot handoff text and no kernel output appeared.
+The boot freezes right after vm_fault_init() prints the compressor mode, which
+vm_mem_bootstrap() calls just before kernel_startup_initialize_upto(
+STARTUP_SUB_ZALLOC).  So the stall is inside the ZALLOC phase, but the console
+is a 40-line overwrite buffer and is never cleared, so the phase markers in a
+photo cannot be ordered reliably against the older boot lines still on screen.
 
-The token probe already carried this guard (subsystem >= STARTUP_SUB_KPRINTF);
-apply the same one here.
+Print a marker when a phase starts as well as when it ends.  B7 with no E7
+after it means the phase began and never finished; E7 with no B7 means the
+phase finished and the stall is in whatever runs next.  Two lines per phase,
+about sixteen in total, so the panel stays readable.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -437,3 +437,6 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -433,3 +433,6 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 	assert(startup_phase < upto);
+ 
++	if (upto >= STARTUP_SUB_KPRINTF) {
++		printf("\nB%u", (unsigned)upto);
++	}
+ 	while (cur < startup_entries_end && cur->subsystem <= upto) {
+@@ -444,3 +447,6 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		startup_entry_cur = ++cur;
  	}
 +	if (upto >= STARTUP_SUB_KPRINTF) {
