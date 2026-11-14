@@ -11,7 +11,7 @@ diff --git a/pexpert/gen/device_tree.c b/pexpert/gen/device_tree.c
 index d5b61da..5b59f4f 100644
 --- a/pexpert/gen/device_tree.c
 +++ b/pexpert/gen/device_tree.c
-@@ -336,6 +336,34 @@ SecureDTLookupEntry(const DTEntry searchPoint, const char *pathName, DTEntry *fo
+@@ -336,6 +336,35 @@ SecureDTLookupEntry(const DTEntry searchPoint, const char *pathName, DTEntry *fo
  	if (!DTInitialized) {
  		return kError;
  	}
@@ -22,7 +22,8 @@ index d5b61da..5b59f4f 100644
 +	 * Answer the lookup with a synthetic node holding the two policy flags
 +	 * the checks read, both zero, in flat-device-tree layout. */
 +	if (pathName != NULL &&
-+	    strcmp(pathName, "/chosen/manifest-properties") == 0) {
++	    (strcmp(pathName, "/chosen/manifest-properties") == 0 ||
++	     strcmp(pathName, "manifest-properties") == 0)) {
 +		static struct {
 +			uint32_t nProperties;
 +			uint32_t nChildren;
