@@ -1,0 +1,31 @@
+Do not publish personalities for kexts whose start is skipped
+
+Their classes never register, so every match on those personalities ends in
+"Couldn't alloc class", which is what run-278's panel stops after.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..31a12b2 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -14801,6 +14801,21 @@ OSKext::sendPersonalitiesToCatalog(
+ 	bool      startMatching,
+ 	OSArray * personalityNames)
+ {
++	/* nio: run-278 ends on the two "Couldn't alloc class" lines -- apfs and
++	 * AMFI -- and then nothing.  Their start() is skipped on purpose, so their
++	 * classes never register, yet load() still publishes their personalities,
++	 * so IOKit keeps matching a class that cannot exist.  Do not publish them:
++	 * a personality nobody can instantiate is worse than no personality. */
++	{
++		const char *nio_cid = getIdentifierCString();
++		if (nio_cid != NULL &&
++		    (strncmp(nio_cid, "com.apple.filesystems.apfs", 26) == 0 ||
++		    strncmp(nio_cid, "com.apple.security.", 19) == 0 ||
++		    strncmp(nio_cid, "com.apple.driver.AppleMobileFileIntegrity", 42) == 0)) {
++			printf("nio: no personality for %s\n", nio_cid);
++			return kOSReturnSuccess;
++		}
++	}
+ 	OSReturn       result              = kOSReturnSuccess;
+ 	OSSharedPtr<OSArray> personalitiesToSend;
+ 	OSDictionary * kextPersonalities   = NULL;        // do not release

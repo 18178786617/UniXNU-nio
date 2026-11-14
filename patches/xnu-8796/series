@@ -242,3 +242,4 @@ nio-probe-candidates-count.patch
 nio-kext-load-exit.patch
 nio-kext-load-executable.patch
 nio-kext-loaded-label.patch
+nio-no-personality-for-skipped.patch
