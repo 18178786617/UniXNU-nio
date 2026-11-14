@@ -1,0 +1,25 @@
+Name the kext whose start is entered
+
+The pair that matters is enter and leave.  Only leave was printed, so a kext
+that hangs in its own start() is invisible: run-269 froze on apfs, and the only
+way to tell was that some other kext's exit line was the last thing on the panel.
+Print the identifier on the way in as well (no 0x%x here -- result is not set
+yet), and every freeze names its kext directly.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..64ff31e 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -8197,6 +8197,12 @@ OSReturn
+ OSKext::start(bool startDependenciesFlag)
+ {
+ 	OSReturn                            result = kOSReturnError;
++
++	/* nio: the exit at finish: names the kext that came back.  A kext that
++	 * never comes back leaves nothing at all, which is how apfs looked for
++	 * three rounds.  This line is the other half of the pair. */
++	printf("nio: start> %s\n",
++	    (getIdentifierCString() != NULL) ? getIdentifierCString() : "(null)");
+ 	kern_return_t                       (* startfunc)(kmod_info_t *, void *);
+ 	unsigned int                        i, count;
+ 	void                              * kmodStartData = NULL;
