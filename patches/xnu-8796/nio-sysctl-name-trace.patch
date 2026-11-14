@@ -1,0 +1,85 @@
+Trace which sysctl registration never returns, with its name
+
+run-25x gets past E16, loads the kexts, attaches lo0 and then stops on a
+sysctl_register_oid_locked() line: the last B0 print never reaches B6 ok.
+
+The cycle guards in nio-sysctl-walk-guard.patch bound the four list walks to
+100000 steps and panic when they exceed it, yet no panic reaches the panel.
+That leaves three candidates, and this patch separates them:
+
+  A  the oid never gets sysctl_geometry_lock
+  B1..B6  it gets the lock and stops between two of the six steps
+  neither  the console blob stopped flushing and the kernel may be fine
+
+Each line is short enough for the 40 row console and carries the oid name, so
+one photo names the exact sysctl and the exact step.
+---
+diff --git a/bsd/kern/kern_newsysctl.c b/bsd/kern/kern_newsysctl.c
+--- a/bsd/kern/kern_newsysctl.c
++++ b/bsd/kern/kern_newsysctl.c
+@@ -164,11 +164,12 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 	struct sysctl_oid *p, **prevp;
+ 
+ 	p = SLIST_FIRST(parent);
+-	printf("nio: reg %p parent %p first %p\n", (void *)new_oidp,
+-	    (void *)parent, (void *)p);
++	printf("B0 %p n=%d f=%p\n", (void *)new_oidp, oidp->oid_number,
++	    (void *)p);
+ 	if (p && p->oid_number == OID_MUTABLE_ANCHOR) {
+ 		parent_rw = p->oid_arg1;
+ 	}
++	printf("B1 rw=%d\n", (parent_rw != NULL) ? 1 : 0);
+ 
+ 	if (oidp->oid_number == OID_AUTO) {
+ 		int n = OID_AUTO_START;
+@@ -188,6 +189,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 				n = p->oid_number + 1;
+ 			}
+ 		}
++		printf("B2 n=%d c=%d\n", n, nio_walk);
+ 
+ 		if (parent_rw) {
+ 			int nio_walk_rw = 0;
+@@ -199,6 +201,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 					n = p->oid_number + 1;
+ 				}
+ 			}
++			printf("B3 n=%d c=%d\n", n, nio_walk_rw);
+ 		}
+ 
+ 		/*
+@@ -222,6 +225,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 				break;
+ 			}
+ 		}
++		printf("B4 c=%d\n", nio_walk_i);
+ 
+ 		if (parent_rw) {
+ 			int nio_walk_irw = 0;
+@@ -236,6 +240,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 					break;
+ 				}
+ 			}
++			printf("B5 c=%d\n", nio_walk_irw);
+ 		}
+ 	}
+ 
+@@ -257,7 +262,7 @@ sysctl_register_oid_locked(struct sysctl_oid *new_oidp,
+ 
+ 	SLIST_NEXT(oidp, oid_link) = *prevp;
+ 	*prevp = oidp;
+-	printf("nio: reg ok %p\n", (void *)new_oidp);
++	printf("B6 ok %p\n", (void *)new_oidp);
+ }
+ 
+ void
+@@ -305,6 +310,9 @@ sysctl_register_oid(struct sysctl_oid *new_oidp)
+ 		}
+ 	}
+ 
++	printf("\nA %s n=%d\n",
++	    (new_oidp->oid_name != NULL) ? new_oidp->oid_name : "?",
++	    oidp->oid_number);
+ 	lck_rw_lock_exclusive(&sysctl_geometry_lock);
+ 	sysctl_register_oid_locked(new_oidp, oidp);
+ 	lck_rw_unlock_exclusive(&sysctl_geometry_lock);
