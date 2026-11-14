@@ -690,10 +690,14 @@ static void prev_boot_banner (u8 *base, u32 rb, u32 w, u32 y0, u32 y1)
   u32 prev, n, i, x, y, col, lines, k;
   char line[120];
 
-  if (tag[0] != PREV_TAG || hdr[0] != PREV_SIG) {
-    return;                            /* first boot after a flash */
+  if (hdr[0] != PREV_SIG) {
+    return;                            /* the record has never been written */
   }
-  prev = tag[1];
+  /* Two writer generations, one read: the tag word is what the newer kernel
+   * leaves behind (it retires the offset before overwriting), while the older
+   * one simply keeps writing at hdr[1] across boots, so that offset is still
+   * the previous boot's end when the first character of this one arrives. */
+  prev = (tag[0] == PREV_TAG) ? tag[1] : hdr[1];
   if (prev == 0 || prev > PREV_RING - 8u) {
     return;
   }
