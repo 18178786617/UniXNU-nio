@@ -662,84 +662,6 @@ static u32 zone_next (u8 *base, u32 rb, u32 w, u32 y, u32 y0, u32 y1)
   return y;
 }
 
-/* ---- what the previous boot said ---------------------------------------
- *
- * The kernel keeps its console log in the ramoops record at 0xAF040000 and, on
- * the first character of a boot, retires the previous boot's final write offset
- * into the record's tag word (see nio-console-to-ramoops.patch).  That offset
- * is the one thing the ring cannot give: it wraps several times before the boot
- * dies, so its end is not the newest text.
- *
- * Draw the last kilobyte before that offset in zone 1 -- the band userspace
- * owns and nothing writes until launchd -- as soon as this boot's first byte
- * arrives.  The bottom of the panel then holds a fixed transcript of how the
- * last boot ended, while the top band keeps showing this one.  One photo is
- * enough to compare them.
- */
-#define PREV_BASE 0xAF040000ull
-#define PREV_RING 0x3F000u
-#define PREV_SIG  0x43474244u           /* 'DBGC' */
-#define PREV_TAG  0x4F494E31u           /* '1NIO' */
-
-static void prev_boot_banner (u8 *base, u32 rb, u32 w, u32 y0, u32 y1,
-    u32 total)
-{
-  /* freestanding build: no uintptr_t, cast through an integer of pointer size */
-  volatile u32 *hdr = (volatile u32 *)(unsigned long long)PREV_BASE;
-  volatile char *ring = (volatile char *)(unsigned long long)(PREV_BASE + 12);
-  u32 prev, n, i, x, y, col, lines, k;
-  char line[120];
-
-  if (hdr[0] != PREV_SIG || total == 0) {
-    return;                            /* the record has never been written */
-  }
-  /* The recorder's write offset lives in a static that starts at zero every
-   * boot, so hdr[1] is useless by the time this code runs.  The blob counts the
-   * bytes it draws itself (see prev_boot_account) and that count carries over
-   * between boots, which is the only thing left that says where the previous
-   * boot stopped.  The ring wraps, so the position is the count modulo it. */
-  prev = total % PREV_RING;
-  if (prev == 0) {
-    return;
-  }
-  n = prev < 1024u ? prev : 1024u;     /* the tail is what matters */
-
-  x = 8;
-  y = y0;
-  col = 0;
-  lines = 0;
-  for (i = prev - n; i <= prev; i++) {
-    char c = (i < prev) ? ring[i] : '\n';
-    if (c == '\r') {
-      continue;
-    }
-    if (c == '\n' || col >= sizeof(line) - 1u) {
-      line[col] = 0;
-      if (col > 0) {
-        if (y + CONS_GLYPH > y1 || lines >= 12u) {
-          return;
-        }
-        k = 0;
-        while (k < col && x + CONS_CELL <= w) {
-          cell (base, rb, x, y, (u8)line[k]);
-          x += CONS_CELL + SCALE;
-          k++;
-        }
-        x = 8;
-        y += CONS_LINE;
-        lines++;
-      }
-      col = 0;
-      if (c == '\n') {
-        continue;
-      }
-    }
-    if (c >= 32 && c <= 126) {
-      line[col++] = c;
-    }
-  }
-}
-
 /* Two zones, because two writers share this screen and they were stepping on
  * each other: every kprintf byte lands in the top zone, every userspace
  * write(1) byte in the bottom one. They keep separate cursors, so neither can
@@ -815,36 +737,6 @@ static void cons_putc_zone (char ch, u32 zone)
   }
 
   st = (u32 *)(base + (u64)(lim - 1) * rb) + (w - 3 - 3 * zone);
-  if (zone == 0) {
-    /* R252: the transcript of the previous boot has to be drawn before this one
-     * paints over the ring it lives in, and the first character of a boot is
-     * the earliest point this code is called at.  The counter sits in the last
-     * page of the record, which the text ring itself reaches, so it is mapped
-     * exactly as far as the ring is. */
-    volatile u32 *ctr = (volatile u32 *)(unsigned long long)(PREV_BASE + 12 +
-        PREV_RING + 4);
-    volatile u32 *tagp = (volatile u32 *)(unsigned long long)(PREV_BASE + 12 +
-        PREV_RING - 8);
-    u32 total = 0;
-
-    /* The newer kernel retires the previous offset into the tag word before it
-     * overwrites anything, which is exact and needs no second boot.  The
-     * counter is for a kernel that does not: it carries the byte count across
-     * boots, so the first boot with this blob has nothing to show. */
-    if (tagp[0] == 0x4F494E31u) {            /* '1NIO' */
-      total = tagp[1];
-    } else if (ctr[0] == 0x544E4F43u) {      /* 'CONT' */
-      total = ctr[1];
-    }
-    if (ctr[0] != 0x544E4F43u) {
-      ctr[0] = 0x544E4F43u;
-      ctr[1] = 0;
-    }
-    if (tagp[0] != 0x4F494E31u && total != 0) {
-      prev_boot_banner (base, rb, w, split + 6, (rows - 1) * CONS_LINE, total);
-    }
-    ctr[1]++;
-  }
   if (st[0] != magic) {
     st[0] = magic;
     st[1] = 0;
@@ -887,7 +779,14 @@ static void cons_putc_zone (char ch, u32 zone)
   }
 
   if (c == '\r') {
-    st[1] = 0;
+    /* R254: do NOT move the cursor back to column 0.
+     *
+     * The kernel ends many lines with "\r\n".  Resetting x here makes the
+     * newline handler below blank the line from column 0, i.e. it erases the
+     * text that was just drawn on it, and the row comes out empty with a line
+     * stamp next to it -- exactly the rows that have been unreadable for
+     * several rounds.  Leaving x where it is keeps the blank to the tail of
+     * the line, which is what it is for. */
     return;
   }
   if (c == '\n') {
@@ -927,10 +826,9 @@ static void cons_putc_zone (char ch, u32 zone)
   }
   /* R253: the log turns into blank rows with a live line stamp, which means the
    * bytes keep arriving but every one of them is dropped right here: the glyph
-   * path only knows 32..126, so a stream that gained a high bit (or arrived as
-   * UTF-16) draws nothing while the newline handler still counts.  Fold the bit
-   * and mark what is still not printable, instead of silently discarding it --
-   * a row of '?' says "text was here", a blank row says nothing at all. */
+   * path only knows 32..126.  Fold a high bit instead of dropping the byte, and
+   * mark what is still unprintable, so a row of '?' says "text was here"
+   * instead of a blank row that says nothing at all. */
   if (c >= 0x80) {
     c &= 0x7f;
     if (c < 32) {
@@ -975,43 +873,8 @@ __attribute__((used)) void blob_stage1 (u64 xmaxmem, void *args)
 #if defined(PE_INIT_PRINTF)
 __attribute__((used)) void blob_stage4 (int foo)
 {
-  volatile struct vc_info *v = (volatile struct vc_info *)VINFO;
-  u8 *base;
-  u32 rb, w, h, lim, rows, split;
-
-  /* R251: this is the last moment the ramoops record still describes the
-   * PREVIOUS boot.
-   *
-   * The recorder in console_write_char keeps its write offset in a static that
-   * starts at zero every boot, so the first character the kernel prints resets
-   * hdr[1] and the tail becomes unreachable.  PE_init_printf runs before any of
-   * that output, and the frame buffer can already be drawn on (the stage
-   * squares have been painted since stage 1), so the transcript goes down here
-   * while it still exists. */
   ((void (*)(int))PE_INIT_PRINTF)(foo);
   stage_mark (4);
-
-  fb_lazy_map ();
-  base = (u8 *)fb_base ();
-  rb = v->v_rowbytes;
-  w = v->v_width;
-  h = v->v_height;
-  if (rb == 0) {
-    rb = FB_ROWBYTES;
-  }
-  if (w == 0) {
-    w = FB_COLS;
-  }
-  if (base == 0 || rb == 0 || w < 64 || h < 4 * CONS_LINE) {
-    return;
-  }
-  lim = fb_rows (base, rb, h);
-  if (lim < CONS_LINE + CONS_GLYPH) {
-    return;
-  }
-  rows = lim / CONS_LINE;
-  split = (rows * CONS_SPLIT_PCT / 100) * CONS_LINE;
-  prev_boot_banner (base, rb, w, split + 6, (rows - 1) * CONS_LINE);
 }
 #endif
 

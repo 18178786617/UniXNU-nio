@@ -1,0 +1,53 @@
+Do not wait forever for the dlil threads to be scheduled
+
+bsd_init reaches dlil_init and stops: the panel's last line is 'dlil_init:
+Waiting for all the create dlil kernel threads to get scheduled at least once'.
+The loop that prints it sleeps on dlil_pending_thread_cnt with a NULL timeout, so
+if the two threads dlil_init() created never run, bsd_init never returns and
+nothing after it -- bsd_autoconf, the launchd handoff -- is reached.
+
+Wait at most five one-second slices, print how many threads are still pending and
+carry on.  The network stack is not what the launchd handoff needs.
+---
+diff --git a/bsd/net/dlil.c b/bsd/net/dlil.c
+index 78791d9..0338541 100644
+--- a/bsd/net/dlil.c
++++ b/bsd/net/dlil.c
+@@ -2700,12 +2700,31 @@ dlil_init(void)
+ 	 * scheduled and run at least once before we proceed
+ 	 */
+ 	lck_mtx_lock(&dlil_thread_sync_lock);
+-	while (dlil_pending_thread_cnt != 0) {
+-		DLIL_PRINTF("%s: Waiting for all the create dlil kernel "
+-		    "threads to get scheduled at least once.\n", __func__);
+-		(void) msleep(&dlil_pending_thread_cnt, &dlil_thread_sync_lock,
+-		    (PZERO - 1), __func__, NULL);
+-		LCK_MTX_ASSERT(&dlil_thread_sync_lock, LCK_ASSERT_OWNED);
++	{
++		/*
++		 * nio: this wait has no timeout, so a thread that never gets
++		 * scheduled holds bsd_init for good -- which is exactly where the
++		 * boot stopped (the panel ends on the "Waiting for all the create
++		 * dlil kernel threads" line).  Wait a bounded number of one-second
++		 * slices, say how many are still pending, and carry on: the rest of
++		 * the network stack is not what launchd needs to start.
++		 */
++		int nio_wait = 0;
++		int nio_ts = 100;
++
++		while (dlil_pending_thread_cnt != 0 && nio_wait < 5) {
++			DLIL_PRINTF("%s: Waiting for all the create dlil kernel "
++			    "threads to get scheduled at least once.\n", __func__);
++			(void) msleep(&dlil_pending_thread_cnt, &dlil_thread_sync_lock,
++			    (PZERO - 1), __func__, &nio_ts);
++			LCK_MTX_ASSERT(&dlil_thread_sync_lock, LCK_ASSERT_OWNED);
++			nio_wait++;
++			nio_ts = 100;
++		}
++		if (dlil_pending_thread_cnt != 0) {
++			printf("nio: dlil threads never ran, %d still pending, "
++			    "carrying on\n", dlil_pending_thread_cnt);
++		}
+ 	}
+ 	lck_mtx_unlock(&dlil_thread_sync_lock);
+ 	DLIL_PRINTF("%s: All the created dlil kernel threads have been "
