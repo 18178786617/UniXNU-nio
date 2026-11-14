@@ -16,7 +16,7 @@ diff --git a/osfmk/kern/zalloc.c b/osfmk/kern/zalloc.c
  {
 +	static uint32_t nio_zreg;
 +	uint32_t nio_z = nio_zreg++;
-+	if ((nio_z & 31u) == 0u) {
++	if ((nio_z & 7u) == 0u) {
 +		printf("\nZ%u:%llx", nio_z, (unsigned long long)(uintptr_t)site & 0xfffffffu);
 +	}
  	if (zone_tagging_on) {
