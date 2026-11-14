@@ -246,3 +246,4 @@ nio-no-personality-for-skipped.patch
 nio-candidate-done.patch
 nio-bsdinit-narrates.patch
 nio-manifest-properties-shim.patch
+nio-probe-candidates-exit.patch
