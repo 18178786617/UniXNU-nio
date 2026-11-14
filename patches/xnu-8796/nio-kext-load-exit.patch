@@ -1,0 +1,20 @@
+Say when a kext's load returns
+
+load> has no partner, so the panel cannot tell a load that is still inside from
+one that finished: run-275 ends with IOSurface's start() closed and nothing
+after it.  Print the identifier and result at the function's single exit.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..7a1e714 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -6656,6 +6656,9 @@ loaded:
+ 	}
+ 
+ finish:
++	printf("nio: load< %s ret=0x%x\n",
++	    (getIdentifierCString() != NULL) ? getIdentifierCString() : "(null)",
++	    (unsigned int)result);
+ 
+ 	if (result != kOSReturnSuccess) {
+ 		OSKextLog(this,
