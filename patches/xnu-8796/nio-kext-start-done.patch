@@ -1,0 +1,30 @@
+Say when a kext's start() returns
+
+The boot stops right after AppleARMPPlatform's interrupt controller prints 'not
+registrying member at registerService()'.  That print comes from the driver's own
+start routine, which the kernel cannot instrument, but its return does pass
+through OSKext::start().
+
+Print the return code and the identifier at the function's single exit, so a
+photo tells whether the driver's start came back or is still inside it.
+---
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..8f3e9e6 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -8312,6 +8312,15 @@ OSKext::start(bool startDependenciesFlag)
+ 	}
+ 
+ finish:
++	/*
++	 * nio: every start() leaves through here.  The boot stops right after
++	 * AppleARMPPlatform's interrupt controller prints its registerService
++	 * line, and that print comes from the driver's own start routine, which
++	 * the kernel cannot instrument -- but its return passes through this
++	 * function.  This line says whether start() came back or is still inside.
++	 */
++	printf("nio: kext start ret=0x%x id=[%s]\n", (unsigned int)result,
++	    (getIdentifierCString() != NULL) ? getIdentifierCString() : "(null)");
+ 	return result;
+ }
+ 

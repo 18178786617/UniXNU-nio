@@ -116,3 +116,4 @@ nio-step-marks.patch
 nio-post-earlyboot-marks.patch
 nio-screen-init-null.patch
 nio-dlil-wait-bounded.patch
+nio-kext-start-done.patch
