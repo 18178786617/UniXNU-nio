@@ -1,21 +1,20 @@
-Mark the end of each startup phase, with almost no output
+Mark the end of each startup phase, but only once the console exists
 
-func 0x9ad2b8 resolves to __zone_site_register, and there is no -zt boot argument,
-so zone_tagging_on is false and those 644 calls return immediately.  A no-op
-function cannot stall, so the thing that stops is most likely the console: the
-last few rounds printed six hundred lines or more, and the panel is a 40-line
-overwrite buffer driven by the log queue.
+The first attempt printed after every phase, including TUNABLES, TIMEOUTS and
+LOCKS.  Those run before the console is initialised, so the printf took the
+kernel down before it could print anything at all -- the panel stayed on the
+DarwinBoot handoff text and no kernel output appeared.
 
-Print one marker per phase instead -- after the loop in
-kernel_startup_initialize_upto, with the phase number.  Ten lines total, so the
-console cannot be the limit, and the last marker says how far the boot really
-got.
+The token probe already carried this guard (subsystem >= STARTUP_SUB_KPRINTF);
+apply the same one here.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -437,3 +437,4 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -437,3 +437,6 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  		startup_entry_cur = ++cur;
  	}
-+	printf("\nE%u", (unsigned)upto);
++	if (upto >= STARTUP_SUB_KPRINTF) {
++		printf("\nE%u", (unsigned)upto);
++	}
  	kernel_startup_log(upto);
