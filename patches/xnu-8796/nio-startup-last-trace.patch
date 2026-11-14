@@ -1,26 +1,22 @@
-Name the ZALLOC/LAST entry that does not return, by dispatching
+Print rank and function for every ZALLOC entry, not just rank LAST
 
-zone_tagging_on defaults to false ("-zt"), so all 644 __zone_site_register calls
-are no-ops and the stall cannot be inside them.  The other 56 entries in that
-slot (smr domains, btlog, kheap/zone-view startup, vm_paging_map) printed
-nothing, which is why the last Z line and the stall never coincided.
+The last F line was F9ad2cc.a5e310 -- __zone_site_register again -- and the very
+next entry printed the token [784:7.55], a rank of 55 that the rank==LAST filter
+skipped.  That skipped entry is the one that does not return.
 
-Print func and arg from the dispatcher for every entry in that slot.  The print
-sits above the call, so the last line on the panel is the entry that never
-returned, whatever function it is.  This sits after nio-startup-tokens so both
-insertions land at the same anchor without fighting over it.
+Widen the filter to the whole subsystem and put rank first, so the last line
+names both the rank that is stalling and the function it belongs to.
 ---
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -420,5 +420,10 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+@@ -420,5 +420,9 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
  				printf("\n[#%u:%u.%u]", nio_this, cur->subsystem,
  				    (unsigned)(cur->rank % 100u));
  			}
  		}
-+		if (cur->subsystem == STARTUP_SUB_ZALLOC &&
-+		    cur->rank == STARTUP_RANK_LAST) {
-+			printf("\nF%x.%x", (unsigned)((uintptr_t)cur->func & 0xffffffu),
-+			    (unsigned)((uintptr_t)cur->arg & 0xffffffu));
++		if (cur->subsystem == STARTUP_SUB_ZALLOC) {
++			printf("\nF%x.%x", (unsigned)cur->rank,
++			    (unsigned)((uintptr_t)cur->func & 0xffffffu));
 +		}
  		cur->func(cur->arg);
