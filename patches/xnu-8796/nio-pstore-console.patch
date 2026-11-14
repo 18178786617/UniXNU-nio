@@ -1,0 +1,73 @@
+Mirror the console ring into pstore through a mapped address
+
+The panel renderer stops drawing characters late in the boot: the line counter
+keeps climbing (9962 in the last video) while the rows stay blank, so the last
+readable line is no longer the last line printed.
+
+Mirror every drained chunk into the pstore console record instead.  The record's
+address 0xAF040000 is physical -- run-249 died writing through it directly -- so
+convert it once with ml_static_ptovirt() and do nothing if that does not yield a
+kernel address.  The loader can print the record's tail, which survives a dead
+panel renderer.
+---
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+index e5b23f2..e2b7794 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -383,6 +383,48 @@ console_ring_put(char **write_ptr, char ch)
+  *       total number of characters a single call to this function can drain is
+  *       restricted to MAX_TOTAL_FLUSH_SIZE.
+  */
++/*
++ * nio: mirror everything the console drains into the pstore console record, so
++ * the loader can print the tail of this boot on the next one.  The panel
++ * renderer stops drawing characters late in the boot -- the line counter keeps
++ * advancing while the rows stay blank -- and this record is the only copy that
++ * survives that.
++ *
++ * 0xAF040000 is a PHYSICAL address: writing through it directly took the boot
++ * down in run-249.  Convert it once with ml_static_ptovirt() and refuse to
++ * touch it when the result is not a kernel address.
++ */
++#define NIO_PSTORE_PHYS  0xAF040000ULL
++#define NIO_PSTORE_RING  0x3F000U
++
++static void
++nio_pstore_write(const char *buf, int n)
++{
++	static volatile uint32_t *hdr;
++	static uint32_t off;
++	volatile char *ring;
++	int i;
++
++	if (hdr == NULL) {
++		vm_offset_t va = ml_static_ptovirt((vm_offset_t)NIO_PSTORE_PHYS);
++		if (va < 0xffff000000000000ULL) {
++			return;
++		}
++		hdr = (volatile uint32_t *)va;
++		hdr[0] = 0x43474244U;          /* 'DBGC' */
++		off = 0;
++	}
++	ring = (volatile char *)(hdr + 3);
++	for (i = 0; i < n; i++) {
++		if (off >= NIO_PSTORE_RING) {
++			off = 0;
++		}
++		ring[off++] = buf[i];
++	}
++	hdr[1] = off;
++	hdr[2] = off;
++}
++
+ static void
+ console_ring_try_empty(bool fail_fast)
+ {
+@@ -433,6 +475,7 @@ console_ring_try_empty(bool fail_fast)
+ 		 */
+ 		if (nchars_out > 0) {
+ 			memcpy(flush_buf, console_ring.read_ptr, nchars_out);
++			nio_pstore_write(flush_buf, nchars_out);
+ 			const ptrdiff_t read_index = console_ring.read_ptr - console_ring.buffer;
+ 			console_ring.read_ptr = console_ring.buffer + ((read_index + nchars_out) % console_ring.len);
+ 			console_ring.used -= nchars_out;
