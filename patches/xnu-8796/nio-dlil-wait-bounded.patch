@@ -1,19 +1,40 @@
-Do not wait forever for the dlil threads to be scheduled
+Do not wait forever for the dlil threads, and say why they never ran
 
-bsd_init reaches dlil_init and stops: the panel's last line is 'dlil_init:
-Waiting for all the create dlil kernel threads to get scheduled at least once'.
-The loop that prints it sleeps on dlil_pending_thread_cnt with a NULL timeout, so
-if the two threads dlil_init() created never run, bsd_init never returns and
-nothing after it -- bsd_autoconf, the launchd handoff -- is reached.
+bsd_init stops in dlil_init: the last line on the panel is the 'Waiting for all
+the create dlil kernel threads to get scheduled' one.  That loop sleeps on
+dlil_pending_thread_cnt with a NULL timeout, so if either thread never runs,
+bsd_init never returns and nothing after it -- bsd_autoconf, the launchd handoff
+-- is reached.
 
-Wait at most five one-second slices, print how many threads are still pending and
-carry on.  The network stack is not what the launchd handoff needs.
+Wait at most five one-second slices, then print what is still pending along with
+both thread pointers and carry on.  Also keep the return value of
+dlil_create_input_thread(): it used to be discarded, and a failure there leaves
+the count at 1 with no thread able to clear it, which is the same hang.
 ---
 diff --git a/bsd/net/dlil.c b/bsd/net/dlil.c
-index 78791d9..0338541 100644
+index 78791d9..9e683da 100644
 --- a/bsd/net/dlil.c
 +++ b/bsd/net/dlil.c
-@@ -2700,12 +2700,31 @@ dlil_init(void)
+@@ -2678,7 +2678,17 @@ dlil_init(void)
+ 	 * detacher threads once everything is initialized.
+ 	 */
+ 	dlil_incr_pending_thread_count();
+-	(void) dlil_create_input_thread(NULL, dlil_main_input_thread, NULL);
++	{
++		/* nio: the return value was ignored, and a failure here leaves the
++		 * pending count at 1 with no thread to clear it, so the wait below can
++		 * never end.  Keep it and print it. */
++		int nio_in_err = dlil_create_input_thread(NULL,
++		    dlil_main_input_thread, NULL);
++
++		if (nio_in_err != 0) {
++			printf("nio: dlil input thread not created: %d\n", nio_in_err);
++		}
++	}
+ 
+ 	/*
+ 	 * Create ifnet detacher thread.
+@@ -2700,12 +2710,34 @@ dlil_init(void)
  	 * scheduled and run at least once before we proceed
  	 */
  	lck_mtx_lock(&dlil_thread_sync_lock);
@@ -25,12 +46,12 @@ index 78791d9..0338541 100644
 -		LCK_MTX_ASSERT(&dlil_thread_sync_lock, LCK_ASSERT_OWNED);
 +	{
 +		/*
-+		 * nio: this wait has no timeout, so a thread that never gets
-+		 * scheduled holds bsd_init for good -- which is exactly where the
-+		 * boot stopped (the panel ends on the "Waiting for all the create
-+		 * dlil kernel threads" line).  Wait a bounded number of one-second
-+		 * slices, say how many are still pending, and carry on: the rest of
-+		 * the network stack is not what launchd needs to start.
++		 * nio: this wait has no timeout, so a thread that never gets scheduled
++		 * holds bsd_init for good -- which is where the boot stopped, with the
++		 * "Waiting for all the create dlil kernel threads" line as the last
++		 * thing on the panel.  Wait a bounded number of one-second slices,
++		 * report what is still pending and carry on: the rest of the network
++		 * stack is not what the launchd handoff needs.
 +		 */
 +		int nio_wait = 0;
 +		int nio_ts = 100;
@@ -45,8 +66,11 @@ index 78791d9..0338541 100644
 +			nio_ts = 100;
 +		}
 +		if (dlil_pending_thread_cnt != 0) {
-+			printf("nio: dlil threads never ran, %d still pending, "
-+			    "carrying on\n", dlil_pending_thread_cnt);
++			printf("nio: dlil threads never ran, %d still pending "
++			    "(input %p, detacher %p), carrying on\n",
++			    dlil_pending_thread_cnt,
++			    (void *)dlil_main_input_thread->dlth_thread,
++			    (void *)thread);
 +		}
  	}
  	lck_mtx_unlock(&dlil_thread_sync_lock);
