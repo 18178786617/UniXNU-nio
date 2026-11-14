@@ -1,0 +1,41 @@
+Record the faulting pc before the NEON spill
+
+The panic on this port reports pc = the spill instruction itself, because that
+is where a stack that has already run past its end ends up: the frames below sp
+are fine, the guard page above is not, and the spill walks into it.  The abort
+that this raises overwrites ELR_EL1, and the state the panic prints belongs to
+the spill, so the fault that actually stopped the boot is never named.
+
+Save pc, far, esr and cpsr after the GPRs and before the NEON spill.  x2 is
+free by then (all of x2..x30 have been stored) and the dispatch code already
+treats x2 as scratch.  A frame abandoned mid-spill now carries the real fault.
+---
+diff --git a/osfmk/arm64/exception_asm.h b/osfmk/arm64/exception_asm.h
+index 6d1b1e6..e1c6638 100644
+--- a/osfmk/arm64/exception_asm.h
++++ b/osfmk/arm64/exception_asm.h
+@@ -158,6 +158,24 @@
+ 	stp		x28, fp,  [x0, SS64_X28]
+ 	str		lr, [x0, SS64_LR]
+ 
++	/*
++	 * nio: record what faulted before the NEON spill runs.
++	 *
++	 * When the stack is already past its end, the spill is what lands in the
++	 * guard page, and the abort it raises overwrites ELR_EL1/FAR_EL1 in the
++	 * frame that is being built -- so the panic names the spill and not the
++	 * fault that got us here.  Writing pc/far/esr/cpsr before the spill keeps
++	 * the real fault readable in the abandoned frame.
++	 */
++	mrs		x2, ELR_EL1
++	str		x2, [x0, SS64_PC]
++	mrs		x2, FAR_EL1
++	str		x2, [x0, SS64_FAR]
++	mrs		x2, ESR_EL1
++	str		w2, [x0, SS64_ESR]
++	mrs		x2, SPSR_EL1
++	str		w2, [x0, SS64_CPSR]
++
+ 	/* Save arm_neon_saved_state64 */
+ 	stp		q0, q1, [x0, NS64_Q0]
+ 	stp		q2, q3, [x0, NS64_Q2]

@@ -1,0 +1,50 @@
+Name the fault that a guard-page abort was hiding
+
+When the spill runs into a guard page, the abort it raises is a second
+exception: the frame that was being filled is left one arm_context_t above the
+new one, with the real pc/far/esr in it (see nio-fleh-early-fault.patch), and
+the panic prints only the spill.  Every round of this port has thus reported
+'the vector faulted' instead of what the kernel was doing.
+
+Print the abandoned frame before the panic: gap, both addresses and the cpu's
+intstack top go on one line, and every value is range-checked first so a wild
+sp degrades to no line instead of a second fault.
+---
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index 2cc442e..e5e1e40 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -466,6 +466,33 @@ panic_with_thread_kernel_state(const char *msg, arm_saved_state_t *ss)
+ 	ss_valid = is_saved_state64(ss);
+ 	arm_saved_state64_t *state = saved_state64(ss);
+ 
++	/*
++	 * nio: an abort taken while the previous frame was still being spilled
++	 * leaves that older frame exactly one context above this one, and the
++	 * older frame is the fault that actually stopped the boot (the spill
++	 * only ran into a guard page because the stack was already past its
++	 * end).  nio-fleh-early-fault.patch makes pc/far/esr readable there.
++	 * The gap and the range are checked first so a wild sp cannot turn a
++	 * panic into a second fault.
++	 */
++	if (ss_valid) {
++		uintptr_t prev = (uintptr_t)state->sp;
++		uintptr_t here = (uintptr_t)state;
++		if (prev > here && (prev - here) == 0x350 &&
++		    prev >= (uintptr_t)gVirtBase && prev < (uintptr_t)static_memory_end &&
++		    (prev & 7) == 0) {
++			uint64_t prev_pc = *(volatile uint64_t *)(prev + 0x108);
++			uint64_t prev_far = *(volatile uint64_t *)(prev + 0x118);
++			uint32_t prev_esr = *(volatile uint32_t *)(prev + 0x120);
++			if (prev_pc >= (uintptr_t)gVirtBase && prev_pc < (uintptr_t)static_memory_end) {
++				kprintf("nio: nested abort, previous frame pc=%llx far=%llx esr=%x sp=%llx istk=%llx\n",
++				    (unsigned long long)prev_pc, (unsigned long long)prev_far, prev_esr,
++				    (unsigned long long)(prev + 0x350),
++				    (unsigned long long)(uintptr_t)getCpuDatap()->intstack_top);
++			}
++		}
++	}
++
+ 	os_atomic_cmpxchg(&original_faulting_state, NULL, state, seq_cst);
+ 
+ 	// rdar://80659177
