@@ -97,7 +97,6 @@ nio-null-parent-task.patch
 nio-first-thread-kernel-stack.patch
 nio-bsd-init-trace.patch
 nio-ionvram-missing-partition.patch
-nio-startup-tokens.patch
 nio-locate-space-guard.patch
 nio-space-walk-count.patch
 nio-kmem-locate-guard.patch

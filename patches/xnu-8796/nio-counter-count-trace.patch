@@ -15,11 +15,13 @@ already points at its per-cpu slot, so the print cannot damage it.
 diff --git a/osfmk/kern/counter_common.c b/osfmk/kern/counter_common.c
 --- a/osfmk/kern/counter_common.c
 +++ b/osfmk/kern/counter_common.c
-@@ -73,2 +73,7 @@ scalable_counter_static_init(scalable_counter_t *counter)
+@@ -73,2 +73,9 @@ scalable_counter_static_init(scalable_counter_t *counter)
  	os_atomic_store_wide(zpercpu_get(*counter), current_value, relaxed);
 +	{
 +		extern int printf(const char *, ...);
 +		static uint32_t nio_ci;
-+		printf("\nC%u", nio_ci++);
++		if ((nio_ci++ & 7u) == 0u) {
++			printf("\nC%u", nio_ci);
++		}
 +	}
  	num_static_scalable_counters++;
