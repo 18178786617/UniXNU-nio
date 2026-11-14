@@ -925,6 +925,18 @@ static void cons_putc_zone (char ch, u32 zone)
     st[2] = zone_next (base, rb, w, y, y0, y1);
     return;
   }
+  /* R253: the log turns into blank rows with a live line stamp, which means the
+   * bytes keep arriving but every one of them is dropped right here: the glyph
+   * path only knows 32..126, so a stream that gained a high bit (or arrived as
+   * UTF-16) draws nothing while the newline handler still counts.  Fold the bit
+   * and mark what is still not printable, instead of silently discarding it --
+   * a row of '?' says "text was here", a blank row says nothing at all. */
+  if (c >= 0x80) {
+    c &= 0x7f;
+    if (c < 32) {
+      c = '?';
+    }
+  }
   if (c < 32 || c > 126) {
     return;
   }
