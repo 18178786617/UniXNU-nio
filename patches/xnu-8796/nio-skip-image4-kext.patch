@@ -69,9 +69,9 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +		 * kern_trustcache.c already tolerate (nio-trust-cache-without-
 +		 * security-extensions.patch), and kern_cs.c only reaches
 +		 * amfi->OSEntitlements_* with a blob AMFI alone would have set. */
-+		if (strncmp(nio_cid, "com.apple.security.", 19) == 0 ||
++		if (0 && (strncmp(nio_cid, "com.apple.security.", 19) == 0 ||
 +		    strncmp(nio_cid, "com.apple.driver.AppleMobileFileIntegrity",
-+		    42) == 0) {
++		    42) == 0)) {
 +			printf("nio: not loading %s, it needs /chosen/manifest-properties\n",
 +			    nio_cid);
 +			result = kOSKextReturnNotFound;
@@ -97,10 +97,10 @@ diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
 +	 * every loaded kext passes through: skip the family here (their C++
 +	 * constructors already ran during load; img4if stays NULL, which the
 +	 * trust-cache path already tolerates). */
-+	if (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0 ||
++	if (0 && (strncmp(getIdentifierCString(), "com.apple.security.", 19) == 0 ||
 +	    strncmp(getIdentifierCString(), "com.apple.filesystems.apfs", 26) == 0 ||
-+	    strncmp(getIdentifierCString(), "com.apple.driver.AppleMobileFileIntegrity", 42) == 0) {
-+		printf("nio: skipping start of %s\n", getIdentifierCString());
++	    strncmp(getIdentifierCString(), "com.apple.driver.AppleMobileFileIntegrity", 42) == 0)) {
++		printf("nio: skip-off start of %s\n", getIdentifierCString());
 +		result = kOSReturnSuccess;
 +		goto finish;
 +	}
