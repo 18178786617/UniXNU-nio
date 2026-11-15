@@ -1,0 +1,9 @@
+17:41:09 prepare: started in /Users/runner/work/UniXNU-nio/UniXNU-nio
+17:41:09 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+17:41:09 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist
+17:41:09 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o
+17:41:09 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+serial bootstrap: scripts/build-xnu-4k-baseline.sh
+17:41:09 syntax ok: scripts/build-xnu-4k-baseline.sh
+17:41:09 script absent: out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+17:41:09 prepare: done
