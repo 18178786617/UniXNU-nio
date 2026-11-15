@@ -113,6 +113,17 @@ def main(argv):
         b = tree_obj.read_bytes()
         say('replay bytes=%d tree bytes=%d identical=%s' % (len(a), len(b), a == b))
         say('replay has HB=%s tree has HB=%s' % (b'nio: HB ' in a, b'nio: HB ' in b))
+        say('object magic=%s' % a[:4].hex())
+        hits = []
+        start = 0
+        while True:
+            k = a.find(b'nio', start)
+            if k < 0 or len(hits) >= 12:
+                break
+            hits.append(a[max(0, k - 12):k + 24])
+            start = k + 3
+        say('object nio contexts (%d): %s' % (len(hits), hits))
+        say('object has leading-newline form=%s' % (b'\nnio: HB ' in a))
         say('replay sha=%s tree sha=%s'
             % (__import__('hashlib').sha256(a).hexdigest()[:16],
                __import__('hashlib').sha256(b).hexdigest()[:16]))
