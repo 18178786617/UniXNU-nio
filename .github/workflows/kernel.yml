@@ -668,6 +668,20 @@ jobs:
                   print('startup.o nio symbols:', syms[:8] if syms else 'none')
               except Exception as exc:
                   print('nm failed:', exc)
+              # If the object is a hard link into a cache, rm just drops one
+              # name and the next rule links it back -- which is what a 12-second
+              # "recompile" with an identical digest looks like.
+              try:
+                  st = _sp.run(['stat', '-f', 'inode=%i links=%l size=%z', opath],
+                               capture_output=True, text=True, timeout=30).stdout.strip()
+                  print('startup.o stat:', st)
+                  if 'links=1' not in st:
+                      ino = st.split('inode=')[1].split()[0]
+                      twins = _sp.run(['find', 'out', '-inum', ino],
+                                      capture_output=True, text=True, timeout=120).stdout.split()
+                      print('startup.o twins:', twins[:6])
+              except Exception as exc:
+                  print('stat failed:', exc)
           rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
           print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
           # The record clang writes with -MJ carries the exact command line.
