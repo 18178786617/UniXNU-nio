@@ -1,0 +1,17 @@
+Say which candidate probe returns nothing
+
+Matching repeats on the same few services, so their probe is the step that keeps
+failing and the class name plus the returned pointer says which one.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..81c4033 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4032,6 +4032,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 				}
+ #endif
+ 				newInst = inst->probe( this, &score );
++				printf("\nnio: P %s r=%p", symbol->getCStringNoCopy(), newInst);
+ 				inst->detach( this );
+ 				if (NULL == newInst) {
+ #if IOMATCHDEBUG
