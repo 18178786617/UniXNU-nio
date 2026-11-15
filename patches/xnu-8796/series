@@ -166,6 +166,8 @@ nio-compressor-landmarks.patch
 
 nio-heartbeat.patch
 
+nio-heartbeat-fast.patch
+
 nio-skip-zone-ro-gate.patch
 
 nio-stack-rw.patch
@@ -239,6 +241,8 @@ nio-kext-start-done.patch
 nio-kext-start-enter.patch
 nio-kext-load-enter.patch
 nio-probe-candidates-count.patch
+
+nio-match-cand-name.patch
 nio-kext-load-exit.patch
 nio-kext-load-executable.patch
 nio-kext-loaded-label.patch
