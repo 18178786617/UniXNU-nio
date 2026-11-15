@@ -255,3 +255,5 @@ nio-probe-result.patch
 nio-no-class-candidate.patch
 nio-skip-cpuic-matching.patch
 nio-async-match-name.patch
+nio-match-drop-reasons.patch
+nio-match-loop-driver.patch
