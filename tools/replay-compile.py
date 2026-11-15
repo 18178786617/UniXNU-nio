@@ -46,6 +46,7 @@ def main(argv):
     record = tree_obj.with_suffix('.o.json')
     replay = pathlib.Path('/tmp') / ('nio-replay-' + tree_obj.name)
     lines = []
+    cargv = None
 
     def say(text):
         lines.append(str(text))
@@ -84,6 +85,28 @@ def main(argv):
                     say('replay stderr tail: %s' % (proc.stderr or '')[-400:])
             except Exception as exc:                     # noqa: BLE001
                 say('replay failed: %s' % exc)
+
+    # Ask the preprocessor directly: if the line survives -E, the compiler must
+    # emit it (and the object's silence is a codegen question); if it does not,
+    # the line is commented out or behind a condition on this base commit.
+    if cargv:
+        pre = [a for a in cargv if a != '-c']
+        if '-o' in pre:
+            i = pre.index('-o')
+            del pre[i:i + 2]
+        pre += ['-E', '-o', '/tmp/nio-replay-startup.i']
+        try:
+            proc = subprocess.run(pre, cwd=str(tree_obj.parent),
+                                  capture_output=True, text=True, timeout=900)
+            say('preprocess rc=%d' % proc.returncode)
+            ipath = pathlib.Path('/tmp/nio-replay-startup.i')
+            if ipath.is_file():
+                body = ipath.read_bytes()
+                say('preprocessed bytes=%d has HB=%s' % (len(body), b'nio: HB ' in body))
+                say('preprocessed bytes=%d has hb-started=%s'
+                    % (len(body), b'nio: hb thread started' in body))
+        except Exception as exc:                         # noqa: BLE001
+            say('preprocess failed: %s' % exc)
 
     if replay.is_file() and tree_obj.is_file():
         a = replay.read_bytes()
