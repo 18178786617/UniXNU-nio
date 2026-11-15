@@ -1,0 +1,24 @@
+Mark the steps between the lock and doServiceMatch
+
+run-295 stops on SM locked with no DSM enter, so the stall is in the few
+statements in between: the busy adjustment and the arbitration unlock.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..863329f 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1106,11 +1106,14 @@ IOService::startMatching( IOOptionBits options )
+ 		__state[1] &= ~kIOServiceSynchronousState;
+ 	}
+ 
++	printf("\nnio: SM b4busy cfg=%d", (int)needConfig);
+ 	if (needConfig) {
+ 		prevBusy = _adjustBusy( 1 );
+ 	}
++	printf("\nnio: SM busy ok");
+ 
+ 	unlockForArbitration();
++	printf("\nnio: SM unlocked");
+ 
+ 	if (needConfig) {
+ 		if (needWake) {
