@@ -1,0 +1,18 @@
+Say whether the arbitration lock is contended by the same thread
+
+run-299 shows one thread asking twice with no free in between and no LA got, so
+the success path never ran: the request is on a service that is already locked.
+Same-thread means a recursive acquisition, different-thread means a real wait.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..6a293c5 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1653,6 +1653,7 @@ IOService::lockForArbitration( bool isSuccessRequired )
+ 	}
+ 
+ 	if (found) { // this object is already locked
++		printf("\nnio: LA busy same=%d", (active->thread == element->thread) ? 1 : 0);
+ 		// determine whether it is the same or a different thread trying to lock
+ 		if (active->thread != element->thread) { // it is a different thread
+ 			ArbitrationLockQueueElement * victim = NULL;
