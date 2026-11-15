@@ -1,0 +1,14 @@
+19:59:14 prepare: started in /Users/runner/work/UniXNU-nio/UniXNU-nio
+19:59:14 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+19:59:14 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist
+19:59:14 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o
+19:59:14 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+traced script start: scripts/build-xnu-4k-baseline.sh
+traced before/after make: scripts/build-xnu-4k-baseline.sh
+19:59:14 syntax ok: scripts/build-xnu-4k-baseline.sh
+19:59:14 script absent: out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+19:59:14 prepare: done
+  File "<stdin>", line 11
+    lines.append(text)
+    ^^^^^
+IndentationError: expected an indented block after function definition on line 10
