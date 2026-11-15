@@ -12,7 +12,7 @@ index 6d7dd7e..6a293c5 100644
  	}
  
  	if (found) { // this object is already locked
-+		printf("\nnio: LA busy same=%d", (active->thread == element->thread) ? 1 : 0);
++		printf("\nnio: LA busy same=%d h=%p w=%p", (active->thread == element->thread) ? 1 : 0, active->thread, element->thread);
  		// determine whether it is the same or a different thread trying to lock
  		if (active->thread != element->thread) { // it is a different thread
  			ArbitrationLockQueueElement * victim = NULL;
