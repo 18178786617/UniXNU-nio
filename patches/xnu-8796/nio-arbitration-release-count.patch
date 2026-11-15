@@ -1,0 +1,17 @@
+Say how many recursion levels are left after a release
+
+A service ends up locked with nobody releasing it, and the only way to see that is
+the count that stays above zero after the last unlock.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..22c2e6e 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1905,6 +1905,7 @@ IOService::unlockForArbitration( void )
+ 	if (element->count > 1) {
+ 		// undo one level of recursion
+ 		element->count--;
++		printf("\nnio: LA rel left=%d t=%p", (int)element->count, current_thread());
+ 	} else {
+ 		// remove it from the active queue
+ 		queue_remove( &gArbitrationLockQueueActive,
