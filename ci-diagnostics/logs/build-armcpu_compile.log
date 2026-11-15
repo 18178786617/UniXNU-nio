@@ -1,0 +1,7 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/ArmCpu/ArmCpu.cpp:447:75: warning: implicit conversion changes signedness: 'unsigned int' to 'int' [-Wsign-conversion]
+  447 |   if ((controller == nullptr) || (controller->initCPUInterruptController (cpuCount, 1) != kIOReturnSuccess)) {
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~  ^~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/ArmCpu/ArmCpu.cpp:452:48: warning: implicit conversion changes signedness: 'uint32_t' (aka 'unsigned int') to 'int' [-Wsign-conversion]
+  452 |   if (controller->registerInterrupt (provider, logicalId, this, &ArmCpu::dispatch, nullptr) != kIOReturnSuccess) {
+      |                   ~~~~~~~~~~~~~~~~~            ^~~~~~~~~
+2 warnings generated.
