@@ -254,3 +254,4 @@ nio-arbitration-recursive.patch
 nio-probe-result.patch
 nio-no-class-candidate.patch
 nio-deferred-match-name.patch
+nio-skip-cpuic-matching.patch
