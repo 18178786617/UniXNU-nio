@@ -148,9 +148,14 @@ def main(argv):
                 text = spath.read_text(errors='replace').splitlines()
                 say('assembly lines=%d has HB=%s'
                     % (len(text), any('nio: HB' in l for l in text)))
+                calls = [l.strip() for l in text if 'bl\t_nio_dc_puts' in l or 'bl _nio_dc_puts' in l]
+                say('assembly calls to nio_dc_puts=%d' % len(calls))
                 at = next((i for i, l in enumerate(text) if '_nio_heartbeat_thread:' in l), None)
                 if at is not None:
-                    for l in text[at:at + 26]:
+                    body = text[at:at + 200]
+                    end = next((i for i, l in enumerate(body) if 'Lfunc_end' in l), len(body))
+                    say('heartbeat body lines=%d' % end)
+                    for l in body[:end]:
                         say('  asm| ' + l[:120])
                 else:
                     say('  asm: no _nio_heartbeat_thread label')
