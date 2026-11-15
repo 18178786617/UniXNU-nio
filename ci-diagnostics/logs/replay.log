@@ -1,0 +1,219 @@
+base=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio
+record=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json exists=True
+tree object=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o exists=True
+recorded file=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c output=startup.o
+replaying 439 arguments in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT
+replay rc=0
+preprocess rc=0
+preprocessed bytes=1246414 has HB=True
+preprocessed bytes=1246414 has hb-started=True
+replay bytes=113592 tree bytes=113592 identical=True
+replay has HB=False tree has HB=False
+object magic=cffaedfe
+object nio contexts (12): [b'%d\x00/chosen\x00\x00nio: hb thread started\n\x00', b'ad started\n\x00nio: hb thread failed\n\x00s', b'work/UniXNU-nio/UniXNU-nio/out/nio/i', b'-nio/UniXNU-nio/out/nio/ios-16.5-20F', b'XNU-nio/out/nio/ios-16.5-20F66/nio/t', b'-16.5-20F66/nio/tree/.cache/xnu-work', b'work/UniXNU-nio/UniXNU-nio/out/nio/i', b'-nio/UniXNU-nio/out/nio/ios-16.5-20F', b'XNU-nio/out/nio/ios-16.5-20F66/nio/t', b'-16.5-20F66/nio/tree/build/xnu/ios-o', b'p_debug_229\x00nio_hb_started\x00vm_kernel', b'ter_handler\x00nio_dc_puts\x00nio_dc_putu\x00']
+object has leading-newline form=False
+replay sha=ea9cc0b4d5c59a7e tree sha=ea9cc0b4d5c59a7e
+assembly rc=0
+assembly lines=28649 has HB=False
+assembly calls to nio_dc_puts=0
+heartbeat body lines=200
+  asm| _nio_heartbeat_thread:                  ; @nio_heartbeat_thread
+  asm| Lfunc_begin6:
+  asm| 	.loc	4 444 0                         ; .cache/xnu-work/osfmk/kern/startup.c:444:0
+  asm| 	.cfi_startproc
+  asm| ; %bb.0:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:arg <- undef
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:wr <- undef
+  asm| 	sub	sp, sp, #128
+  asm| 	stp	x28, x27, [sp, #32]             ; 16-byte Folded Spill
+  asm| 	stp	x26, x25, [sp, #48]             ; 16-byte Folded Spill
+  asm| 	stp	x24, x23, [sp, #64]             ; 16-byte Folded Spill
+  asm| 	stp	x22, x21, [sp, #80]             ; 16-byte Folded Spill
+  asm| 	stp	x20, x19, [sp, #96]             ; 16-byte Folded Spill
+  asm| 	stp	x29, x30, [sp, #112]            ; 16-byte Folded Spill
+  asm| 	add	x29, sp, #112
+  asm| 	.cfi_def_cfa w29, 16
+  asm| 	.cfi_offset w30, -8
+  asm| 	.cfi_offset w29, -16
+  asm| 	.cfi_offset w19, -24
+  asm| 	.cfi_offset w20, -32
+  asm| 	.cfi_offset w21, -40
+  asm| 	.cfi_offset w22, -48
+  asm| 	.cfi_offset w23, -56
+  asm| 	.cfi_offset w24, -64
+  asm| 	.cfi_offset w25, -72
+  asm| 	.cfi_offset w26, -80
+  asm| 	.cfi_offset w27, -88
+  asm| 	.cfi_offset w28, -96
+  asm| Ltmp115:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- 0
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- 0
+  asm| 	mov	w20, #0                         ; =0x0
+  asm| 	mov	x27, #0                         ; =0x0
+  asm| 	mov	w19, #51712                     ; =0xca00
+  asm| 	movk	w19, #15258, lsl #16
+  asm| Lloh57:
+  asm| 	adrp	x21, _cons_ops@GOTPAGE
+  asm| Lloh58:
+  asm| 	ldr	x21, [x21, _cons_ops@GOTPAGEOFF]
+  asm| 	mov	x22, #-3689348814741910324      ; =0xcccccccccccccccc
+  asm| 	movk	x22, #52429
+  asm| 	mov	w23, #10                        ; =0xa
+  asm| 	add	x24, sp, #16
+  asm| Ltmp116:
+  asm| LBB6_1:                                 ; =>This Loop Header: Depth=1
+  asm|                                         ;     Child Loop BB6_3 Depth 2
+  asm|                                         ;     Child Loop BB6_7 Depth 2
+  asm|                                         ;     Child Loop BB6_9 Depth 2
+  asm|                                         ;     Child Loop BB6_13 Depth 2
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x27
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- 0
+  asm| 	.loc	4 448 12 prologue_end           ; .cache/xnu-work/osfmk/kern/startup.c:448:12
+  asm| 	stp	xzr, xzr, [sp]
+  asm| Ltmp117:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- 0
+  asm| 	.loc	4 450 3                         ; .cache/xnu-work/osfmk/kern/startup.c:450:3
+  asm| 	mov	w0, #100                        ; =0x64
+  asm| 	bl	_delay
+  asm| Ltmp118:
+  asm| 	.loc	4 451 4                         ; .cache/xnu-work/osfmk/kern/startup.c:451:4
+  asm| 	add	w20, w20, #1
+  asm| Ltmp119:
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- [DW_OP_plus_uconst 8, DW_OP_deref] $sp
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	.loc	4 452 3                         ; .cache/xnu-work/osfmk/kern/startup.c:452:3
+  asm| 	add	x0, sp, #8
+  asm| 	bl	_clock_get_uptime
+  asm| Ltmp120:
+  asm| 	.loc	4 453 31                        ; .cache/xnu-work/osfmk/kern/startup.c:453:31
+  asm| 	ldr	x0, [sp, #8]
+  asm| Ltmp121:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- [DW_OP_deref] $sp
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- $x0
+  asm| 	.loc	4 453 3 is_stmt 0               ; .cache/xnu-work/osfmk/kern/startup.c:453:3
+  asm| 	mov	x1, sp
+  asm| 	bl	_absolutetime_to_nanoseconds
+  asm| Ltmp122:
+  asm| 	.loc	4 454 8 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:454:8
+  asm| 	ldr	x26, [sp]
+  asm| Ltmp123:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x26
+  asm| 	.loc	4 454 18 is_stmt 0              ; .cache/xnu-work/osfmk/kern/startup.c:454:18
+  asm| 	sub	x8, x26, x27
+  asm| Ltmp124:
+  asm| 	.loc	4 454 7                         ; .cache/xnu-work/osfmk/kern/startup.c:454:7
+  asm| 	cmp	x8, x19
+  asm| 	b.lo	LBB6_1
+  asm| Ltmp125:
+  asm| ; %bb.2:                                ;   in Loop: Header=BB6_1 Depth=1
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x26
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x27
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	;DEBUG_VALUE: nio_dc_puts:s <- undef
+  asm| 	.loc	4 424 3 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:424:3
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w27, #10                        ; =0xa
+  asm| Ltmp126:
+  asm| 	mov	w0, #10                         ; =0xa
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp127:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #110                        ; =0x6e
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp128:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #105                        ; =0x69
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp129:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #111                        ; =0x6f
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp130:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #58                         ; =0x3a
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp131:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #32                         ; =0x20
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp132:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #72                         ; =0x48
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp133:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #66                         ; =0x42
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp134:
+  asm| 	ldr	x8, [x21, #16]
+  asm| 	mov	w0, #32                         ; =0x20
+  asm| 	mov	w1, #1                          ; =0x1
+  asm| 	blr	x8
+  asm| Ltmp135:
+  asm| 	;DEBUG_VALUE: nio_dc_putu:i <- 11
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x20
+  asm| 	.loc	4 434 9                         ; .cache/xnu-work/osfmk/kern/startup.c:434:9
+  asm| 	str	wzr, [sp, #24]
+  asm| 	str	xzr, [sp, #16]
+  asm| 	mov	w28, #11                        ; =0xb
+  asm| 	mov	x19, x20
+  asm| Ltmp136:
+  asm| LBB6_3:                                 ;   Parent Loop BB6_1 Depth=1
+  asm|                                         ; =>  This Inner Loop Header: Depth=2
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x26
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	.loc	4 0 9 is_stmt 0                 ; .cache/xnu-work/osfmk/kern/startup.c:0:9
+  asm| 	mov	x25, x27
+  asm| Ltmp137:
+  asm| 	;DEBUG_VALUE: nio_dc_putu:i <- $w28
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x19
+  asm| 	.loc	4 436 7 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:436:7
+  asm| 	subs	w28, w28, #1
+  asm| Ltmp138:
+  asm| 	b.vs	LBB6_5
+  asm| Ltmp139:
+  asm| LBB6_4:                                 ;   in Loop: Header=BB6_3 Depth=2
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x19
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x26
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	.loc	4 0 0 is_stmt 0                 ; .cache/xnu-work/osfmk/kern/startup.c:0:0
+  asm| 	umulh	x8, x19, x22
+  asm| 	lsr	x9, x8, #3
+  asm| 	msub	w8, w9, w23, w19
+  asm| 	orr	w8, w8, #0x30
+  asm| Ltmp140:
+  asm| 	;DEBUG_VALUE: nio_dc_putu:i <- $w28
+  asm| 	.loc	4 436 12                        ; .cache/xnu-work/osfmk/kern/startup.c:436:12
+  asm| 	strb	w8, [x24, w28, sxtw]
+  asm| Ltmp141:
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x9
+  asm| 	.loc	4 438 2 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:438:2
+  asm| 	sub	w27, w25, #1
+  asm| 	cmp	x19, #9
+  asm| 	mov	x19, x9
+  asm| Ltmp142:
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x19
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x19
+  asm| 	b.hi	LBB6_3
+  asm| 	b	LBB6_6
+  asm| Ltmp143:
+  asm| LBB6_5:                                 ;   in Loop: Header=BB6_3 Depth=2
+  asm| 	;DEBUG_VALUE: nio_dc_putu:v <- $x19
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x26
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w20
+  asm| 	.loc	4 436 7                         ; .cache/xnu-work/osfmk/kern/startup.c:436:7
+  asm| 	bl	___ubsan_handle_sub_overflow_minimal
+  asm| Ltmp144:
+  asm| 	.loc	4 0 7 is_stmt 0                 ; .cache/xnu-work/osfmk/kern/startup.c:0:7
+  asm| 	b	LBB6_4
+  asm| Ltmp145:
+  asm| LBB6_6:                                 ;   in Loop: Header=BB6_1 Depth=1
