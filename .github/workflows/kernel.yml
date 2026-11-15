@@ -532,26 +532,47 @@ jobs:
           switches=$(grep -c '^CONFIG_' "$config" || true)
           echo "merged config: $config ($switches switches)"
 
-      - name: Drop stale linker output
-        # The first pass links before the archives that define mockfs_mountroot
-        # and native_verified_block_root_authorized exist, so it fails at the
-        # link by design and leaves compile records and link.filelist behind.
-        # A kernel file already on the disk would be taken for this round's
-        # and prelinked as-is, which is how a stale core gets published.
-        #
-        # Delete exactly the linker output, never a wildcard: run-342 removed
-        # mach.development.* and with it a file the LDFILELIST step needs, so
-        # the bootstrap pass died before link.filelist existed and every
-        # archive builder stopped with "No XNU symbol names".
+      - name: Report a prebuilt linker output
+        # run-342 and run-343 proved the tree carries a prebuilt kernel: when
+        # the deletion step removed it, the bootstrap pass died before
+        # link.filelist existed and every archive builder stopped with "No XNU
+        # symbol names".  A file that cannot be removed has to be aged instead
+        # (the next step does that), but say what was there first.
         run: |
-          found=$(find out -type f \( -name 'mach.development.bcm2837.unstripped' -o -path '*/kernel/kernel.macho' \) 2>/dev/null || true)
-          if [ -n "$found" ]; then
-            printf '%s\n' "$found"
-            printf '%s\n' "$found" | while IFS= read -r f; do [ -f "$f" ] && rm -f "$f"; done
-            echo "removed $(printf '%s\n' "$found" | wc -l | tr -d ' ') stale linker outputs"
-          else
-            echo "no stale linker output on the disk"
-          fi
+          for f in $(find out -type f -name 'mach.development.bcm2837.unstripped' 2>/dev/null); do
+            echo "prebuilt linker output: $f ($(wc -c < "$f") bytes, $(date -r "$f" '+%Y-%m-%d %H:%M') )"
+          done
+          echo "prebuilt check done"
+
+      - name: Age the prebuilt kernel so every pass links its own objects
+        # The kernel the prelink consumes is built once and then sits in the
+        # tree: make sees a target newer than the objects it just compiled and
+        # skips the link, so the published core carries code from whenever that
+        # file was made (run-337 .. run-341 all shipped the same core).
+        #
+        # Deleting it does not work: run-342/343 did that and the bootstrap
+        # pass died before link.filelist existed.  Ageing it does: the file
+        # stays for the filelist step, and make relinks because every object
+        # is now newer.  The edit goes into the board's own copy of the build
+        # script, the way the owner-root gate above is applied.
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          path = pathlib.Path('scripts/build-xnu-4k-baseline.sh')
+          text = path.read_text()
+          anchor = 'make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 \\\n'
+          if text.count(anchor) != 1:
+              raise SystemExit('the kernel make call matched %d times, expected 1' % text.count(anchor))
+          age = (
+              '# nio: the tree ships this kernel already built and make takes it for current;\n'
+              '# age it so the link below uses the objects this round compiled.  Do not delete it:\n'
+              '# the LDFILELIST step reads it, and run-342/343 died when it was gone.\n'
+              'touch -t 200001010000 "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped" 2>/dev/null || true\n'
+          )
+          path.write_text(text.replace(anchor, age + anchor))
+          print('the kernel make call now ages the prebuilt output first')
+          PY
+          bash -n scripts/build-xnu-4k-baseline.sh
 
       - name: Build the kernel
         env:
@@ -600,9 +621,12 @@ jobs:
           echo "obj=$obj"
           echo "native=$native"
           echo "work=$work"
-          dest=$(ls -d out/nio/*/nio 2>/dev/null | head -1)/logs
-          mkdir -p "$dest"
-          python3 - "$obj" "$native" "$work" <<'PY' | tee "$dest/fingerprint.log"
+          base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
+          dest=${base:-out}/logs
+          mkdir -p "$dest" 2>/dev/null || true
+          # This step must never be the reason a round is red, so the pipeline
+          # ends in true whether or not the tee target could be written.
+          python3 - "$obj" "$native" "$work" <<'PY' | tee "$dest/fingerprint.log" || true
           import os, sys
           marks = [b'nio: STALL rounds=', b'nio: HB ', b'the matching path stalled', b'nio: U1']
           obj, native, work = sys.argv[1:4]
