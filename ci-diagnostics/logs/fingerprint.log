@@ -1,0 +1,10 @@
+kernel.macho (published): 56938496 bytes, mtime 11-15 18:21:29, nio: STALL rounds==no, nio: HB =no, the matching path stalled=yes, nio: U1=no
+native (prelink input): 18838552 bytes, mtime 11-15 18:21:24, nio: STALL rounds==no, nio: HB =no, the matching path stalled=yes, nio: U1=no
+osfmk/DEVELOPMENT/startup.o: 113592 bytes, mtime 11-15 18:21:23, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+iokit/DEVELOPMENT/IOService.o: MISSING out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+startup.c source: mtime 11-15 18:12:22, HB=yes, old-format=no
+IOService.cpp source: mtime 11-15 18:12:22, STALL=yes, U1=no
+startup.c sha256: ed50ef81931cc352943758f6c61f65b6
+  source line 456: nio_dc_puts("\nnio: HB ");
+startup.o nio literals: ['nio: hb thread failed', 'nio: hb thread started']
+compile record: present
