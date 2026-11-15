@@ -55,28 +55,14 @@ for o in "$OBJ/osfmk/DEVELOPMENT/startup.o" "$OBJ/iokit/DEVELOPMENT/IOService.o"
     fi
 done
 
-# 3. Age the prebuilt kernel in every copy of the build script.
+# 3. Report the build script and stop.  Everything that forced a relink has
+#    been tried and each of it breaks the bootstrap pass: deleting the kernel
+#    (run-342/343) and ageing it (run-349) both make the LDFILELIST step
+#    regenerate link.filelist, which cannot succeed before the archives exist.
+#    The kernel therefore stays the one the tree ships until the archive order
+#    is fixed upstream; this script only reports, so the round still builds.
 for s in scripts/build-xnu-4k-baseline.sh out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh; do
-    [ -f "$s" ] || { note "script absent: $s"; continue; }
-    if grep -q 'nio: age the prebuilt kernel' "$s" 2>/dev/null; then
-        note "already aged: $s"
-        continue
-    fi
-    python3 - "$s" <<'PY' 2>&1 | tee -a "$log" 2>/dev/null
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-text = path.read_text()
-anchor = 'make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 \\\n'
-if text.count(anchor) != 1:
-    print('anchor count %d in %s -- left alone' % (text.count(anchor), path))
-else:
-    age = (
-        '# nio: age the prebuilt kernel so make links this round\'s objects\n'
-        'touch -t 200001010000 "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped" 2>/dev/null || true\n'
-    )
-    path.write_text(text.replace(anchor, age + anchor))
-    print('aged:', path)
-PY
+    [ -f "$s" ] && note "script: $s ($(wc -l <"$s") lines)" || note "script absent: $s"
 done
 
 note "prepare: done"
