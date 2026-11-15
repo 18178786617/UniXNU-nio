@@ -1,0 +1,77 @@
+Put the heartbeat on the framebuffer directly
+
+The panel froze after SM busy ok and nothing ever showed up again: not a
+heartbeat, not the stall panic.  Everything the kernel prints goes through
+console_write(), which waits forever for room in the console ring buffer
+when the ring stops draining -- so a heartbeat that goes through printf
+dies at the exact moment it is needed, and the panel cannot say whether
+the kernel stopped or only the console did.
+
+The heartbeat now writes through cons_ops[1].putc, the entry the console
+blob replaced with a direct framebuffer writer.  That path takes no lock
+and touches no ring, so a thread that can still run can still mark the
+panel: a frozen tail with new HB lines arriving under it means the console
+is wedged and the kernel is alive; a frozen tail with no new HB lines
+means the kernel itself stopped.  The line carries the tick counter and
+the uptime in microseconds, so two of them also say how fast a second
+really is.
+---
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index 7e09705..6127866 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -403,6 +403,42 @@ event_register_handler(struct event_hdr *hdr)
+ 	head->next = hdr;
+ }
+ 
++/* nio: write straight to the video console, bypassing the ring buffer.
++ *
++ * console_write() waits forever for room in the console ring
++ * (osfmk/console/serial_console.c:555), so a heartbeat that goes through
++ * printf dies exactly when the console wedges -- the one state it exists
++ * to distinguish.  run-335 froze after "SM busy ok" and neither the
++ * heartbeat nor the stall panic ever showed up again.  cons_ops[1].putc
++ * is the entry the console blob replaced with a direct framebuffer
++ * writer: it takes no lock on the way, so a thread that can still run
++ * can still put a line on the panel.  A photo of a frozen tail with new
++ * HB lines arriving under it says the console is wedged and the kernel
++ * is alive; a frozen tail with no new HB lines says the kernel stopped. */
++extern struct console_ops cons_ops[];
++
++static void
++nio_dc_puts(const char *s)
++{
++	while (*s != '\0') {
++		cons_ops[VC_CONS_OPS].putc(*s++, true);
++	}
++}
++
++static void
++nio_dc_putu(unsigned long v)
++{
++	char buf[12];
++	int i = (int)sizeof (buf) - 1;
++
++	buf[i] = '\0';
++	do {
++		buf[--i] = (char)('0' + (v % 10u));
++		v /= 10u;
++	} while (v != 0);
++	nio_dc_puts(&buf[i]);
++}
++
+ static void
+ nio_heartbeat_thread(void *arg, wait_result_t wr)
+ {
+@@ -417,7 +453,10 @@ nio_heartbeat_thread(void *arg, wait_result_t wr)
+ 		absolutetime_to_nanoseconds(nio_hb_abstime, &nio_hb_ns);
+ 		if ((nio_hb_ns - nio_hb_last) >= 1000000000ULL) {
+ 			nio_hb_last = nio_hb_ns;
+-			printf("\nnio: hb %u %u", n, (uint32_t)(nio_hb_ns / 1000));
++			nio_dc_puts("\nnio: HB ");
++			nio_dc_putu(n);
++			nio_dc_puts(" ");
++			nio_dc_putu(nio_hb_ns / 1000u);
+ 		}
+ 	}
+ }

@@ -272,3 +272,4 @@ nio-match-loop-driver.patch
 nio-iokit-match-return.patch
 
 nio-match-stall-watchdog.patch
+nio-direct-console-heartbeat.patch
