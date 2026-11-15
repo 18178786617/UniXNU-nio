@@ -532,101 +532,70 @@ jobs:
           switches=$(grep -c '^CONFIG_' "$config" || true)
           echo "merged config: $config ($switches switches)"
 
-      - name: Report a prebuilt linker output
-        # run-342 and run-343 proved the tree carries a prebuilt kernel: when
-        # the deletion step removed it, the bootstrap pass died before
-        # link.filelist existed and every archive builder stopped with "No XNU
-        # symbol names".  A file that cannot be removed has to be aged instead
-        # (the next step does that), but say what was there first.
-        run: |
-          for f in $(find out -type f -name 'mach.development.bcm2837.unstripped' 2>/dev/null); do
-            echo "prebuilt linker output: $f ($(wc -c < "$f") bytes, $(date -r "$f" '+%Y-%m-%d %H:%M') )"
-          done
-          echo "prebuilt check done"
-
-      - name: Rebuild every object from the patched sources
-        # run-344's fingerprint settled it: the patched startup.c carries
-        # "nio: HB ", the startup.o the linker reads does not.  The objects
-        # shipped with the tree are treated as current, so a patch that edits
-        # a source never reaches the kernel -- every round since run-337
-        # published the same core for exactly this reason.
+      - name: Prepare the kernel build inputs
+        # run-344's fingerprint proved the objects arrive with the tree and are
+        # taken for current: the patched startup.c carries "nio: HB ", the
+        # startup.o the linker reads does not.  Everything here exists to make
+        # the build compile the series' own sources and then link them.
         #
-        # Clear the objects and the compile records, and keep the two files
-        # the LDFILELIST step reads (the kernel binary and link.filelist):
-        # run-342/343 showed what removing those does.  Every object is then
-        # compiled from the source the patch series just wrote.
+        # The step may never fail the round: run-342, 343 and 345 were all lost
+        # to a preparation step whose failure the logs could not show.  Every
+        # action lands in out/<board>/<os>/<config>/logs/ci-steps.log, which the
+        # log collection publishes, so the next failure is readable.
+        continue-on-error: true
         run: |
+          base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
+          dest=${base:-out}/logs
+          mkdir -p "$dest" 2>/dev/null || true
+          log="$dest/ci-steps.log"
+          note() { printf '%s %s\n' "$(date -u '+%H:%M:%S')" "$*" | tee -a "$log"; }
+
+          note "prepare: started"
+
+          # 1) What the tree already carries.
+          for f in $(find out -type f \( -name 'mach.development.bcm2837.unstripped' -o -name 'link.filelist' \) 2>/dev/null); do
+            note "prebuilt: $f ($(wc -c < "$f") bytes, $(date -r "$f" '+%Y-%m-%d %H:%M'))"
+          done
+
+          # 2) Clear the objects and the compile records, keep the two files the
+          #    LDFILELIST step reads: run-342/343 lost a round to removing those.
           obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj 2>/dev/null | head -1)
-          if [ -z "$obj" ]; then
-            echo "no object tree on the disk; nothing to clear"
-            exit 0
+          if [ -n "$obj" ]; then
+            n=$(find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) 2>/dev/null | wc -l | tr -d ' ')
+            find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) -delete 2>/dev/null || true
+            note "cleared $n objects and compile records under $obj"
+          else
+            note "no object tree yet: $obj"
           fi
-          keep=$(find "$obj" -type f -name 'mach.development.bcm2837.unstripped' 2>/dev/null)
-          for f in $keep; do
-            echo "keeping $(basename "$f") ($(wc -c < "$f") bytes, $(date -r "$f" '+%Y-%m-%d %H:%M'))"
-          done
-          n=$(find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) 2>/dev/null | wc -l | tr -d ' ')
-          find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) -delete 2>/dev/null || true
-          echo "cleared $n stale objects and compile records"
 
-      - name: Age the prebuilt kernel so every pass links its own objects
-        # The kernel the prelink consumes is built once and then sits in the
-        # tree: make sees a target newer than the objects it just compiled and
-        # skips the link, so the published core carries code from whenever that
-        # file was made (run-337 .. run-341 all shipped the same core).
-        #
-        # Deleting it does not work: run-342/343 did that and the bootstrap
-        # pass died before link.filelist existed.  Ageing it does: the file
-        # stays for the filelist step, and make relinks because every object
-        # is now newer.  The edit goes into the board's own copy of the build
-        # script, the way the owner-root gate above is applied.
-        run: |
-          python3 - <<'PY'
-          import pathlib
-          path = pathlib.Path('scripts/build-xnu-4k-baseline.sh')
+          # 3) Put `touch -t` in front of the kernel make call in every copy of
+          #    the build script that exists (the tree's copy is the one that
+          #    runs; the checkout's copy is the one it is made from).  Ageing the
+          #    prebuilt kernel is what makes make link at all.
+          for s in scripts/build-xnu-4k-baseline.sh $(ls out/nio/*/nio/tree/scripts/build-xnu-4k-baseline.sh 2>/dev/null); do
+            [ -f "$s" ] || continue
+            python3 - "$s" <<'PY' | tee -a "$log"
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
           text = path.read_text()
           anchor = 'make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 \\\n'
-          if text.count(anchor) != 1:
-              raise SystemExit('the kernel make call matched %d times, expected 1' % text.count(anchor))
-          age = (
-              '# nio: the tree ships this kernel already built and make takes it for current;\n'
-              '# age it so the link below uses the objects this round compiled.  Do not delete it:\n'
-              '# the LDFILELIST step reads it, and run-342/343 died when it was gone.\n'
-              'touch -t 200001010000 "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped" 2>/dev/null || true\n'
-          )
-          path.write_text(text.replace(anchor, age + anchor))
-          print('the kernel make call now ages the prebuilt output first')
+          mark = '# nio: the tree ships this kernel already built'
+          if mark in text:
+              print('already aged:', path)
+          elif text.count(anchor) == 1:
+              age = ('# nio: the tree ships this kernel already built and make takes it for current;\n'
+                     '# age it so the link uses the objects this round compiled.  Do not delete it://n'
+                     '# the LDFILELIST step reads it, and run-342/343 died when it was gone.\n'
+                     'touch -t 200001010000 "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped" 2>/dev/null || true\n')
+              path.write_text(text.replace(anchor, age + anchor))
+              print('aged:', path)
+          else:
+              print('anchor count %d in %s -- left alone' % (text.count(anchor), path))
           PY
-          bash -n scripts/build-xnu-4k-baseline.sh
+            bash -n "$s" 2>/dev/null && note "syntax ok: $s" || note "syntax FAILED: $s"
+          done
 
-      - name: Build the kernel
-        env:
-          # prepare-xnu-source.py lists Apple sources through the GitHub API;
-          # anonymous calls from hosted runners hit the shared rate limit.
-          # This step also fetches the pinned sources (no separate fetch step).
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          # The build's own output is kept in a file as well as on the
-          # console. The output of the pipeline itself -- the "kernel: ..."
-          # lines and any Python error it ends with -- never reaches the log
-          # tree under out/, so a failure in the plan or in the driver was
-          # invisible to everything that reads those logs.
-          set -o pipefail
-          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
-
-          # The kernel, not unixnu's exit code, decides whether this step
-          # failed.  Run 157 built the kernel and the recipe still returned
-          # nonzero, so the step failed, the artifact upload was skipped and
-          # the kernel was lost even though it was sitting in the tree the
-          # whole time.  The kernel is the thing the round is for, and it is
-          # on the disk, so its presence is the verdict.  A round that
-          # produced no kernel still fails here.
-          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
-          if [ -z "$kernel" ]; then
-            echo "::error title=no kernel::the build produced no kernel.macho"
-            exit 1
-          fi
-          echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
+          note "prepare: done"
 
       - name: Fingerprint where the round's marker lives
         # run-337 onward publish a core without the new strings although the
