@@ -274,3 +274,4 @@ nio-iokit-match-return.patch
 nio-match-stall-watchdog.patch
 nio-direct-console-heartbeat.patch
 # 21:35 re-run to verify the framebuffer heartbeat strings land in the kernel
+nio-stall-framebuffer-message.patch

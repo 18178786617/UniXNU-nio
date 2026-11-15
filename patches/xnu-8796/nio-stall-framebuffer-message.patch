@@ -1,0 +1,51 @@
+Write the stall message on the framebuffer before panicking
+
+run-338's boot ended with the panel going dark, and a dark panel cannot say
+whether the stall watchdog ever fired.  The heartbeat already writes through
+cons_ops[1].putc -- the entry the console blob replaced with a direct
+framebuffer writer, no lock and no ring -- so the watchdog says it there too,
+before the panic runs: STALL and the matching round count go on the panel
+with no console dependency, and a photo of the last seconds catches them
+whatever the panic path does afterwards.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 192a948..9b40f4b 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -3914,6 +3914,36 @@ nio_match_watchdog(void *arg, wait_result_t wr)
+ 			continue;
+ 		}
+ 		if (since && (ns - since) >= 15ULL * 1000000000ULL) {
++			/* nio: say it on the framebuffer through the same unlocked path the
++			 * heartbeat uses (cons_ops[1].putc, the entry the console blob
++			 * replaced).  The panic that follows is supposed to halt with
++			 * debug=0x1, but whatever the panic path draws can be lost if the
++			 * machine goes down for another reason -- these characters are put
++			 * on the panel BEFORE the panic runs, with no lock and no console,
++			 * so a photo of the last seconds catches them regardless. */
++			{
++				struct nio_wd_console_ops {
++					void (*putc)(char, bool);
++					int (*getc)(bool);
++				};
++				extern struct nio_wd_console_ops cons_ops[];
++				const char *nio_m = "\nnio: STALL rounds=";
++				unsigned nio_v = nio_match_progress;
++				char nio_buf[12];
++				int nio_i = (int)sizeof (nio_buf) - 1;
++
++				while (*nio_m != '\0') {
++					cons_ops[1].putc(*nio_m++, true);
++				}
++				nio_buf[nio_i] = '\0';
++				do {
++					nio_buf[--nio_i] = (char)('0' + (nio_v % 10u));
++					nio_v /= 10u;
++				} while (nio_v != 0);
++				for (const char *nio_s = &nio_buf[nio_i]; *nio_s != '\0'; nio_s++) {
++					cons_ops[1].putc(*nio_s, true);
++				}
++			}
+ 			panic("nio: the matching path stalled (rounds=%u)", nio_match_progress);
+ 		}
+ 	}
