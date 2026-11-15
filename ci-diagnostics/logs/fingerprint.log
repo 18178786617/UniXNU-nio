@@ -1,0 +1,32 @@
+kernel.macho (published): 56938496 bytes, mtime 11-15 20:26:04, nio: STALL rounds==no, nio: HB =no, the matching path stalled=yes, nio: U1=no
+native (prelink input): 18838552 bytes, mtime 11-15 20:25:58, nio: STALL rounds==no, nio: HB =no, the matching path stalled=yes, nio: U1=no
+osfmk/DEVELOPMENT/startup.o: 113592 bytes, mtime 11-15 20:25:58, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+iokit/DEVELOPMENT/IOService.o: MISSING out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+startup.c source: mtime 11-15 20:15:21, HB=yes, old-format=no
+IOService.cpp source: mtime 11-15 20:15:21, STALL=yes, U1=no
+startup.c sha256: ed50ef81931cc352943758f6c61f65b6
+  source line 456: nio_dc_puts("\nnio: HB ");
+    443| nio_heartbeat_thread(void *arg, wait_result_t wr)
+    444| {
+    445| 	unsigned n = 0;
+    446| 	uint64_t nio_hb_last = 0;
+    447| 	for (;;) {
+    448| 		uint64_t nio_hb_abstime = 0, nio_hb_ns = 0;
+    449| 
+    450| 		delay(100);
+    451| 		n++;
+    452| 		clock_get_uptime(&nio_hb_abstime);
+    453| 		absolutetime_to_nanoseconds(nio_hb_abstime, &nio_hb_ns);
+    454| 		if ((nio_hb_ns - nio_hb_last) >= 1000000000ULL) {
+    455| 			nio_hb_last = nio_hb_ns;
+    456| 			nio_dc_puts("\nnio: HB ");
+    457| 			nio_dc_putu(n);
+    458| 			nio_dc_puts(" ");
+    459| 			nio_dc_putu(nio_hb_ns / 1000u);
+    460| 		}
+startup.o nio literals: ['nio: hb thread failed', 'nio: hb thread started']
+startup.o nio symbols: ['0000000000016a28 b _kernel_startup_initialize_upto.nio_hb_started', '0000000000000478 t _nio_heartbeat_thread']
+startup.o stat: inode=3601721 links=1 size=113592
+compile record: present
+compile record entries: 1
+startup.o compile: /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -xc /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c -o startup.o -c -g -nostdinc -ferror-limit=10000 -fno-builtin -fno-common -ftrivial-auto-var-init=zero -fsigned-bitfields -fmerge-all-constants -fno-c++-static-destructors -fsanitize-minimal-runtime -fsanitize-ignorelist=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/san/kasan-blacklist-arm64 -fsanitize=signed-integer-overflow -D ARM64_BOARD_CONFIG_BCM2837 -arch arm64 -D arm64 -D ARM64 -D __ARM64__ -D LP64 -D PAGE_SIZE_FIXED -D VM_KERNEL_LI
