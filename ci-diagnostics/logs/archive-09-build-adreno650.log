@@ -1,0 +1,3 @@
+note: -Wno-unnecessary-virtual-specifier is not known to this clang, not passing it
+PASS: 31 NativeAdreno a650 objects archived
+PASS: archive verified with 31 objects
