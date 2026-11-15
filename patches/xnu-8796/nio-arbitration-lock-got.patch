@@ -1,0 +1,17 @@
+Say when the arbitration lock is actually acquired
+
+want/free are balanced, so the last thread either never got the lock or got it and
+stalled later; one line at the success return separates the two.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..796efe4 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1837,6 +1837,7 @@ restart_sleep:                  wait_result = assert_wait( element,
+ 					success = false;
+ 				} else { // we weren't aborted, so we must be ready to go :-)
+ 					// we've already been moved from waiting to active queue
++					printf("\nnio: LA got t=%p", current_thread());
+ 					return true;
+ 				}
+ 			} else { // the lock request is to be failed
