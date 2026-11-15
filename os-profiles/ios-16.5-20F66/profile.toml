@@ -244,3 +244,30 @@
 
 ["adt"."defaults"."u32"]
 "kern.maxvnodes" = 10000
+
+
+["adt"."options"]
+
+# nio: the AppleARMWatchdogTimer kext reads its configuration from
+# IODeviceTree:/options.  With an empty /options it falls back to "inferred
+# defaults", which arm the userspace watchdog, the IOKit quiesce watchdog,
+# the panic watchdog and the shutdown watchdog.  The userspace watchdog is
+# fed by watchdogd, which lives in userspace: from inside the kernel no
+# check-in ever arrives, the watchdog times out and the machine resets --
+# which is how every round of this port ends, about a minute into the boot.
+#
+# The kext's own strings are the evidence for the names: "defang_watchdogd",
+# "PanicWatchdogEnabled", "IOKitQuiesceWatchdogEnabled",
+# "ShutdownWatchdogEnabled" and "IODeviceTree:/options" all sit next to each
+# other in the prelinked binary, and the kext prints
+# "watchdog configured (source: %s) to monitor userspace, SoC watchdog
+# %sabled, ..." with "inferred defaults" as the source when the tree says
+# nothing.
+#
+# The wdt boot arg is left alone: the kernel reads it for the scheduler
+# hygiene debug, and the arm_init.c use of it is a different feature.
+["adt"."options"."u32"]
+"defang_watchdogd" = 1
+"IOKitQuiesceWatchdogEnabled" = 0
+"PanicWatchdogEnabled" = 0
+"ShutdownWatchdogEnabled" = 0

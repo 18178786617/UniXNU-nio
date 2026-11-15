@@ -168,6 +168,8 @@ nio-heartbeat.patch
 
 nio-heartbeat-fast.patch
 
+nio-heartbeat-boottime.patch
+
 nio-skip-zone-ro-gate.patch
 
 nio-stack-rw.patch
@@ -243,6 +245,8 @@ nio-kext-load-enter.patch
 nio-probe-candidates-count.patch
 
 nio-match-cand-name.patch
+
+nio-match-boottime.patch
 nio-kext-load-exit.patch
 nio-kext-load-executable.patch
 nio-kext-loaded-label.patch
