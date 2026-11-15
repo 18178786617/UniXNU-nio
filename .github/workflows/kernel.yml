@@ -546,6 +546,35 @@ jobs:
           bash device/tools/ci-prepare.sh . 2>&1 | tee -a "${RUNNER_TEMP:-/tmp}/ci-prepare.out" || true
           echo "prepare finished; the build follows whether or not it did anything"
 
+      - name: Build the kernel
+        env:
+          # prepare-xnu-source.py lists Apple sources through the GitHub API;
+          # anonymous calls from hosted runners hit the shared rate limit.
+          # This step also fetches the pinned sources (no separate fetch step).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # The build's own output is kept in a file as well as on the
+          # console. The output of the pipeline itself -- the "kernel: ..."
+          # lines and any Python error it ends with -- never reaches the log
+          # tree under out/, so a failure in the plan or in the driver was
+          # invisible to everything that reads those logs.
+          set -o pipefail
+          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
+
+          # The kernel, not unixnu's exit code, decides whether this step
+          # failed.  Run 157 built the kernel and the recipe still returned
+          # nonzero, so the step failed, the artifact upload was skipped and
+          # the kernel was lost even though it was sitting in the tree the
+          # whole time.  The kernel is the thing the round is for, and it is
+          # on the disk, so its presence is the verdict.  A round that
+          # produced no kernel still fails here.
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "::error title=no kernel::the build produced no kernel.macho"
+            exit 1
+          fi
+          echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
+
       - name: Fingerprint where the round's marker lives
         # run-337 onward publish a core without the new strings although the
         # log shows the series applied and startup.o compiled.  Three places
