@@ -1,0 +1,26 @@
+Trace every arbitration lock acquire and release by thread
+
+run-297 shows two threads alternating and the last one never getting the lock;
+the pair of prints here says which thread released last and which one is asking,
+without needing the queue internals.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..144c4e7 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1610,6 +1610,7 @@ IOService::setPMRootDomain( class IOPMrootDomain * rootDomain)
+ bool
+ IOService::lockForArbitration( bool isSuccessRequired )
+ {
++	printf("\nnio: LA want t=%p", current_thread());
+ 	bool                          found;
+ 	bool                          success;
+ 	ArbitrationLockQueueElement * element;
+@@ -1880,6 +1881,7 @@ restart_sleep:                  wait_result = assert_wait( element,
+ void
+ IOService::unlockForArbitration( void )
+ {
++	printf("\nnio: LA free t=%p", current_thread());
+ 	bool                          found;
+ 	ArbitrationLockQueueElement * element;
+ 
