@@ -11,12 +11,9 @@ the symptom, so the nubs that match normally stay quiet.  It carries the
 nub's name, the reasons in the order the candidates were offered, and the
 class name of the candidate that was turned away for the most interesting
 reason -- that name is what says which driver is stuck.
-
-Reason 6 (the kext that holds the personality has not been loaded) also gets
-a line of its own, naming the kext that is missing.
 ---
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
-index dd4ca61..dc50cd2 100644
+index dd4ca61..f8de13d 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
 @@ -3831,6 +3831,53 @@ IOService::invokeNotifiers(OSArray * willSend[])
@@ -142,25 +139,21 @@ index dd4ca61..dc50cd2 100644
  					break;
  				}
  			}
-@@ -3996,6 +4056,17 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3996,6 +4056,13 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			// Check to see if driver reloc has been loaded.
  			needReloc = (false == gIOCatalogue->isModuleLoaded( match, &kextRef ));
  			if (needReloc) {
-+				/* the one reason worth a line of its own: name the kext
-+				 * that is not there, because that is the thing to fix. */
++				/* the kext that holds the personality is not loaded: the
++				 * matching waits for it.  (Which kext it is cannot be
++				 * printed here: the key that holds it is a symbol that
++				 * is a plain pointer in this build, and reading it
++				 * through the wrong type does not compile.  The class
++				 * name below says which personality it was.) */
 +				NIO_DROP(6);
-+				{
-+					OSString * nio_mod = OSDynamicCast(OSString,
-+					    match->getObject(gIOModuleIdentifierKernelKey.get()));
-+					if (nio_mod) {
-+						printf("\nnio: F6 %s %s", getName() ? getName() : "?",
-+						    nio_mod->getCStringNoCopy());
-+					}
-+				}
  #if IOMATCHDEBUG
  				if (debugFlags & kIOLogCatalogue) {
  					LOG("%s: stalling for module\n", getName());
-@@ -4028,6 +4099,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -4028,6 +4095,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			}
  			if (familyMatches) {
  				familyMatches->setObject( props );
@@ -168,7 +161,7 @@ index dd4ca61..dc50cd2 100644
  			}
  		} while (false);
  
-@@ -4035,6 +4107,27 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -4035,6 +4103,27 @@ IOService::probeCandidates( OSOrderedSet * matches )
  		OSSafeReleaseNULL(nextMatch);
  		OSSafeReleaseNULL(props);
  	}
