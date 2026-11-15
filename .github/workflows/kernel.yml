@@ -578,6 +578,83 @@ jobs:
           fi
           echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
 
+      - name: Replay the recorded compile of startup.o
+        # run-362's #error fired at startup.c:2, so the compiler really reads the
+        # patched file -- and every other round still got an object without
+        # "nio: HB " on line 456.  Replay the exact command clang recorded, into
+        # /tmp, and compare it with the object in the tree: identical means the
+        # compiler is consistent and the tree's copy is overwritten; different
+        # means the recorded command is not what produced the tree's copy.
+        if: always()
+        continue-on-error: true
+        run: |
+          base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
+          dest=${base:-out}/logs
+          mkdir -p "$dest" 2>/dev/null || true
+          python3 - "$base" "$dest/replay.log" <<'PYIN' 2>&1 | tee -a "$dest/ci-steps.log" 2>/dev/null
+          import json, os, pathlib, shlex, subprocess, sys
+
+          base, out = sys.argv[1], sys.argv[2]
+          obj = pathlib.Path(base) / 'tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837'
+          rec = obj / 'osfmk/DEVELOPMENT/startup.o.json'
+          tree_obj = obj / 'osfmk/DEVELOPMENT/startup.o'
+          lines = []
+
+
+          def say(text):
+          lines.append(text)
+          print(text)
+
+
+          if not rec.is_file():
+          say('no compile record; nothing to replay')
+          else:
+          raw = rec.read_text(errors='replace')
+          dec = json.JSONDecoder()
+          idx = 0
+          entry = None
+          while idx < len(raw):
+          while idx < len(raw) and raw[idx] in ' \n\r\t':
+          idx += 1
+          if idx >= len(raw):
+          break
+          try:
+          candidate, idx = dec.raw_decode(raw, idx)
+          except ValueError:
+          break
+          entry = candidate
+          break
+          if not entry:
+          say('record did not decode')
+          else:
+          argv = entry.get('arguments') or shlex.split(entry.get('command', ''))
+          argv = list(argv)
+          if '-o' in argv:
+          argv[argv.index('-o') + 1] = '/tmp/nio-replay-startup.o'
+          else:
+          argv += ['-o', '/tmp/nio-replay-startup.o']
+          say('replaying %d arguments' % len(argv))
+          try:
+          proc = subprocess.run(argv, cwd=str(obj / 'osfmk/DEVELOPMENT'),
+          capture_output=True, text=True, timeout=600)
+          say('replay rc=%d %s' % (proc.returncode, (proc.stderr or '')[-300:]))
+          except Exception as exc:
+          say('replay failed: %s' % exc)
+          replay = pathlib.Path('/tmp/nio-replay-startup.o')
+          if replay.is_file() and tree_obj.is_file():
+          a = replay.read_bytes()
+          b = tree_obj.read_bytes()
+          say('replay %d bytes, tree %d bytes, identical=%s'
+          % (len(a), len(b), a == b))
+          say('replay has HB=%s, tree has HB=%s'
+          % (b'nio: HB ' in a, b'nio: HB ' in b))
+          else:
+          say('replay object missing: %s' % replay.is_file())
+
+          pathlib.Path(out).write_text('\n'.join(lines) + '\n')
+          PYIN
+          echo "replay step finished"
+
       - name: Fingerprint where the round's marker lives
         # run-337 onward publish a core without the new strings although the
         # log shows the series applied and startup.o compiled.  Three places
