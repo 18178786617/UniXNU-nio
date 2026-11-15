@@ -250,8 +250,6 @@ nio-probe-candidates-exit.patch
 nio-startmatching-probe.patch
 nio-doservicematch-probe.patch
 nio-startmatching-steps.patch
-nio-arbitration-lock-probe.patch
 nio-arbitration-lock-got.patch
 nio-arbitration-busy-same.patch
 nio-adjustbusy-abortable.patch
-nio-arbitration-queue-lock.patch
