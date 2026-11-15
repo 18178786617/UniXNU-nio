@@ -532,6 +532,19 @@ jobs:
           switches=$(grep -c '^CONFIG_' "$config" || true)
           echo "merged config: $config ($switches switches)"
 
+      - name: Drop stale linker output
+        # The first pass links before the archives that define mockfs_mountroot
+        # and native_verified_block_root_authorized exist, so it fails at the
+        # link by design and only leaves compile records behind.  A kernel
+        # file already on the disk would be taken for this round's and
+        # prelinked as-is, which is how a stale core can be published without
+        # anyone noticing.  Remove both kinds before the build, so the only
+        # kernel that can exist afterwards is one this build linked.
+        run: |
+          before=$(find out -type f \( -name 'mach.development.*' -o -name 'kernel.macho' \) 2>/dev/null | wc -l | tr -d ' ')
+          find out -type f \( -name 'mach.development.*' -o -name 'kernel.macho' \) -delete 2>/dev/null || true
+          echo "removed $before stale linker outputs"
+
       - name: Build the kernel
         env:
           # prepare-xnu-source.py lists Apple sources through the GitHub API;
@@ -560,6 +573,26 @@ jobs:
             exit 1
           fi
           echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
+
+      - name: Prove the kernel was built from these sources
+        # run-337 onward published kernels whose core did not come from the
+        # patched tree: the build log shows the patch series applied and
+        # startup.o compiled, yet the linked core carries no trace of the new
+        # code, so round after round behaved identically.  A kernel without
+        # this round's marker is a stale kernel, and flashing it costs a
+        # phone round: fail here, with the reason named, instead.
+        run: |
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "::error title=no kernel::the build produced no kernel.macho"
+            exit 1
+          fi
+          if python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(0 if b"nio: STALL rounds=" in d else 1)' "$kernel"; then
+            echo "the kernel carries the stall marker at $kernel"
+          else
+            echo "::error title=stale kernel::no 'nio: STALL rounds=' in the kernel; its core was not rebuilt from the patched sources"
+            exit 1
+          fi
 
       - name: Collect the logs
         # The logs are collected before anything reports on them, so that a
