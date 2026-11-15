@@ -107,6 +107,9 @@ on:
       - "scripts/build-*.py"
       - "scripts/emit-prelink-nio.py"
       - "scripts/reference/**"
+      # The preparation script now lives here and changes what the build does.
+      # run-351 was pushed without it and no run started at all.
+      - "tools/**"
       # The device tree is compiled into the ADT the kernel boots from, so a node
       # that is enabled there changes the kernel image. It was missing from this
       # list: R257 enabled UFS in dts/nio.dts, which is what makes the storage
