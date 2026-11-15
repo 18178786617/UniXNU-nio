@@ -130,6 +130,33 @@ def main(argv):
     else:
         say('replay object missing=%s' % (not replay.is_file()))
 
+    # Emit assembly for the same inputs: the listing says what the function was
+    # compiled into, which is the only place left that can explain an object
+    # whose symbols are there and whose literal is not.
+    if cargv:
+        asmv = [a for a in cargv if a != '-c']
+        if '-o' in asmv:
+            i = asmv.index('-o')
+            del asmv[i:i + 2]
+        asmv += ['-S', '-o', '/tmp/nio-replay-startup.s']
+        try:
+            proc = subprocess.run(asmv, cwd=str(tree_obj.parent),
+                                  capture_output=True, text=True, timeout=900)
+            say('assembly rc=%d' % proc.returncode)
+            spath = pathlib.Path('/tmp/nio-replay-startup.s')
+            if spath.is_file():
+                text = spath.read_text(errors='replace').splitlines()
+                say('assembly lines=%d has HB=%s'
+                    % (len(text), any('nio: HB' in l for l in text)))
+                at = next((i for i, l in enumerate(text) if '_nio_heartbeat_thread:' in l), None)
+                if at is not None:
+                    for l in text[at:at + 26]:
+                        say('  asm| ' + l[:120])
+                else:
+                    say('  asm: no _nio_heartbeat_thread label')
+        except Exception as exc:                         # noqa: BLE001
+            say('assembly failed: %s' % exc)
+
     logdir.mkdir(parents=True, exist_ok=True)
     (logdir / 'replay.log').write_text('\n'.join(lines) + '\n')
     return 0
