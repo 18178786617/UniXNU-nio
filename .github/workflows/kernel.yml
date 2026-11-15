@@ -544,6 +544,31 @@ jobs:
           done
           echo "prebuilt check done"
 
+      - name: Rebuild every object from the patched sources
+        # run-344's fingerprint settled it: the patched startup.c carries
+        # "nio: HB ", the startup.o the linker reads does not.  The objects
+        # shipped with the tree are treated as current, so a patch that edits
+        # a source never reaches the kernel -- every round since run-337
+        # published the same core for exactly this reason.
+        #
+        # Clear the objects and the compile records, and keep the two files
+        # the LDFILELIST step reads (the kernel binary and link.filelist):
+        # run-342/343 showed what removing those does.  Every object is then
+        # compiled from the source the patch series just wrote.
+        run: |
+          obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj 2>/dev/null | head -1)
+          if [ -z "$obj" ]; then
+            echo "no object tree on the disk; nothing to clear"
+            exit 0
+          fi
+          keep=$(find "$obj" -type f -name 'mach.development.bcm2837.unstripped' 2>/dev/null)
+          for f in $keep; do
+            echo "keeping $(basename "$f") ($(wc -c < "$f") bytes, $(date -r "$f" '+%Y-%m-%d %H:%M'))"
+          done
+          n=$(find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) 2>/dev/null | wc -l | tr -d ' ')
+          find "$obj" -type f \( -name '*.o' -o -name '*.cpo' -o -name '*.o.json' -o -name '*.d' \) -delete 2>/dev/null || true
+          echo "cleared $n stale objects and compile records"
+
       - name: Age the prebuilt kernel so every pass links its own objects
         # The kernel the prelink consumes is built once and then sits in the
         # tree: make sees a target newer than the objects it just compiled and
@@ -637,7 +662,9 @@ jobs:
                   return
               d = open(path, 'rb').read()
               hits = ', '.join(m.decode() + '=' + ('yes' if m in d else 'no') for m in marks)
-              print(f'{label}: {os.path.getsize(path)} bytes, {hits}')
+              import time as _t
+              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(path)))
+              print(f'{label}: {os.path.getsize(path)} bytes, mtime {stamp}, {hits}')
 
           probe('kernel.macho (published)', os.popen("ls out/nio/*/nio/kernel/kernel.macho 2>/dev/null | head -1").read().strip())
           probe('native (prelink input)', native)
@@ -646,11 +673,27 @@ jobs:
           src = os.path.join(work, 'osfmk/kern/startup.c') if work else ''
           if src and os.path.isfile(src):
               d = open(src, 'rb').read()
-              print('startup.c source: STALL=%s HB=%s'
-                    % ('yes' if b'nio: STALL rounds=' in d else 'no',
-                       'yes' if b'nio: HB ' in d else 'no'))
+              import time as _t
+              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(src)))
+              print('startup.c source: mtime %s, HB=%s, old-format=%s'
+                    % (stamp,
+                       'yes' if b'nio: HB ' in d else 'no',
+                       'yes' if b'nio: hb %u %u' in d else 'no'))
           else:
               print('startup.c source: MISSING', src)
+          isrc = os.path.join(work, 'iokit/Kernel/IOService.cpp') if work else ''
+          if isrc and os.path.isfile(isrc):
+              d = open(isrc, 'rb').read()
+              import time as _t
+              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(isrc)))
+              print('IOService.cpp source: mtime %s, STALL=%s, U1=%s'
+                    % (stamp,
+                       'yes' if b'nio: STALL rounds=' in d else 'no',
+                       'yes' if b'nio: U1' in d else 'no'))
+          else:
+              print('IOService.cpp source: MISSING', isrc)
+          rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
+          print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
           PY
 
       - name: Prove the kernel was built from these sources
