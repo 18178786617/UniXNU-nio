@@ -664,17 +664,32 @@ jobs:
           # run-356 showed the object restored in 12 seconds with the bootstrap
           # pass's digest, so the question is what the compiler actually read.
           if rec and os.path.isfile(rec):
+              # clang -MJ writes one JSON object per compiled target, back to
+              # back, so json.load stops at the first boundary.  Decode them one
+              # at a time and fall back to the raw head.
               import json as _json
-              try:
-                  payload = _json.load(open(rec))
-                  entries = payload if isinstance(payload, list) else [payload]
-                  for entry in entries:
-                      cmd = entry.get('command') or ' '.join(entry.get('arguments', []))
-                      if cmd:
-                          print('startup.o compile:', cmd[:700])
-                          break
-              except Exception as exc:
-                  print('compile record unreadable:', exc)
+              raw = open(rec, errors='replace').read()
+              dec = _json.JSONDecoder()
+              idx = 0
+              entries = []
+              while idx < len(raw):
+                  while idx < len(raw) and raw[idx] in ' \n\r\t':
+                      idx += 1
+                  if idx >= len(raw):
+                      break
+                  try:
+                      obj, idx = dec.raw_decode(raw, idx)
+                  except ValueError:
+                      break
+                  entries.append(obj)
+              print('compile record entries:', len(entries))
+              for entry in entries:
+                  cmd = entry.get('command') or ' '.join(entry.get('arguments', []))
+                  if cmd:
+                      print('startup.o compile:', cmd[:700])
+                      break
+              else:
+                  print('record head:', raw[:400].replace('\n', ' '))
           PY
 
       - name: Prove the kernel was built from these sources
