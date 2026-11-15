@@ -660,6 +660,21 @@ jobs:
               print('startup.o nio literals:', [s.decode('latin1') for s in seen][:12])
           rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
           print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
+          # The record clang writes with -MJ carries the exact command line.
+          # run-356 showed the object restored in 12 seconds with the bootstrap
+          # pass's digest, so the question is what the compiler actually read.
+          if rec and os.path.isfile(rec):
+              import json as _json
+              try:
+                  payload = _json.load(open(rec))
+                  entries = payload if isinstance(payload, list) else [payload]
+                  for entry in entries:
+                      cmd = entry.get('command') or ' '.join(entry.get('arguments', []))
+                      if cmd:
+                          print('startup.o compile:', cmd[:700])
+                          break
+              except Exception as exc:
+                  print('compile record unreadable:', exc)
           PY
 
       - name: Prove the kernel was built from these sources
