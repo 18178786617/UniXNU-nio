@@ -252,4 +252,3 @@ nio-doservicematch-probe.patch
 nio-startmatching-steps.patch
 nio-arbitration-lock-got.patch
 nio-arbitration-busy-same.patch
-nio-adjustbusy-abortable.patch
