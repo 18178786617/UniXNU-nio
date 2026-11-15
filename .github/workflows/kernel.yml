@@ -658,6 +658,16 @@ jobs:
               od = open(opath, 'rb').read()
               seen = sorted(set(_re.findall(rb'nio: [ -~]{3,30}', od)))
               print('startup.o nio literals:', [s.decode('latin1') for s in seen][:12])
+              # If the static heartbeat function was dropped as unused, its
+              # literals go with it -- which is exactly what run-353..358 show
+              # (the caller's literals stay, the thread body's do not).
+              import subprocess as _sp
+              try:
+                  nm = _sp.run(['nm', '-a', opath], capture_output=True, text=True, timeout=60).stdout
+                  syms = [l for l in nm.splitlines() if 'nio' in l]
+                  print('startup.o nio symbols:', syms[:8] if syms else 'none')
+              except Exception as exc:
+                  print('nm failed:', exc)
           rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
           print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
           # The record clang writes with -MJ carries the exact command line.
