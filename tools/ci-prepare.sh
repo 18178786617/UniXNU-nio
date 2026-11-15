@@ -64,6 +64,12 @@ else:
         '# the half-written link.filelist with it, and every archive builder\n'
         '# then stops with "No XNU symbol names" (run-350).\n'
         'if [ "${XNU_BOOTSTRAP:-0}" = 1 ]; then JOBS=1; fi\n'
+        '# nio: the seed objects are copied in at build start, and cp stamps them\n'
+        '# newer than the patched sources, so make skips them and the kernel keeps\n'
+        '# the pre-patch code (run-353: startup.o 113,592 bytes in every round, its\n'
+        '# only nio literals the old ones).  Drop the two this series changes.\n'
+        'rm -f "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o" \\\n'
+        '      "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o" 2>/dev/null || true\n'
     )
     path.write_text(text.replace(anchor, block + anchor))
     print('serial bootstrap:', path)
