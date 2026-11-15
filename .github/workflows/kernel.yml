@@ -751,7 +751,7 @@ jobs:
             echo "::error title=no kernel::the build produced no kernel.macho"
             exit 1
           fi
-          if python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(0 if b"nio: STALL rounds=" in d else 1)' "$kernel"; then
+          if python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(0 if b"nio: HB " in d else 1)' "$kernel"; then
             echo "the kernel carries the stall marker at $kernel"
           else
             # A warning, not a failure: since run-349 the constraint is known --
@@ -759,7 +759,7 @@ jobs:
             # the LDFILELIST step regenerate link.filelist, which cannot succeed
             # before the archives exist.  Keeping the round green still gives a
             # bootable (if stale) kernel; the note says it is stale.
-            echo "::warning title=stale kernel::no 'nio: STALL rounds=' in the kernel; the core is the one the tree ships"
+            echo "::warning title=stale kernel::no 'nio: HB ' in the kernel; the core is the one the tree ships"
           fi
 
       - name: Collect the logs
