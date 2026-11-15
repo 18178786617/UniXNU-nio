@@ -535,15 +535,23 @@ jobs:
       - name: Drop stale linker output
         # The first pass links before the archives that define mockfs_mountroot
         # and native_verified_block_root_authorized exist, so it fails at the
-        # link by design and only leaves compile records behind.  A kernel
-        # file already on the disk would be taken for this round's and
-        # prelinked as-is, which is how a stale core can be published without
-        # anyone noticing.  Remove both kinds before the build, so the only
-        # kernel that can exist afterwards is one this build linked.
+        # link by design and leaves compile records and link.filelist behind.
+        # A kernel file already on the disk would be taken for this round's
+        # and prelinked as-is, which is how a stale core gets published.
+        #
+        # Delete exactly the linker output, never a wildcard: run-342 removed
+        # mach.development.* and with it a file the LDFILELIST step needs, so
+        # the bootstrap pass died before link.filelist existed and every
+        # archive builder stopped with "No XNU symbol names".
         run: |
-          before=$(find out -type f \( -name 'mach.development.*' -o -name 'kernel.macho' \) 2>/dev/null | wc -l | tr -d ' ')
-          find out -type f \( -name 'mach.development.*' -o -name 'kernel.macho' \) -delete 2>/dev/null || true
-          echo "removed $before stale linker outputs"
+          found=$(find out -type f \( -name 'mach.development.bcm2837.unstripped' -o -path '*/kernel/kernel.macho' \) 2>/dev/null || true)
+          if [ -n "$found" ]; then
+            printf '%s\n' "$found"
+            printf '%s\n' "$found" | while IFS= read -r f; do [ -f "$f" ] && rm -f "$f"; done
+            echo "removed $(printf '%s\n' "$found" | wc -l | tr -d ' ') stale linker outputs"
+          else
+            echo "no stale linker output on the disk"
+          fi
 
       - name: Build the kernel
         env:
@@ -580,6 +588,11 @@ jobs:
         # can lose the change: the source the compiler read, the object the
         # linker read, or the link itself.  Print all three, so the next
         # round names the stage instead of leaving it to guesswork.
+        #
+        # Whatever happened before this step, the answer is still worth
+        # having: a build that dies in the bootstrap pass is exactly the
+        # case where the fingerprint explains why.
+        if: always()
         run: |
           obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837 2>/dev/null | head -1)
           native=$(ls out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped 2>/dev/null | head -1)
