@@ -642,6 +642,22 @@ jobs:
                        'yes' if b'nio: U1' in d else 'no'))
           else:
               print('IOService.cpp source: MISSING', isrc)
+          # Why is the string in the source but not in the object?  Print the
+          # source's digest and the exact line, and every nio: literal the
+          # object does carry, so the next round compares the two directly.
+          if src and os.path.isfile(src):
+              import hashlib
+              raw = open(src, 'rb').read()
+              print('startup.c sha256:', hashlib.sha256(raw).hexdigest()[:32])
+              for no, line in enumerate(raw.splitlines(), 1):
+                  if b'nio: HB' in line:
+                      print('  source line %d: %s' % (no, line.decode('latin1').strip()))
+          opath = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o') if obj else ''
+          if opath and os.path.isfile(opath):
+              import re as _re
+              od = open(opath, 'rb').read()
+              seen = sorted(set(_re.findall(rb'nio: [ -~]{3,30}', od)))
+              print('startup.o nio literals:', [s.decode('latin1') for s in seen][:12])
           rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
           print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
           PY
