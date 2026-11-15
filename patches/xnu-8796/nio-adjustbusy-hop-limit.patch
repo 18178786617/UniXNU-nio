@@ -1,0 +1,27 @@
+Stop the busy walk after 64 providers
+
+The panel shows one thread locking the same service again and again inside
+_adjustBusy and that service never returning to zero, so the provider chain
+almost certainly loops.  Cap the walk before taking the lock, so nothing is held
+when it stops.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..5043bdc 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -5327,11 +5327,15 @@ IOService::_adjustBusy( SInt32 delta )
+ 	UInt32      result;
+ 	bool        wasQuiet, nowQuiet, needWake;
+ 
++	int nio_hops = 0;
+ 	next = this;
+ 	result = __state[1] & kIOServiceBusyStateMask;
+ 
+ 	if (delta) {
+ 		do {
++			if (++nio_hops > 64) {
++				break;
++			}
+ 			if (next != this) {
+ 				next->lockForArbitration();
+ 			}
