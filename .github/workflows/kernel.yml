@@ -649,9 +649,17 @@ jobs:
               import hashlib
               raw = open(src, 'rb').read()
               print('startup.c sha256:', hashlib.sha256(raw).hexdigest()[:32])
-              for no, line in enumerate(raw.splitlines(), 1):
+              lines = raw.splitlines()
+              for no, line in enumerate(lines, 1):
                   if b'nio: HB' in line:
                       print('  source line %d: %s' % (no, line.decode('latin1').strip()))
+                      # Show the enclosing function: if the line sits in a static
+                      # helper nothing calls, clang drops the body and the
+                      # literal with it, which is the shape every round shows.
+                      lo = max(0, no - 14)
+                      for k in range(lo, min(len(lines), no + 4)):
+                          print('   %4d| %s' % (k + 1, lines[k].decode('latin1')))
+                      break
           opath = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o') if obj else ''
           if opath and os.path.isfile(opath):
               import re as _re
