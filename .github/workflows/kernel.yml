@@ -574,6 +574,48 @@ jobs:
           fi
           echo "the kernel is at $kernel ($(wc -c < "$kernel") bytes)"
 
+      - name: Fingerprint where the round's marker lives
+        # run-337 onward publish a core without the new strings although the
+        # log shows the series applied and startup.o compiled.  Three places
+        # can lose the change: the source the compiler read, the object the
+        # linker read, or the link itself.  Print all three, so the next
+        # round names the stage instead of leaving it to guesswork.
+        run: |
+          obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837 2>/dev/null | head -1)
+          native=$(ls out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped 2>/dev/null | head -1)
+          work=$(ls -d out/nio/*/nio/tree/.cache/xnu-work 2>/dev/null | head -1)
+          echo "obj=$obj"
+          echo "native=$native"
+          echo "work=$work"
+          dest=$(ls -d out/nio/*/nio 2>/dev/null | head -1)/logs
+          mkdir -p "$dest"
+          python3 - "$obj" "$native" "$work" <<'PY' | tee "$dest/fingerprint.log"
+          import os, sys
+          marks = [b'nio: STALL rounds=', b'nio: HB ', b'the matching path stalled', b'nio: U1']
+          obj, native, work = sys.argv[1:4]
+
+          def probe(label, path):
+              if not path or not os.path.isfile(path):
+                  print(f'{label}: MISSING {path}')
+                  return
+              d = open(path, 'rb').read()
+              hits = ', '.join(m.decode() + '=' + ('yes' if m in d else 'no') for m in marks)
+              print(f'{label}: {os.path.getsize(path)} bytes, {hits}')
+
+          probe('kernel.macho (published)', os.popen("ls out/nio/*/nio/kernel/kernel.macho 2>/dev/null | head -1").read().strip())
+          probe('native (prelink input)', native)
+          for rel in ('osfmk/DEVELOPMENT/startup.o', 'iokit/DEVELOPMENT/IOService.o'):
+              probe(rel, os.path.join(obj, rel) if obj else '')
+          src = os.path.join(work, 'osfmk/kern/startup.c') if work else ''
+          if src and os.path.isfile(src):
+              d = open(src, 'rb').read()
+              print('startup.c source: STALL=%s HB=%s'
+                    % ('yes' if b'nio: STALL rounds=' in d else 'no',
+                       'yes' if b'nio: HB ' in d else 'no'))
+          else:
+              print('startup.c source: MISSING', src)
+          PY
+
       - name: Prove the kernel was built from these sources
         # run-337 onward published kernels whose core did not come from the
         # patched tree: the build log shows the patch series applied and
