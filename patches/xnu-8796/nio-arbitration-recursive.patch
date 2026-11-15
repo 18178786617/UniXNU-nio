@@ -1,0 +1,18 @@
+Say when a recursive acquisition is taken
+
+IOCoreSurfaceRoot is entered twice by the same thread and the second entry never
+prints SM locked, so it is worth knowing whether the recursion branch is even
+reached; if it is, the count is the only thing that changed.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..5e55121 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1846,6 +1846,7 @@ restart_sleep:                  wait_result = assert_wait( element,
+ 		} else { // it is the same thread, recursive access is allowed
+ 			// add one level of recursion
+ 			active->count++;
++			printf("\nnio: SM rec c=%d t=%p", (int)active->count, current_thread());
+ 
+ 			// return unused queue element to queue
+ 			action = kPutOnFreeQueue;

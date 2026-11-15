@@ -250,3 +250,4 @@ nio-probe-candidates-exit.patch
 nio-startmatching-probe.patch
 nio-doservicematch-probe.patch
 nio-startmatching-steps.patch
+nio-arbitration-recursive.patch
