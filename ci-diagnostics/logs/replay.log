@@ -1,0 +1,43 @@
+base=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio
+record=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json exists=True
+tree object=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o exists=True
+recorded file=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c output=startup.o
+replaying 439 arguments in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT
+replay rc=0
+preprocess rc=0
+preprocessed bytes=1246414 has HB=True
+preprocessed bytes=1246414 has hb-started=True
+replay bytes=113592 tree bytes=113592 identical=True
+replay has HB=False tree has HB=False
+object magic=cffaedfe
+object nio contexts (12): [b'%d\x00/chosen\x00\x00nio: hb thread started\n\x00', b'ad started\n\x00nio: hb thread failed\n\x00s', b'work/UniXNU-nio/UniXNU-nio/out/nio/i', b'-nio/UniXNU-nio/out/nio/ios-16.5-20F', b'XNU-nio/out/nio/ios-16.5-20F66/nio/t', b'-16.5-20F66/nio/tree/.cache/xnu-work', b'work/UniXNU-nio/UniXNU-nio/out/nio/i', b'-nio/UniXNU-nio/out/nio/ios-16.5-20F', b'XNU-nio/out/nio/ios-16.5-20F66/nio/t', b'-16.5-20F66/nio/tree/build/xnu/ios-o', b'p_debug_229\x00nio_hb_started\x00vm_kernel', b'ter_handler\x00nio_dc_puts\x00nio_dc_putu\x00']
+object has leading-newline form=False
+replay sha=ea9cc0b4d5c59a7e tree sha=ea9cc0b4d5c59a7e
+assembly rc=0
+assembly lines=28649 has HB=False
+  asm| _nio_heartbeat_thread:                  ; @nio_heartbeat_thread
+  asm| Lfunc_begin6:
+  asm| 	.loc	4 444 0                         ; .cache/xnu-work/osfmk/kern/startup.c:444:0
+  asm| 	.cfi_startproc
+  asm| ; %bb.0:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:arg <- undef
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:wr <- undef
+  asm| 	sub	sp, sp, #128
+  asm| 	stp	x28, x27, [sp, #32]             ; 16-byte Folded Spill
+  asm| 	stp	x26, x25, [sp, #48]             ; 16-byte Folded Spill
+  asm| 	stp	x24, x23, [sp, #64]             ; 16-byte Folded Spill
+  asm| 	stp	x22, x21, [sp, #80]             ; 16-byte Folded Spill
+  asm| 	stp	x20, x19, [sp, #96]             ; 16-byte Folded Spill
+  asm| 	stp	x29, x30, [sp, #112]            ; 16-byte Folded Spill
+  asm| 	add	x29, sp, #112
+  asm| 	.cfi_def_cfa w29, 16
+  asm| 	.cfi_offset w30, -8
+  asm| 	.cfi_offset w29, -16
+  asm| 	.cfi_offset w19, -24
+  asm| 	.cfi_offset w20, -32
+  asm| 	.cfi_offset w21, -40
+  asm| 	.cfi_offset w22, -48
+  asm| 	.cfi_offset w23, -56
+  asm| 	.cfi_offset w24, -64
+  asm| 	.cfi_offset w25, -72
+  asm| 	.cfi_offset w26, -80
