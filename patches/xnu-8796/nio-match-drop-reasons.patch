@@ -3,92 +3,152 @@ Say why a candidate personality is dropped before it is instantiated
 The panel shows M<n> from probeCandidates and not one "nio: C" line, and
 "nio: C" is printed in the second loop of that function, so the second loop
 never runs: every personality is turned away by the first one.  The first
-loop has eight doors and this records which one each candidate is turned
-away at, so the panel names the door instead of leaving it to guesswork.
+loop has nine doors and this records which one each candidate is turned away
+at, so the panel names the door instead of leaving it to guesswork.
 
 The line is printed only for the nubs that dropped every candidate, which is
-the symptom, so the nubs that match normally stay quiet.  Reason 6 (the kext
-that holds the personality has not been loaded) also gets a line of its own,
-naming the kext that is missing.
+the symptom, so the nubs that match normally stay quiet.  It carries the
+nub's name, the reasons in the order the candidates were offered, and the
+class name of the candidate that was turned away for the most interesting
+reason -- that name is what says which driver is stuck.
+
+Reason 6 (the kext that holds the personality has not been loaded) also gets
+a line of its own, naming the kext that is missing.
 ---
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
-index df38670..bfc0ad8 100644
+index dd4ca61..dc50cd2 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -3881,6 +3881,9 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3831,6 +3831,53 @@ IOService::invokeNotifiers(OSArray * willSend[])
+  * called on the provider instance
+  */
+ 
++/* nio: the class name of a personality, for the panel. */
++static void
++nio_class_name(OSDictionary * match, char * out, int size)
++{
++	OSSymbol * cls = OSDynamicCast(OSSymbol, match->getObject(gIOClassKey));
++	const char * s = cls ? cls->getCStringNoCopy() : "?";
++	int i = 0;
++	while (s[i] && i < size - 1) {
++		out[i] = s[i];
++		i++;
++	}
++	out[i] = '\0';
++}
++
++/* nio: how interesting a reason is; the class name that gets printed is the
++ * one of the candidate that was turned away for the most interesting reason. */
++static int
++nio_reason_rank(int reason)
++{
++	switch (reason) {
++		case 6: return 9;
++		case 5: return 8;
++		case 9: return 7;
++		case 4: return 6;
++		case 7: return 5;
++		case 8: return 4;
++		case 3: return 3;
++		case 2: return 2;
++		case 1: return 1;
++		default: return 0;
++	}
++}
++
++/* nio: record why a candidate was dropped, and keep the class name of the
++ * most interesting one.  The macro is used inside probeCandidates, where the
++ * personality is called 'match'. */
++#define NIO_DROP(n) do { \
++	if (nio_nreasons < 8) { \
++		nio_reasons[nio_nreasons] = (n); \
++		if (nio_reason_rank(n) > nio_best_rank) { \
++			nio_best_rank = nio_reason_rank(n); \
++			nio_class_name(match, nio_best_name, 24); \
++		} \
++		nio_nreasons++; \
++	} \
++} while (0)
++
+ void
+ IOService::probeCandidates( OSOrderedSet * matches )
+ {
+@@ -3881,6 +3928,11 @@ IOService::probeCandidates( OSOrderedSet * matches )
  	uint32_t                    dextCount;
  	bool                        isDext;
  	bool                        categoryConsumed;
-+	int                         nio_reasons[16];
++	int                         nio_reasons[8];
 +	int                         nio_nreasons = 0;
++	int                         nio_best_rank = 0;
++	char                        nio_best_name[24];
 +	int                         nio_kept = 0;
  
  	rematchCountProp = NULL;
  	count = 0;
-@@ -3928,9 +3931,11 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3928,9 +3980,11 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			client = NULL;
  			isDext = (NULL != match->getObject(gIOUserServerNameKey));
  			if (isDext && !(kIODKEnable & gIODKDebug)) {
-+				if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 1;
++				NIO_DROP(1);
  				continue;
  			}
  			if (isDext && !gIODextRelaunchMax && rematchCountProp) {
-+				if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 2;
++				NIO_DROP(2);
  				continue;
  			}
  			newIsBoot = gIOCatalogue->personalityIsBoot(match);
-@@ -3953,6 +3958,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3953,6 +4007,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  				existingIsBoot = client->propertyExists(gIOMatchedAtBootKey);
  				isReplacementCandidate = existingIsBoot && !newIsBoot;
  				if (!isDext && !isReplacementCandidate) {
-+					if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 3;
++					NIO_DROP(3);
  					break;
  				}
  			}
-@@ -3960,17 +3966,20 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3960,17 +4015,20 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			// create a copy now in case its modified during matching
  			props = OSDictionary::withDictionary(match, match->getCount());
  			if (NULL == props) {
-+				if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 4;
++				NIO_DROP(4);
  				break;
  			}
  			props->setCapacityIncrement(1);
  
  			// check the nub matches
  			if (false == matchPassive(props, kIOServiceChangesOK | kIOServiceClassDone)) {
-+				if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 5;
++				NIO_DROP(5);
  				break;
  			}
  			if (isReplacementCandidate) {
  				if (canTerminateForReplacement(client)) {
  					client->terminate(kIOServiceTerminateNeedWillTerminate | kIOServiceTerminateWithRematch);
-+					if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 7;
++					NIO_DROP(7);
  					break;
  				}
  			}
-@@ -3980,6 +3989,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3980,6 +4038,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  					dextCount++;
  				}
  				if (categoryConsumed) {
-+					if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 8;
++					NIO_DROP(8);
  					break;
  				}
  			}
-@@ -3989,6 +3999,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3989,6 +4048,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  					personalityMatch = !personalityMatch;
  				}
  				if (!personalityMatch) {
-+					if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 9;
++					NIO_DROP(9);
  					break;
  				}
  			}
-@@ -3996,6 +4007,17 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -3996,6 +4056,17 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			// Check to see if driver reloc has been loaded.
  			needReloc = (false == gIOCatalogue->isModuleLoaded( match, &kextRef ));
  			if (needReloc) {
 +				/* the one reason worth a line of its own: name the kext
 +				 * that is not there, because that is the thing to fix. */
-+				if (nio_nreasons < 16) nio_reasons[nio_nreasons++] = 6;
++				NIO_DROP(6);
 +				{
 +					OSString * nio_mod = OSDynamicCast(OSString,
 +					    match->getObject(gIOModuleIdentifierKernelKey.get()));
@@ -100,7 +160,7 @@ index df38670..bfc0ad8 100644
  #if IOMATCHDEBUG
  				if (debugFlags & kIOLogCatalogue) {
  					LOG("%s: stalling for module\n", getName());
-@@ -4028,6 +4050,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -4028,6 +4099,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
  			}
  			if (familyMatches) {
  				familyMatches->setObject( props );
@@ -108,19 +168,20 @@ index df38670..bfc0ad8 100644
  			}
  		} while (false);
  
-@@ -4035,6 +4058,25 @@ IOService::probeCandidates( OSOrderedSet * matches )
+@@ -4035,6 +4107,27 @@ IOService::probeCandidates( OSOrderedSet * matches )
  		OSSafeReleaseNULL(nextMatch);
  		OSSafeReleaseNULL(props);
  	}
 +
 +	/* nio: the summary of the doors above, one line per nub that dropped
 +	 * every candidate it was offered.  The reasons are single digits, in the
-+	 * order the candidates were offered. */
++	 * order the candidates were offered; the name is the class of the
++	 * candidate that was turned away for the most interesting reason. */
 +	if (nio_nreasons && !nio_kept) {
-+		char nio_buf[48];
++		char nio_buf[24];
 +		int nio_i, nio_o = 0;
 +		nio_buf[0] = '\0';
-+		for (nio_i = 0; nio_i < nio_nreasons && nio_o < 40; nio_i++) {
++		for (nio_i = 0; nio_i < nio_nreasons && nio_o < 20; nio_i++) {
 +			nio_buf[nio_o++] = (char)('0' + nio_reasons[nio_i]);
 +			nio_buf[nio_o] = '\0';
 +			if (nio_i + 1 < nio_nreasons) {
@@ -128,7 +189,8 @@ index df38670..bfc0ad8 100644
 +				nio_buf[nio_o] = '\0';
 +			}
 +		}
-+		printf("\nnio: S %s r=%s", getName() ? getName() : "?", nio_buf);
++		printf("\nnio: S %s r=%s n=%s", getName() ? getName() : "?", nio_buf,
++		    nio_best_name[0] ? nio_best_name : "?");
 +	}
 +
  	OSSafeReleaseNULL(matches);
