@@ -70,6 +70,16 @@ else:
         '# only nio literals the old ones).  Drop the two this series changes.\n'
         'rm -f "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o" \\\n'
         '      "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o" 2>/dev/null || true\n'
+        '# nio: run-354 deleted those two and the build put the same 113,592-byte\n'
+        '# object back with the old literals, so the seed is laid down around make.\n'
+        '# In the bootstrap pass, clear every object and compile record at once and\n'
+        '# leave the kernel binary and link.filelist alone; the whole kernel is then\n'
+        '# compiled from the sources the patch step wrote.\n'
+        'if [ "${XNU_BOOTSTRAP:-0}" = 1 ]; then\n'
+        '\tfind "$ROOT/build/xnu/ios-obj" -type f \\( -name "*.o" -o -name "*.cpo" -o -name "*.o.json" \\) \\\n'
+        '\t    -delete 2>/dev/null || true\n'
+        '\techo "nio: cleared every object for the bootstrap pass"\n'
+        'fi\n'
     )
     path.write_text(text.replace(anchor, block + anchor))
     print('serial bootstrap:', path)
