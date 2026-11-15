@@ -12,9 +12,9 @@ index 6d7dd7e..4be2404 100644
  	bool        sync;
  	bool        waitAgain;
  
-+	printf("\nnio: SM enter t=%p", current_thread());
++	printf("\nnio: SM enter %s t=%p", getName() ? getName() : "?", current_thread());
  	lockForArbitration();
-+	printf("\nnio: SM locked t=%p", current_thread());
++	printf("\nnio: SM locked %s t=%p", getName() ? getName() : "?", current_thread());
  
  	sync = (options & kIOServiceSynchronous)
  	    || ((provider = getProvider())
