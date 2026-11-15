@@ -270,3 +270,5 @@ nio-async-match-name.patch
 nio-match-drop-reasons.patch
 nio-match-loop-driver.patch
 nio-iokit-match-return.patch
+
+nio-match-stall-watchdog.patch
