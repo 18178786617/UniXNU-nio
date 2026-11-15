@@ -1,0 +1,18 @@
+Name the thread that blocks on a provider lock during busy propagation
+
+run-300 stops on LA want immediately after SM b4busy cfg=1 and the only lock in
+that path is _adjustBusy's per-provider lock; this line says the wait is there
+and not on the service's own lock.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..8ecfb24 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -5333,6 +5333,7 @@ IOService::_adjustBusy( SInt32 delta )
+ 	if (delta) {
+ 		do {
+ 			if (next != this) {
++				printf("\nnio: AB next t=%p", current_thread());
+ 				next->lockForArbitration();
+ 			}
+ 			count = next->__state[1] & kIOServiceBusyStateMask;

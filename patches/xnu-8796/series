@@ -253,3 +253,4 @@ nio-startmatching-steps.patch
 nio-arbitration-lock-probe.patch
 nio-arbitration-lock-got.patch
 nio-arbitration-busy-same.patch
+nio-adjustbusy-next-lock.patch
