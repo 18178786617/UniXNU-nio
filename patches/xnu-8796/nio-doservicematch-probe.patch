@@ -1,0 +1,20 @@
+Bracket doServiceMatch
+
+run-294 shows SM enter and SM locked as the last two lines, so the arbitration
+lock is fine and the stall is in the body: this is the only call in that body
+that does the matching work.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 6d7dd7e..031ecfa 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1122,7 +1122,9 @@ IOService::startMatching( IOOptionBits options )
+ 		} else {
+ 			do {
+ 				if ((__state[1] & kIOServiceNeedConfigState)) {
++					printf("\nnio: DSM enter");
+ 					doServiceMatch( options );
++					printf("\nnio: DSM exit");
+ 				}
+ 
+ 				lockForArbitration();

@@ -248,3 +248,4 @@ nio-bsdinit-narrates.patch
 nio-manifest-properties-shim.patch
 nio-probe-candidates-exit.patch
 nio-startmatching-probe.patch
+nio-doservicematch-probe.patch
