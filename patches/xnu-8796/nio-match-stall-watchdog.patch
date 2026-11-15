@@ -14,6 +14,14 @@ when the console path is what is stuck.  That is the difference between the
 two answers -- a panic that fires means the kernel was alive and only the
 console was wedged; no panic and no reset means the kernel itself stopped.
 
+run-333's panel showed the same silence and no panic screen, because this
+thread used to printf the warning before panicking.  printf goes through
+console_write(), which waits forever for room in the console ring buffer
+when the console is the thing that is wedged -- so the watchdog blocked
+inside its own warning and the panic, the one thing that bypasses the
+console, never ran.  The panic is now raised directly; its message carries
+the round count, and the panic screen prints it.
+
 Everything lives in this file: the counter, the thread and the bump, so
 nothing has to be shared across kernel components.
 ---
@@ -21,7 +29,7 @@ diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
 index 3316a98..7c409df 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -3878,6 +3878,42 @@ nio_reason_rank(int reason)
+@@ -3878,6 +3878,40 @@ nio_reason_rank(int reason)
  	} \
  } while (0)
  
@@ -54,8 +62,6 @@ index 3316a98..7c409df 100644
 +			continue;
 +		}
 +		if (since && (ns - since) >= 15ULL * 1000000000ULL) {
-+			printf("\nnio: the matching path has made no progress for 15 seconds (rounds=%u)",
-+			    nio_match_progress);
 +			panic("nio: the matching path stalled (rounds=%u)", nio_match_progress);
 +		}
 +	}
