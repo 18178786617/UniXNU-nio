@@ -1,0 +1,35 @@
+Write each service name straight to the framebuffer
+
+The panel stops at 'SM enter ArmCpu' and never reaches 'SM locked ArmCpu',
+which is one printf later: the console path itself stops there, and everything
+after it is invisible while the kernel keeps matching (run-370/371's U1 U2T U3
+repeat dozens of times).
+
+Put the first three letters of every service name on the framebuffer through
+the same direct writer.  The last name visible is then the service being
+started when the console stopped, which is what 'how far did it get' means.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index fb25aa6..a2a6fd8 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1130,6 +1130,19 @@ IOService::startMatching( IOOptionBits options )
+ 	bool        sync;
+ 	bool        waitAgain;
+ 
++	/* nio: say the service name straight on the framebuffer, in three letters.
++	 * The console path stops printing at some point and everything after it is
++	 * invisible, so progress has to be measured without it. */
++	{
++		const char *nio_n = getName();
++		char nio_b[8];
++		nio_b[0] = '\n'; nio_b[1] = 'B'; nio_b[2] = ' ';
++		nio_b[3] = (nio_n && nio_n[0]) ? nio_n[0] : '?';
++		nio_b[4] = (nio_n && nio_n[1]) ? nio_n[1] : ' ';
++		nio_b[5] = (nio_n && nio_n[2]) ? nio_n[2] : ' ';
++		nio_b[6] = '\0';
++		nio_u_mark(nio_b);
++	}
+ 	printf("\nnio: SM enter %s t=%p", getName() ? getName() : "?", current_thread());
+ 	lockForArbitration();
+ 	printf("\nnio: SM locked %s t=%p", getName() ? getName() : "?", current_thread());
