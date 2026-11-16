@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 21:12",
-  "headline": "402 上机照片判读完成：面板没有 'nio: ufs driver start enter' ⇒ start() 一次都没被调用。同时 'IOKit match ret=1' 是成功（匹配门已开），NioUfs 确实链进了内核。找到真原因：Info.plist 缺了 NioUfsRoot personality（provider 必须是 IOPlatformExpertDevice 驱动才干活）。已推 probe 诊断 + 补上该 personality，下一轮上机一次定位。",
+  "updated": "2026-11-16 22:45",
+  "headline": "★ UFS 的真正根因找到了：内核从来没有拿到过设备树（不是驱动/节点/personality 问题）。证据：const_boot_args 在镜像里全零、运行时由 x0 填；x0 来自 Android ABL；PE_init_platform 用它设 PE_state.deviceTreeHead 再 SecureDTInit；面板的 dram-base=0x101000 与我们 ADT 的 0x80000000 对不上 ⇒ 读到的是垃圾。⇒ 之前所有'加 UFS 节点'的修复都不可能生效。推荐修法：让 BootShim 在内核前把 ADT 拷到固定物理地址并改写 boot_args 的 deviceTreeP（本地构建，不刷分区）。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -83,12 +83,13 @@
     }
   ],
   "next_actions": [
-    "410 构建完 → 打包 → 上机 → 看面板有没有 'nio: ufs probe #N provider=... compatible=...'",
-    "有 probe 行：compatible 对不对？不对 ⇒ 查 ADT 里 UFS 节点是否真在 /arm-io 下",
-    "没有 probe 行 ⇒ personality 没发出去，查 Info.plist 是否进了 OSBundle",
-    "若 ArmDTPlatform 仍是盲区：给 UniXNU/ArmDTPlatform 仓库加 nub 计数诊断 + 改 components.toml 的 pin"
+    "411 那一轮上机：看 'nio: dt head=... len=... ufshc=...' 确认 deviceTreeP 是垃圾（一锤定音）",
+    "实施路 3：BootShim.S 里 .incbin ADT + 启动时拷到固定物理地址 + 改写 x0 指向的 boot_args 的 deviceTreeP/Length",
+    "round-image.sh 第 4 步重建 BootShim 时把 ADT 拷到位（本地构建，不占 CI）",
+    "验证：上机后面板应出现 dram-base=0x80000000（不再是 0x101000）与 'nio: ufs probe' 行"
   ],
   "notes": [
+    "★ UFS 根因（2026-11-16 定位）：设备树从未加载 ⇒ UFS 节点/personality 全是下游问题。",
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
     "刷机是主动动作：watch-round.sh 默认 FLASH=0。",
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
@@ -100,8 +101,8 @@
     "QEMU 本机：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
     "QEMU monitor 走 TCP（unix socket 在 Windows 上没有）；QMP 必须先发 qmp_capabilities。",
     "GDB：目标停下时 stub 会先回 stop reply（'T02thread:01;'），读寄存器前要先跳过它。",
-    "ADT 层级用 scripts/nio_adt.py 的 decode() 验证，秒级出结果。",
-    "★ UFS 匹配失败的两处根因（2026-11-16 定位）：probe 的 compatible 没匹配上，且 Info.plist 缺 NioUfsRoot personality（start() 要求 provider 是 IOPlatformExpertDevice）。已推诊断+修复。"
+    "读内核的 boot_args：tools/boot-args.py（const_boot_args 镜像里全零 ⇒ 运行时填）。",
+    "生成 patch 必须在'打过所有补丁的树'上做 A/B diff，否则会混入别的补丁的改动。"
   ],
   "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节"
 }
