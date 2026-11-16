@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 19:10",
-  "headline": "402 在 Intel 上跑（带 QMP 握手修复）—— 这是第一次有机会拿到内核的完整控制台文本。399 已经在 Intel 上成功构建出内核（sha256 5f84c8b8，指纹 nio: HB =yes），当时只差 QMP 的 capabilities 协商。",
+  "updated": "2026-11-16 19:47",
+  "headline": "QEMU 通了：402 在 Intel 上把内核跑起来，QMP 握手修复生效，帧缓冲（10.9 MB）与控制台环都取出来了，内核零异常。开工信号机制也验证通过（ci-started/run-N），CI 主管现在能在排队 3 分钟就换镜像、两个 arm64 都排队就跳 Intel。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,32 +47,32 @@
   ],
   "rounds": [
     {
+      "run": 406,
+      "time": "19:45",
+      "marker": "—",
+      "qemu": "macos-15；带 QEMU 产物发布修复",
+      "result": "会把 fb.bin 带回来"
+    },
+    {
+      "run": 405,
+      "time": "19:33",
+      "marker": "—",
+      "qemu": "Intel；ci-started/run-405 已出现",
+      "result": "开工信号验证通过"
+    },
+    {
       "run": 402,
       "time": "19:09",
-      "marker": "—",
-      "qemu": "Intel；带 QMP 握手修复",
-      "result": "争取拿到 console.txt"
-    },
-    {
-      "run": 401,
-      "time": "19:07",
-      "marker": "—",
-      "qemu": "arm64 池排队，被取消",
-      "result": "机主取消"
-    },
-    {
-      "run": 400,
-      "time": "19:00",
-      "marker": "—",
-      "qemu": "arm64 池排队，被取消",
-      "result": "机主取消"
+      "marker": "nio: HB =yes",
+      "qemu": "★★ 帧缓冲 10.9MB + 控制台环取出，内核零异常",
+      "result": "QMP 握手修复生效"
     },
     {
       "run": 399,
       "time": "18:22",
       "marker": "nio: HB =yes",
-      "qemu": "★ 内核构建成功；QMP 缺握手",
-      "result": "CI 判 success"
+      "qemu": "★ 内核构建成功（CI 判 success）",
+      "result": "token 重写 + 三次重试救下"
     },
     {
       "run": 398,
@@ -97,9 +97,9 @@
     }
   ],
   "next_actions": [
-    "402 出结果 ⇒ 主管自动打包，我立刻读 console.txt（ramoops 环，纯文本）",
-    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了）",
-    "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）"
+    "读 fb.bin（用 read-console.py --decode + DiagFont.h 解码成文本）",
+    "若文本可读：搜 'nio: ufs driver start enter'、看 'IOKit match ret=1' 之后停在哪",
+    "QEMU 本机装好后，harness 改为本地秒级迭代"
   ],
   "notes": [
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
@@ -107,10 +107,8 @@
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
     "每轮 CI 结束后看护脚本自动更新看板。",
     "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
-    "CI 镜像三选一：macos-26 → macos-15 → macos-15-intel。前两个同一池，Intel 另一个池；池满时只有 Intel 能跑。",
-    "runs-on 数组是 AND 语义，不能用 [a, b] 做多镜像回退。",
-    "被取消的轮次不留分支 ⇒ 不能用轮次号+1 预测下一轮。",
-    "concurrency 只保留最新一次 push 的轮次 ⇒ 推 paths 里的目录会挤掉排队的轮次。",
+    "CI 规则（机主定）：macos-15 → macos-26 → macos-15-intel；排队 3 分钟就换；两个 arm64 都排队就跳 Intel。",
+    "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据（workflow 第 3 步推）。",
     "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。"
   ]
 }
