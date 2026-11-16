@@ -1,6 +1,6 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 20:58",
+  "updated": "2026-11-16 21:12",
   "headline": "402 上机照片判读完成：面板没有 'nio: ufs driver start enter' ⇒ start() 一次都没被调用。同时 'IOKit match ret=1' 是成功（匹配门已开），NioUfs 确实链进了内核。找到真原因：Info.plist 缺了 NioUfsRoot personality（provider 必须是 IOPlatformExpertDevice 驱动才干活）。已推 probe 诊断 + 补上该 personality，下一轮上机一次定位。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
@@ -97,9 +97,11 @@
     "CI 规则（机主定）：macos-15 → macos-26 → macos-15-intel；排队 3 分钟就换；两个 arm64 都排队就跳 Intel。",
     "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据（workflow 第 3 步推）。",
     "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。",
-    "QEMU 本地：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
+    "QEMU 本机：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
     "QEMU monitor 走 TCP（unix socket 在 Windows 上没有）；QMP 必须先发 qmp_capabilities。",
     "GDB：目标停下时 stub 会先回 stop reply（'T02thread:01;'），读寄存器前要先跳过它。",
-    "ADT 层级用 scripts/nio_adt.py 的 decode() 验证，秒级出结果。"
-  ]
+    "ADT 层级用 scripts/nio_adt.py 的 decode() 验证，秒级出结果。",
+    "★ UFS 匹配失败的两处根因（2026-11-16 定位）：probe 的 compatible 没匹配上，且 Info.plist 缺 NioUfsRoot personality（start() 要求 provider 是 IOPlatformExpertDevice）。已推诊断+修复。"
+  ],
+  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节"
 }
