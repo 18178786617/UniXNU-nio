@@ -60,6 +60,13 @@ FRAMEBUFFER_PITCH = 4320
 FRAMEBUFFER_DEPTH = 32
 
 KERNEL_PHYS_BASE = 0x80000000
+
+# The kernel mirrors every console character into the ramoops pstore console
+# record (nio-console-to-ramoops.patch): { u32 sig='DBGC', u32 start, u32 size }
+# followed by a plain-text ring.  Reading that ring out of guest memory gives
+# the whole console as text -- far better than decoding pixels.
+RAMOOPS_CONSOLE = 0xAF040000
+RAMOOPS_RING = 0x3F000
 RAM_BASE = 0x40000000
 RAM_SIZE = 0x100000000
 
@@ -203,24 +210,47 @@ class Rsp:
         self.sock.sendall(b"+")
 
 
-def qmp_exec(proc, command, arguments=None):
-    """Send one QMP command over the monitor socket and read the reply."""
-    proc.stdin.write(json.dumps({"execute": command, "arguments": arguments or {}}) + "\n")
-    proc.stdin.flush()
+def qmp_exec(sock_path, command, arguments=None):
+    """Send one QMP command over the monitor socket and read the reply.
+
+    The monitor lives on its own unix socket: -nographic already wants stdio
+    for the serial port, and QEMU refuses to hand stdio to two character
+    devices (it then exits before the gdb port is ever opened).
+    """
     deadline = time.time() + 30
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if not line:
+        if os.path.exists(sock_path):
             break
-        line = line.strip()
-        if line.startswith("{"):
-            try:
-                reply = json.loads(line)
-            except ValueError:
-                continue
-            if "return" in reply or "error" in reply:
-                return reply
-    return None
+        time.sleep(0.2)
+    else:
+        raise RuntimeError("qmp socket never appeared: %s" % sock_path)
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(30)
+    sock.connect(sock_path)
+    try:
+        # greeting, then the command
+        greeting = sock.recv(4096)
+        sock.sendall(json.dumps({"execute": command,
+                                 "arguments": arguments or {}}).encode() + b"\n")
+        buf = b""
+        while b"\n" not in buf:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        for line in buf.split(b"\n"):
+            line = line.strip()
+            if line.startswith(b"{"):
+                try:
+                    reply = json.loads(line.decode())
+                except ValueError:
+                    continue
+                if "return" in reply or "error" in reply:
+                    return reply
+        return None
+    finally:
+        sock.close()
 
 
 def write_png(path, width, height, rgba):
@@ -303,10 +333,15 @@ def main(argv):
     print("adt pa 0x%x len %d   boot_args pa 0x%x" % (adt_pa, len(adt), ba_pa))
 
     qemu_log = work / "qemu-stderr.log"
+    serial_log = work / "serial.log"
+    qmp_sock = work / "qmp.sock"
     cmd = [args.qemu, "-M", "virt,gic-version=3", "-cpu", "cortex-a76",
            "-m", str(RAM_SIZE // (1024 * 1024)), "-smp", str(args.smp),
-           "-nographic", "-no-reboot", "-S", "-gdb", "tcp::1234",
-           "-qmp", "stdio",
+           "-display", "none", "-no-reboot", "-S", "-gdb", "tcp::1234",
+           "-serial", "file:%s" % serial_log,
+           # The monitor gets its own socket; stdio is taken by the serial log
+           # and QEMU will not share it.
+           "-qmp", "unix:%s,server=on,wait=off" % qmp_sock,
            # guest_errors is what turns a data abort inside the kernel into a
            # line we can read: ESR, FAR and the faulting virtual address.
            "-d", "guest_errors", "-D", str(qemu_log)]
@@ -328,8 +363,33 @@ def main(argv):
     t = threading.Thread(target=pump, daemon=True)
     t.start()
 
-    time.sleep(2)
-    rsp = Rsp("127.0.0.1", 1234)
+    # QEMU needs a moment before the gdb port is listening; on a loaded
+    # runner with fifteen loader segments that can take a while.
+    rsp = None
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            print("qemu exited before the gdb port opened (rc=%s)" % proc.returncode)
+            break
+        try:
+            rsp = Rsp("127.0.0.1", 1234)
+            break
+        except OSError:
+            time.sleep(1)
+    if rsp is None:
+        print("could not reach the qemu gdb port")
+        try:
+            proc.terminate()
+        except Exception:                  # noqa: BLE001
+            pass
+        time.sleep(1)
+        if proc.poll() is None:
+            proc.kill()
+        log.close()
+        if qemu_log.is_file():
+            (outdir / "qemu-guest-errors.log").write_text(
+                qemu_log.read_text(errors="replace"))
+        return 1
     rsp.set_register(0, ba_pa)          # x0 = boot_args (physical)
     rsp.set_register(31, entry_pa)     # pc
     print("registers set: x0=0x%x pc=0x%x" % (ba_pa, entry_pa))
@@ -340,11 +400,33 @@ def main(argv):
         time.sleep(1)
 
     try:
-        qmp_exec(proc, "pmemsave", {"val": FRAMEBUFFER_BASE,
-                                    "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
-                                    "filename": str(outdir / "fb.bin")})
+        qmp_exec(qmp_sock, "pmemsave", {"val": FRAMEBUFFER_BASE,
+                                        "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
+                                        "filename": str(outdir / "fb.bin")})
     except Exception as exc:               # noqa: BLE001
         print("pmemsave failed:", exc)
+
+    # The console ring: plain text, so it can be read as it is.
+    try:
+        qmp_exec(qmp_sock, "pmemsave", {"val": RAMOOPS_CONSOLE,
+                                        "size": RAMOOPS_RING + 12,
+                                        "filename": str(outdir / "ramoops.bin")})
+        raw = (outdir / "ramoops.bin").read_bytes()
+        sig, start, size = struct.unpack_from("<III", raw, 0)
+        if sig == 0x43474244:
+            ring = raw[12:12 + min(size or RAMOOPS_RING, RAMOOPS_RING)]
+            text = ring.decode("latin1")
+            (outdir / "console.txt").write_text(text, encoding="utf-8")
+            printable = sum(1 for ch in text if ch.isprintable() or ch in "\r\n\t")
+            print("console ring: sig ok, %d bytes, %d printable"
+                  % (len(text), printable))
+            tail = [ln for ln in text.splitlines() if ln.strip()][-12:]
+            for ln in tail:
+                print("  | " + ln[:150])
+        else:
+            print("console ring: signature mismatch (0x%08x)" % sig)
+    except Exception as exc:               # noqa: BLE001
+        print("ramoops read failed:", exc)
 
     try:
         proc.terminate()
