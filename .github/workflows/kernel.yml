@@ -64,7 +64,7 @@ on:
           after multiple attempts").  macos-15-intel is the x86_64 path and
           works, but it takes more than twenty minutes a round.
         required: false
-        default: "macos-15-intel"
+        default: "macos-15"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -174,7 +174,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
@@ -199,6 +199,27 @@ jobs:
           # token is written into device/.git/config and is used by nothing
           # else: the build reads the tree and never talks to the network.
           persist-credentials: true
+
+      - name: Announce that this round has started
+        # The runner pool decides whether a round runs at all, and it takes
+        # that decision before the first step: a job that waits for a runner
+        # for three minutes is never going to get one, and the round is
+        # cancelled with "The job was not acquired by Runner of type hosted".
+        # Nothing about that is visible from the branches -- a round that never
+        # started leaves no branch behind, which is the same as a round that
+        # is still working.
+        #
+        # This step therefore says the round is under way, before anything
+        # slow happens.  A branch named ci-started/run-N appears as soon as
+        # the job has a runner, and the supervisor can then tell "queued" from
+        # "running" and stop waiting on an image that will never be scheduled.
+        if: always()
+        run: |
+          cd device
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q --allow-empty -m "ci: run $GITHUB_RUN_NUMBER started" || true
+          git push -f origin HEAD:refs/heads/ci-started/run-$GITHUB_RUN_NUMBER 2>&1 | tail -2 || true
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
