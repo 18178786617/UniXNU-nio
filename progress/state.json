@@ -1,8 +1,8 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 14:00",
-  "headline": "P1：UFS 设备没上线（HCS=0x8 → DP=0），根卷挂不上，启动停在 IOKit match ret=1 之后",
-  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷 → P2 存储层 → P3 launchd 起用户态（之后才是 P3+ 各驱动）",
+  "updated": "2026-11-16 16:30",
+  "headline": "QEMU harness 已能在 QEMU 里连续运行内核 90 秒且无异常；391/392 的失败都是 harness 自身问题（PC 写到了 SP、QMP 路径类型、pmemsave 相对路径），393 修完。控制台文本将从 ramoops 环直接读出",
+  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
       "id": "P0",
@@ -17,8 +17,8 @@
       "name": "UFS 起来 + 挂上 APFS 根卷",
       "status": "current",
       "criteria": "根卷挂载成功的日志",
-      "evidence": "HCS=0x8：DP(设备在位)=0、UTRLRDY(链表就绪)=0 —— 设备始终没上线；控制台在 match ret=1 之后不再有新输出，启动停在这里。驱动已有 UIC 全套（DME_LINK_STARTUP=0x16）并试过唤醒，但链路没起来。",
-      "next": "两条路：(1) 走手机原厂 UEFI 建好 UFS 再交给我们（umi 验证过的路，需把 UNIXNU.EFI/DarwinBoot/载荷放进 ESP）；(2) 内核里解决 PHY 时钟（GCC 在安全域，读 0x62008 直接 abort）"
+      "evidence": "① 走正常启动链（刷 boot_b + set_active b）后停点不变 ⇒ 不是启动路径问题；② 面板上没有 'nio: ufs driver start enter' ⇒ NioUfs::start() 从没被调用；③ IODTPlatformExpert::createNub 对任何 arm-io 子节点都发 IOPlatformDevice nub，而我们的 /arm-io 只有 intc ⇒ 没有 UFS nub ⇒ personality 无从匹配；④ 于是根设备从未发布，根卷挂不上，launchd 起不来 ⇒ 停在 match ret=1 之后。",
+      "next": "已上机：ADT 增加 /arm-io/ufs(0x1d84000+0x3000) 与 /arm-io/ufsphy(0x1d87000+0xe000)（地址取自 Mi 10 真机设备树，同 SoC；驱动的 UFS_HC_BASE 正是 0x1d84000），ranges 窗口扩到覆盖 UFS，并打开 native-ufs-diagnostics=1。判据：出现 'nio: ufs driver start enter' ⇒ nub 通了；随后诊断行里的 hcs 的 DP 位决定下一步。"
     },
     {
       "id": "P2",
@@ -47,42 +47,59 @@
   ],
   "rounds": [
     {
-      "run": 384,
-      "time": "—",
+      "run": 393,
+      "time": "排队中",
       "marker": "—",
-      "qemu": "运行中",
-      "result": "QEMU 步骤的输出这次会进已发布的 diagnostics 目录"
+      "qemu": "pmemsave 绝对路径 + 错误可见 + guest-memory 兜底",
+      "result": "争取拿到 console.txt"
     },
     {
-      "run": 383,
-      "time": "13:55",
+      "run": 392,
+      "time": "16:15",
       "marker": "nio: HB =yes",
-      "qemu": "失败（输出没进 diagnostics，已修）",
-      "result": "补丁 156 条全部应用干净"
+      "qemu": "内核跑满 90 秒无异常；pmemsave 相对路径写错地方",
+      "result": "已修（绝对路径）"
     },
     {
-      "run": 381,
-      "time": "13:40",
+      "run": 391,
+      "time": "16:05",
       "marker": "nio: HB =yes",
-      "qemu": "第一次尝试",
-      "result": "手机不再自动复位；V 计数涨到 29399"
+      "qemu": "★ 内核跑起来 90 秒，guest errors 为空",
+      "result": "QMP 路径类型错误已修"
+    },
+    {
+      "run": 390,
+      "time": "15:50",
+      "marker": "nio: HB =yes",
+      "qemu": "RSP 读包顺序 + PC 写到了 SP(31)",
+      "result": "两个 bug 已修"
+    },
+    {
+      "run": 389,
+      "time": "15:35",
+      "marker": "nio: HB =yes",
+      "qemu": "-nographic 与 -qmp stdio 抢 stdio",
+      "result": "QMP 改走 unix socket"
     },
     {
       "run": 380,
       "time": "13:24",
       "marker": "nio: HB =yes",
       "qemu": "—",
-      "result": "★ 匹配完成：SM unlocked + IOKit match ret=1"
+      "result": "★★ 匹配完成：SM unlocked + IOKit match ret=1"
     }
   ],
   "next_actions": [
-    "读 384 的 QEMU 日志（qemu-run.log / qemu-guest-errors.log / fb.bin），看匹配之后的完整启动轨迹与异常码",
-    "拍手机面板上的 UFS 相关行（控制器 HCS/HCE 诊断），确认 DP=0 的判断",
-    "若确认 DP=0，动手走「原厂 UEFI 建 UFS 链路」的路线"
+    "读 393 的 console.txt（ramoops 环）——第一次拿到内核完整控制台文本",
+    "在文本里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了，驱动被匹配）",
+    "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）",
+    "若 QEMU 文本可用，之后每轮先读 QEMU 再决定要不要上机"
   ],
   "notes": [
-    "校验方法：marker 必须在字节层面能失败（阴性对照）。今天上午 8 小时误判源于找一个编译器已优化掉的字符串。",
-    "刷机是主动动作：watch-round.sh 默认 FLASH=0，只打包抓日志；读完再决定是否上机。",
-    "QEMU harness 在 CI 跑道跑（brew 的 qemu-system-aarch64），产物随 diagnostics 分支发布，无需 token。"
+    "校验方法：marker 必须在字节层面能失败（阴性对照）。",
+    "刷机是主动动作：watch-round.sh 默认 FLASH=0。",
+    "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
+    "每轮 CI 结束后看护脚本自动更新看板。",
+    "凡是'我记得协议是这样'的约定，一律找权威出处核对：框架代码 / 内核源码 / 规范文档。今天栽了两次（编译器优化掉字符串、寄存器编号 31 是 SP）。"
   ]
 }
