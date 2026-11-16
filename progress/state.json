@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
   "updated": "2026-11-16 22:20",
-  "headline": "★ 根因定案：ESP 里的设备树是 11 月 8 日的旧文件（13628 字节，无 UFS 节点），而 DarwinBoot 读的正是它（kernel.macho.adt）。我们 11-16 加的 UFS 节点从未刷进 ESP。已修：make-payload-vol.sh 现在自动用最新的 out/nio.adt 刷新卷里的 .adt；下一步是刷一次 ESP（带新 ADT 的 payload 卷）。",
+  "headline": "★ 根因定案并修正：ADT 有两个投递途径，fastboot 路径也走 DarwinBoot。nio.fdf:93 证明 DarwinBoot 在 FD 里；mkimg.sh --bakevol 证明 RAM 卷烘进 boot.img；卷契约写着 DarwinBoot 读 \\EFI\\UniXNU\\Payloads\\kernel.macho.adt。⇒ 不必刷 ESP，重新打包镜像即可带上新 ADT。而 20:49 那个镜像里的卷是 11-08 的旧 ADT ⇒ UFS 节点从未进过任何被刷过的镜像。现在：418 在 macos-26/15 全排队时用 Intel 跑（已启动）；打包会自动重新生成 ADT；auto-flash 会验证镜像里确实带着带 UFS 节点的树。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,57 +47,60 @@
   ],
   "rounds": [
     {
+      "run": 418,
+      "time": "22:10",
+      "marker": "nio: HB ",
+      "qemu": "在 macos-15-intel 上跑（唯一能起的镜像）",
+      "result": "构建中；含 dt 诊断补丁"
+    },
+    {
+      "run": 413,
+      "time": "21:24",
+      "marker": "—",
+      "qemu": "—",
+      "result": "机主取消"
+    },
+    {
       "run": 410,
       "time": "20:56",
-      "marker": "—",
-      "qemu": "带 UFS probe 诊断 + NioUfsRoot personality",
-      "result": "构建中"
+      "marker": "nio: HB ",
+      "qemu": "内核成功",
+      "result": "已上机，照片判读见台账"
     },
     {
-      "run": 409,
-      "time": "20:49",
-      "marker": "nio: HB =yes",
-      "qemu": "—",
-      "result": "CI 成功，已打包"
-    },
-    {
-      "run": 402,
-      "time": "19:09",
-      "marker": "nio: HB =yes",
-      "qemu": "★★ 帧缓冲 10.9MB；内核构建成功",
-      "result": "★ 已上机，照片判读见台账"
-    },
-    {
-      "run": 399,
-      "time": "18:22",
-      "marker": "nio: HB =yes",
-      "qemu": "★ 内核构建成功",
-      "result": "CI 判 success"
+      "run": 405,
+      "time": "19:33",
+      "marker": "nio: HB ",
+      "qemu": "行为与 402 可复现",
+      "result": "CI 成功"
     },
     {
       "run": 380,
       "time": "13:24",
-      "marker": "nio: HB =yes",
+      "marker": "nio: HB ",
       "qemu": "—",
       "result": "★★ 匹配完成：SM unlocked + IOKit match ret=1"
     }
   ],
   "next_actions": [
-    "★ 刷 ESP：先 fastboot fetch esp 备份，再用新 payload 卷刷（这是分区写操作，需机主确认）",
-    "415（macos-26，含 dt 诊断）在跑 ⇒ 上机后看 'nio: dt head=... ufshc=...' 直接验证这条链",
-    "刷完 ESP 再 fastboot boot ⇒ 应出现 'nio: ufs probe #N' 与 'nio: ufs driver start enter'"
+    "418 跑完 ⇒ 主管自动打包 ⇒ 打包会重新生成 ADT 并烘进卷 ⇒ auto-flash 验证后上机",
+    "上机后面板应出现 'nio: dt head=... arm-io=1 ufshc=1'（证明设备树到位）",
+    "再应出现 'nio: ufs probe #N provider=... compatible=\"qcom,ufshc\"' 与 'nio: ufs driver start enter'",
+    "若 dt head 显示 arm-io=0 ufshc=0 ⇒ 设备树还是没进去，回到 BootShim/卷这条线"
   ],
   "notes": [
-    "★ UFS 根因（2026-11-16 定案）：ESP 上 \\EFI\\UniXNU\\Payloads\\kernel.macho.adt 是 11-08 的旧文件，无 UFS 节点；DarwinBoot 读它 ⇒ 内核拿到的设备树没有 UFS 节点。",
-    "★ 纪律：一次只推一个构建（机主要求，台账第 10 条）。会触发构建的路径要攒着推。",
-    "校验方法：marker 必须在字节层面能失败（阴性对照）。",
+    "★ UFS 根因（2026-11-16 定案）：镜像里卷的 .adt 是 11-08 的旧文件（无 UFS 节点）；DarwinBoot 从 RAM 卷读它填 boot_args.deviceTreeP。重新打包即修，不必刷 ESP。",
+    "★ DarwinBoot 在 FD 里（nio.fdf:93），且必须排在 NioBoot.inf 之上才被派发。",
+    "★ payload 卷被烘进 boot.img（mkimg.sh --bakevol），BootShim 在内核前拷到 0xA4000000。",
+    "★ DarwinBoot↔内核的 boot_args ABI：DeviceTree@0x60、DeviceTreeLength@0x68、CommandLine@0x6c。",
+    "★ CI 纪律：一次只推一个构建。workflow 的 concurrency 是 cancel-in-progress: false，所以每次 push 都往队列里叠一轮旧的，撤不掉 ⇒ 切镜像会造成堆积。",
+    "★ 主管已重写：只用 Intel、一次只推一轮、用 state 文件记住在飞的轮次、绝不叠队列。",
+    "★ api.github.com 本机完全不可达（000），没有 token ⇒ push 是唯一的触发方式。",
+    "★ 校验方法：marker 必须在字节层面能失败（阴性对照）。",
+    "★ ADT 生成需要 --dram-size（board.toml 的 dram_size），且每次 random-seed 不同（无害）。",
     "刷机是主动动作：watch-round.sh 默认 FLASH=0；刷 ESP 需先 fastboot fetch esp 备份。",
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
-    "每轮 CI 结束后看护脚本自动更新看板。",
-    "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
-    "CI 镜像顺序：macos-26 → macos-15 → macos-15-intel；排队 3 分钟就换。",
-    "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据（workflow 第 3 步推）。",
-    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。",
+    "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据。",
     "QEMU 本机：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
     "QEMU monitor 走 TCP；QMP 必须先发 qmp_capabilities。",
     "GDB：目标停下时 stub 会先回 stop reply，读寄存器前要先跳过它。",
