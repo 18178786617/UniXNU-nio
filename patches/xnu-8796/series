@@ -278,3 +278,4 @@ nio-stall-framebuffer-message.patch
 nio-heartbeat-noinline.patch
 nio-arbitration-probe-decl.patch
 nio-arbitration-unlock-probe.patch
+nio-arbitration-probe-u3.patch

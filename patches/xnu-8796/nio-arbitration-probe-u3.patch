@@ -1,0 +1,26 @@
+Say whether the arbitration unlock returns
+
+run-370's panel repeats U1 U2T a dozen times: the global lock is free, it is
+taken, and unlockForArbitration is entered again and again.  That is not a
+deadlock on the lock -- the console simply stopped printing, and matching keeps
+going behind it.
+
+Mark the end of the function: U3 after each return says the whole lock/unlock
+path completes, which turns 'how far did matching get' into something the
+framebuffer can answer.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 565a0e3..fb25aa6 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -2035,6 +2035,10 @@ IOService::unlockForArbitration( void )
+ 
+ 	// unlock global access
+ 	IOUnlock( gArbitrationLockQueueLock );
++	/* nio: the function ran to the end.  run-370 showed U1 U2T over and over,
++	 * so the global lock is free and this path repeats; U3 says whether each
++	 * of those calls also returns. */
++	nio_u_mark(" U3");
+ }
+ 
+ uint32_t
