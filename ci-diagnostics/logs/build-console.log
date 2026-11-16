@@ -1,0 +1,205 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree
+== kernel: XNU
+== kernel: prepare XNU aca3beaa3dfb
++ git clone --quiet --shared --no-checkout /Users/runner/work/UniXNU-nio/UniXNU-nio/out/feeds/xnu-01c28cc1 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work
+== kernel: patch apple-only-cpu-tunables.patch
+== kernel: patch architectural-timer-entry.patch
+== kernel: patch armvirt-platform-personality.patch
+== kernel: patch cxx-flag-dependencies.patch
+== kernel: patch disabled-deferred-reclaim.patch
+== kernel: patch external-archive-dependencies.patch
+== kernel: patch kernel-sdk-root.patch
+== kernel: patch xnu-8796-compile-records.patch
+== kernel: patch local-availability.patch
+== kernel: patch mockfs-intermediate-lookup.patch
+== kernel: patch mockfs-memory-device-width.patch
+== kernel: patch mockfs-statfs.patch
+== kernel: patch mockfs-test-file.patch
+== kernel: patch mockfs-typed-allocation.patch
+== kernel: patch native-4k-bootstrap-capacity.patch
+== kernel: patch native-4k-signature-hash-cache.patch
+== kernel: patch native-4k-user-abi.patch
+== kernel: patch native-aes-personality.patch
+== kernel: patch native-arm-pan.patch
+== kernel: patch native-dt-panic-region.patch
+== kernel: patch native-lookup-trace.patch
+== kernel: patch native-priv-work-interval.patch
+== kernel: patch native-quiet-managed-page-report.patch
+== kernel: patch native-text-fixup.patch
+== kernel: patch native-trust-cache-runtime.patch
+== kernel: patch native-union-getattrlistbulk.patch
+== kernel: patch native-union-lower-directory.patch
+== kernel: patch native-work-interval-soft-fail.patch
+== kernel: patch native-work-interval-trace.patch
+== kernel: patch native-work-interval-instance.patch
+== kernel: patch non-apple-cache-monitor.patch
+== kernel: patch non-apple-iommu-bootstrap.patch
+== kernel: patch non-apple-pmap-field.patch
+== kernel: patch null-root-media.patch
+== kernel: patch nio-iokit-registry-trace.patch
+== kernel: patch nio-cpu-interrupt-controller-attach.patch
+== kernel: patch offline-component-load-probes.patch
+== kernel: patch offline-legacy-start.patch
+== kernel: patch gpu-probe-start.patch
+== kernel: patch offline-native-gpu-broker.patch
+== kernel: patch offline-owner-boot-manifest.patch
+== kernel: patch offline-owner-cache-carrier.patch
+== kernel: patch offline-owner-root-binding-audit.patch
+== kernel: patch offline-owner-root-crypto-probe.patch
+== kernel: patch offline-owner-systemos-mount.patch
+== kernel: patch offline-owner-z-air-init.patch
+== kernel: patch offline-pgz-alignment-probe.patch
+== kernel: patch public-entitlements-header.patch
+== kernel: patch source-corecrypto14-bootstrap.patch
+== kernel: patch source-machine-layer.patch
+== kernel: patch source-pthread-bootstrap.patch
+== kernel: patch nio-early-boot-landmarks.patch
+== kernel: patch zzw-native-adreno-sandbox-grant.patch
+== kernel: patch zzwb-native-sandbox-grant-set-properties.patch
+== kernel: patch zzx-pmap-sync-64bit-pa.patch
+== kernel: patch zzy-native-gpu-addon-mount.patch
+== kernel: patch zzy-staged-system-apps.patch
+== kernel: patch zzyb-native-cryptex-os-view.patch
+== kernel: patch zzyc-owner-skip-launch-constraints.patch
+== kernel: patch native-smp-secondary.patch
+== kernel: patch native-smp-type-clusters.patch
+== kernel: patch sheng-platform-power.patch
+== kernel: patch zzz-boot-progress.patch
+== kernel: patch xnu-8796.101.5-security-init.patch
+== kernel: patch xnu-8796.101.5-sparse-index.patch
+== kernel: patch linux-clang-auto-var-init.patch
+== kernel: patch linux-clang-uio-stackbuf-align.patch
+== kernel: patch linux-clang-kalloc-pointee-type.patch
+== kernel: patch linux-clang-iorpc-kernel-content.patch
+== kernel: patch xnu-8796-arm64-kpc-backend.patch
+== kernel: patch nio-skip-security-extensions.patch
+== kernel: patch nio-trust-cache-without-security-extensions.patch
+== kernel: patch nio-amfi-less-blob-acceleration.patch
+== kernel: patch nio-amfi-less-entitlement-queries.patch
+== kernel: patch nio-kext-data-const-stays-writable.patch
+== kernel: patch nio-kernel-data-const-stays-writable.patch
+== kernel: patch nio-skip-image4-kext.patch
+== kernel: patch nio-port-command-line.patch
+== kernel: patch nio-boot-args-fallback.patch
+== kernel: patch nio-kmem-range-landmarks.patch
+== kernel: patch nio-kmem-scramble-landmarks.patch
+== kernel: patch nio-sysctl-walk-guard.patch
+== kernel: patch nio-compressor-landmarks.patch
+== kernel: patch nio-heartbeat.patch
+== kernel: patch nio-heartbeat-fast.patch
+== kernel: patch nio-heartbeat-boottime.patch
+== kernel: patch nio-heartbeat-timebase.patch
+== kernel: patch nio-skip-zone-ro-gate.patch
+== kernel: patch nio-stack-rw.patch
+== kernel: patch nio-kernel-window-rw.patch
+== kernel: patch nio-register-boot-stack.patch
+== kernel: patch nio-no-pinst-spsel.patch
+== kernel: patch nio-ast-no-thread.patch
+== kernel: patch nio-get-threadtask-null.patch
+== kernel: patch nio-check-stack-zero.patch
+== kernel: patch nio-thread-ro-null-safe.patch
+== kernel: patch nio-intstack-larger.patch
+== kernel: patch nio-null-task-derefs.patch
+== kernel: patch nio-vm-page-pageins-null.patch
+== kernel: patch nio-heartbeat-wait-for-kernel-task.patch
+== kernel: patch nio-null-parent-task.patch
+== kernel: patch nio-first-thread-kernel-stack.patch
+== kernel: patch nio-bsd-init-trace.patch
+== kernel: patch nio-ionvram-missing-partition.patch
+== kernel: patch nio-locate-space-guard.patch
+== kernel: patch nio-space-walk-count.patch
+== kernel: patch nio-kmem-locate-guard.patch
+== kernel: patch nio-meta-budget.patch
+== kernel: patch nio-range-sizes.patch
+== kernel: patch nio-chunk-hwm-retry.patch
+== kernel: patch nio-chunk-coalesce-trace.patch
+== kernel: patch nio-console-to-ramoops.patch
+== kernel: patch nio-counter-storage-in-data.patch
+== kernel: patch nio-phase-done-trace.patch
+== kernel: patch nio-counter-count-trace.patch
+== kernel: patch nio-fleh-early-fault.patch
+== kernel: patch nio-nested-abort-report.patch
+== kernel: patch nio-step-marks.patch
+== kernel: patch nio-post-earlyboot-marks.patch
+== kernel: patch nio-screen-init-null.patch
+== kernel: patch nio-dlil-wait-bounded.patch
+== kernel: patch nio-kext-start-done.patch
+== kernel: patch nio-kext-start-enter.patch
+== kernel: patch nio-kext-load-enter.patch
+== kernel: patch nio-probe-candidates-count.patch
+== kernel: patch nio-match-cand-name.patch
+== kernel: patch nio-match-boottime.patch
+== kernel: patch nio-match-timebase.patch
+== kernel: patch nio-kext-load-exit.patch
+== kernel: patch nio-kext-load-executable.patch
+== kernel: patch nio-kext-loaded-label.patch
+== kernel: patch nio-no-personality-for-skipped.patch
+== kernel: patch nio-candidate-done.patch
+== kernel: patch nio-bsdinit-narrates.patch
+== kernel: patch nio-manifest-properties-shim.patch
+== kernel: patch nio-probe-candidates-exit.patch
+== kernel: patch nio-startmatching-probe.patch
+== kernel: patch nio-doservicematch-probe.patch
+== kernel: patch nio-startmatching-steps.patch
+== kernel: patch nio-arbitration-recursive.patch
+== kernel: patch nio-probe-result.patch
+== kernel: patch nio-no-class-candidate.patch
+== kernel: patch nio-skip-cpuic-matching.patch
+== kernel: patch nio-async-match-name.patch
+== kernel: patch nio-match-drop-reasons.patch
+== kernel: patch nio-match-loop-driver.patch
+== kernel: patch nio-iokit-match-return.patch
+== kernel: patch nio-match-stall-watchdog.patch
+== kernel: patch nio-direct-console-heartbeat.patch
+== kernel: patch nio-stall-framebuffer-message.patch
+== kernel: patch nio-heartbeat-noinline.patch
+== kernel: patch nio-arbitration-probe-decl.patch
+== kernel: patch nio-arbitration-unlock-probe.patch
+== kernel: patch nio-arbitration-probe-u3.patch
+== kernel: patch nio-start-name-direct.patch
+== kernel: patch nio-arbitration-lock-probe.patch
+== kernel: patch nio-mark-service-seq.patch
+== kernel: patch nio-name-six-and-match-rounds.patch
+== kernel: patch nio-arbitration-out-of-path.patch
+== kernel: patch nio-probe-entry-marks.patch
+== kernel: patch nio-skip-unmatched-classes.patch
+== kernel: patch nio-busy-beacon.patch
+== kernel: patch nio-dt-head-report.patch
+== kernel: patch nio-static-kext-personalities.patch
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/scripts/prepare-xnu-source.py
+Restored 0 omitted public headers from Apple; blob hashes verified
+== kernel: bootstrap pass for the compile records
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+  243 |                         storageRoot->setObject("IOProbeScore", scoreRoot.get());
+      |                                                                ~~~~~~~~~^
+      |                                                                         ->
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:243:53: error: no member named 'get' in 'OSNumber'
+  243 |                         storageRoot->setObject("IOProbeScore", scoreRoot.get());
+      |                                                                ~~~~~~~~~ ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:244:40: error: member reference type 'OSPtr<OSDictionary>' (aka 'OSDictionary *') is a pointer; did you mean to use '->'?
+  244 |                         personalities->setObject(storageRoot.get());
+      |                                                  ~~~~~~~~~~~^
+      |                                                             ->
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:244:41: error: no member named 'get' in 'OSDictionary'
+  244 |                         personalities->setObject(storageRoot.get());
+      |                                                  ~~~~~~~~~~~ ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:248:42: error: member reference type 'OSPtr<OSArray>' (aka 'OSArray *') is a pointer; did you mean to use '->'?
+  248 |                         gIOCatalogue->addDrivers(personalities.get(), false);
+      |                                                  ~~~~~~~~~~~~~^
+      |                                                               ->
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:248:43: error: no member named 'get' in 'OSArray'
+  248 |                         gIOCatalogue->addDrivers(personalities.get(), false);
+      |                                                  ~~~~~~~~~~~~~ ^
+899 warnings and 28 errors generated.
+make[7]: *** [IOStartIOKit.cpo] Error 1
+make[6]: *** [build_all] Error 2
+make[5]: *** [do_all] Error 2
+make[4]: *** [build_all] Error 2
+make[3]: *** [build_all_recurse_into_conf] Error 2
+make[2]: *** [build_all_recurse_into_iokit] Error 2
+make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^BCM2837] Error 2
+make: *** [build] Error 2
+build-xnu-4k-baseline.sh: line 866: make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="$XNU_ARCH_STRING" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION -DXNU_TARGET_OS_IOS" DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_VERSION" RC_DARWIN_KERNEL_VERSION="$XNU_DARWIN" RC_ProjectSourceVersion="$XNU_VERSION" BUILD_LTO=0 BOUND_CHECKS=0 BUILD_WERROR="${XNU_BUILD_WERROR:-0}" MAKEJOBS=-j"${JOBS:-4}" CFLAGS_EXTRA="$EXTRA_CFLAGS" "${EXTRA_MAKE_ARGS[@]}" ${XNU_HOST_MAKE_ARGS[@]+"${XNU_HOST_MAKE_ARGS[@]}"} OBJROOT="$ROOT/build/xnu/ios-obj" SYMROOT="$ROOT/build/xnu/ios-sym" DSTROOT="$ROOT/build/xnu/ios-dst" failed
+unixnu: bash failed (2); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/logs/kernel-bootstrap.log
