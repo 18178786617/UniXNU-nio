@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 16:30",
-  "headline": "QEMU harness 已能在 QEMU 里连续运行内核 90 秒且无异常；391/392 的失败都是 harness 自身问题（PC 写到了 SP、QMP 路径类型、pmemsave 相对路径），393 修完。控制台文本将从 ramoops 环直接读出",
+  "updated": "2026-11-16 17:30",
+  "headline": "run-393 不是构建错误：GitHub 的 macOS arm64 runner 池没容量，job 一个步骤都没跑就被取消（官方 annotation 原文）。已按机主要求把默认镜像改成 macos-26（约 9 分钟），macos-15 留作第二镜像，Intel 不用。396 正在跑，带已修好的 QEMU harness。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,39 +47,46 @@
   ],
   "rounds": [
     {
-      "run": 393,
-      "time": "排队中",
+      "run": 396,
+      "time": "17:27",
       "marker": "—",
-      "qemu": "pmemsave 绝对路径 + 错误可见 + guest-memory 兜底",
+      "qemu": "macos-26；harness 已修（绝对路径/QMP 错误可见/兜底）",
       "result": "争取拿到 console.txt"
     },
     {
+      "run": 395,
+      "time": "17:26",
+      "marker": "—",
+      "qemu": "被 396 挤掉（concurrency 只留最新）",
+      "result": "cancelled"
+    },
+    {
+      "run": 394,
+      "time": "17:22",
+      "marker": "—",
+      "qemu": "macos-15 排队等 runner",
+      "result": "可能仍会因容量超时"
+    },
+    {
+      "run": 393,
+      "time": "16:31",
+      "marker": "—",
+      "qemu": "★ 不是构建错误：arm64 池无容量，job 零步骤被取消",
+      "result": "官方 annotation 证实"
+    },
+    {
       "run": 392,
-      "time": "16:15",
+      "time": "16:11",
       "marker": "nio: HB =yes",
-      "qemu": "内核跑满 90 秒无异常；pmemsave 相对路径写错地方",
+      "qemu": "内核跑满 90 秒无异常；pmemsave 相对路径",
       "result": "已修（绝对路径）"
     },
     {
       "run": 391,
       "time": "16:05",
       "marker": "nio: HB =yes",
-      "qemu": "★ 内核跑起来 90 秒，guest errors 为空",
-      "result": "QMP 路径类型错误已修"
-    },
-    {
-      "run": 390,
-      "time": "15:50",
-      "marker": "nio: HB =yes",
-      "qemu": "RSP 读包顺序 + PC 写到了 SP(31)",
-      "result": "两个 bug 已修"
-    },
-    {
-      "run": 389,
-      "time": "15:35",
-      "marker": "nio: HB =yes",
-      "qemu": "-nographic 与 -qmp stdio 抢 stdio",
-      "result": "QMP 改走 unix socket"
+      "qemu": "★ 内核在 QEMU 里跑起来 90 秒，guest errors 为空",
+      "result": "QMP 路径类型已修"
     },
     {
       "run": 380,
@@ -90,16 +97,18 @@
     }
   ],
   "next_actions": [
-    "读 393 的 console.txt（ramoops 环）——第一次拿到内核完整控制台文本",
+    "读 396 的 console.txt（ramoops 环）——第一次拿到内核完整控制台文本",
     "在文本里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了，驱动被匹配）",
-    "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）",
-    "若 QEMU 文本可用，之后每轮先读 QEMU 再决定要不要上机"
+    "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）"
   ],
   "notes": [
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
     "刷机是主动动作：watch-round.sh 默认 FLASH=0。",
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
     "每轮 CI 结束后看护脚本自动更新看板。",
-    "凡是'我记得协议是这样'的约定，一律找权威出处核对：框架代码 / 内核源码 / 规范文档。今天栽了两次（编译器优化掉字符串、寄存器编号 31 是 SP）。"
+    "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
+    "CI 镜像：macos-26 优先（约 9 分钟），macos-15 第二（同一架构不同容量池），不用 Intel（>20 分钟）。",
+    "runs-on 数组是 AND 语义，不能用 [a, b] 做多镜像回退。",
+    "concurrency 只保留最新一次 push 的轮次：推 workflow 会让还没开始的轮次作废。"
   ]
 }
