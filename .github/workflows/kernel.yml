@@ -690,7 +690,8 @@ jobs:
           # The artifacts of a workflow run cannot be pulled without a token,
           # so the QEMU output goes into the diagnostics tree as well.
           for f in out/qemu/qemu.log out/qemu/qemu-guest-errors.log out/qemu/fb.bin \
-                   out/qemu/console.txt out/qemu/fb.png out/qemu/serial.log; do
+                   out/qemu/ramoops.bin out/qemu/console.txt out/qemu/fb.png \
+                   out/qemu/serial.log; do
             if [ -f "$f" ]; then cp "$f" "$base/logs/"; else echo "missing $f"; fi
           done
           ls -la "$base/logs" | head -20
