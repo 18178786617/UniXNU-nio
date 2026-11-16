@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 19:47",
-  "headline": "QEMU 通了：402 在 Intel 上把内核跑起来，QMP 握手修复生效，帧缓冲（10.9 MB）与控制台环都取出来了，内核零异常。开工信号机制也验证通过（ci-started/run-N），CI 主管现在能在排队 3 分钟就换镜像、两个 arm64 都排队就跳 Intel。",
+  "updated": "2026-11-16 22:02",
+  "headline": "QEMU 本地跑通（E://qemu，秒级迭代），抓到内核第一个异常（prelink 空洞，QEMU 特有，与 UFS 无关）。run-387 的 UFS 节点修复已静态验证为完整正确：节点在 /arm-io 下 ✓、ArmDTPlatform 会发布每个 arm-io 子节点 ✓、compatible 匹配 ✓、映射窗口覆盖 ✓。剩下的唯一未知是运行时：NioUfs::start() 是否被调用 —— 402 内核已打包待上机。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,32 +47,25 @@
   ],
   "rounds": [
     {
-      "run": 406,
-      "time": "19:45",
-      "marker": "—",
-      "qemu": "macos-15；带 QEMU 产物发布修复",
-      "result": "会把 fb.bin 带回来"
+      "run": 402,
+      "time": "19:09",
+      "marker": "nio: HB =yes",
+      "qemu": "★★ 帧缓冲 10.9MB；QMP 握手生效",
+      "result": "内核构建成功，已打包"
     },
     {
       "run": 405,
       "time": "19:33",
-      "marker": "—",
-      "qemu": "Intel；ci-started/run-405 已出现",
-      "result": "开工信号验证通过"
-    },
-    {
-      "run": 402,
-      "time": "19:09",
       "marker": "nio: HB =yes",
-      "qemu": "★★ 帧缓冲 10.9MB + 控制台环取出，内核零异常",
-      "result": "QMP 握手修复生效"
+      "qemu": "内核成功；行为与 402 可复现",
+      "result": "ci-started 开工信号验证"
     },
     {
       "run": 399,
       "time": "18:22",
       "marker": "nio: HB =yes",
       "qemu": "★ 内核构建成功（CI 判 success）",
-      "result": "token 重写 + 三次重试救下"
+      "result": "token 重写 + 三次重试"
     },
     {
       "run": 398,
@@ -97,9 +90,10 @@
     }
   ],
   "next_actions": [
-    "读 fb.bin（用 read-console.py --decode + DiagFont.h 解码成文本）",
-    "若文本可读：搜 'nio: ufs driver start enter'、看 'IOKit match ret=1' 之后停在哪",
-    "QEMU 本机装好后，harness 改为本地秒级迭代"
+    "上机验证 402 内核（out/Mu-nio-0.img，19:37 打包）：看面板有没有 'nio: ufs driver start enter'",
+    "有 ⇒ NioUfs::start() 被调用了（UFS 节点修复生效），下一步看 UFS 链路/时钟诊断",
+    "没有 ⇒ 匹配仍失败，回查 ArmDTPlatform 的发布顺序与 personality",
+    "CI 主管按机主规则自动跑：macos-15 → macos-26 → Intel，排队 3 分钟就换"
   ],
   "notes": [
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
@@ -109,6 +103,10 @@
     "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
     "CI 规则（机主定）：macos-15 → macos-26 → macos-15-intel；排队 3 分钟就换；两个 arm64 都排队就跳 Intel。",
     "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据（workflow 第 3 步推）。",
-    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。"
+    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。",
+    "QEMU 本地：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
+    "QEMU monitor 走 TCP（unix socket 在 Windows 上没有）；QMP 必须先发 qmp_capabilities。",
+    "GDB：目标停下时 stub 会先回 stop reply（'T02thread:01;'），读寄存器前要先跳过它。",
+    "ADT 层级用 scripts/nio_adt.py 的 decode() 验证，秒级出结果。"
   ]
 }
