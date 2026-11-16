@@ -609,15 +609,15 @@ jobs:
             brew install qemu
           fi
           qemu-system-aarch64 --version | head -1
-          python3 scripts/make-qemu-adt.py --output out/qemu/kernel.adt
+          python3 device/scripts/make-qemu-adt.py --output out/qemu/kernel.adt
           cmdline=$(python3 - <<'PYCMD'
           import tomllib
-          board = tomllib.load(open("board.toml", "rb"))
+          board = tomllib.load(open("device/board.toml", "rb"))
           print(" ".join(board["payload"]["kernel_args"]))
           PYCMD
           )
           echo "cmdline: $cmdline"
-          python3 tools/qemu-nio.py --kernel out/kernel.macho \
+          python3 device/tools/qemu-nio.py --kernel out/kernel.macho \
             --adt out/qemu/kernel.adt --cmdline "$cmdline" \
             --seconds 90 --out out/qemu
           ls -la out/qemu || true
