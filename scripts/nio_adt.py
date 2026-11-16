@@ -336,7 +336,8 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
     }) for index, affinity in enumerate(cpu_regs)]
     gic = hardware["gic"]
     dist, redist = gic["distributor"], gic["redistributor"]
-    # A logical translation window enclosing only the published GIC regions.
+    # A logical translation window enclosing the published GIC regions and,
+    # when the storage controller is published, its host and PHY.
     # It does not reserve physical RAM or initialize the peripheral.
     ufs = hardware.get("ufs")
     regions = [(dist["base"], dist["size"]), (redist["base"], redist["size"])]
@@ -345,6 +346,14 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
         # translation window: their nubs are published from these nodes.
         regions.append((ufs["host"]["base"], ufs["host"]["size"]))
         regions.append((ufs["phy"]["base"], ufs["phy"]["size"]))
+    # The window starts at the lowest address in it, which is the storage
+    # controller: it sits at 0x1d84000 and the interrupt controller at
+    # 0x17a00000, so the storage one is the lower of the two and the
+    # interrupt controller's own offset in the bus is 0x15c7c000.  The
+    # offsets of the children are unsigned, so the base has to be the
+    # lowest one -- starting the window at the interrupt controller would
+    # put the storage controller at a negative offset, which cannot be
+    # encoded.
     bus_base = min(base for base, _ in regions)
     bus_size = max(base + size for base, size in regions) - bus_base
     children = [
