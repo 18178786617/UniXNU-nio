@@ -139,6 +139,23 @@ static bool contains (const char *data, size_t length, const char *needle)
 IOService *NioUfs::probe (IOService *provider, SInt32 *score)
 {
   native_ufs_probe_calls = native_ufs_probe_calls + 1;
+  // Say what the probe was handed.  The panel shows no "nio: ufs driver start
+  // enter", and that line is the first statement of start(), so start() was
+  // never called: the probe returned null, which means the compatible of the
+  // provider did not match.  Which provider it was, and what its compatible
+  // said, is the one thing that tells the two possible reasons apart -- the
+  // UFS node missing from the tree, or the node there under a name the
+  // driver does not know.
+  {
+    OSObject *seen = provider->getProperty ("compatible");
+    OSData *seenData = OSDynamicCast (OSData, seen);
+    OSString *seenString = OSDynamicCast (OSString, seen);
+    const char *text = seenData ? static_cast<const char *> (seenData->getBytesNoCopy ())
+                                 : (seenString ? seenString->getCStringNoCopy () : "(none)");
+    printf ("nio: ufs probe #%u provider=%s compatible=\"%s\"",
+            native_ufs_probe_calls, provider->getName () ? provider->getName () : "(unnamed)",
+            text);
+  }
   if (OSDynamicCast (IOPlatformExpertDevice, provider)) {
     // Second personality (KernelConfigTables: IOMatchCategory NioUfsRoot): attaches to the
     // root device, which starts before the platform expert publishes IOResources, so the

@@ -7,9 +7,24 @@
   <key>CFBundlePackageType</key><string>KEXT</string>
   <key>CFBundleVersion</key><string>0.1.0</string>
   <key>OSBundleRequired</key><string>Root</string>
-  <key>IOKitPersonalities</key><dict><key>nio SM8250 UFSHCI</key><dict>
-    <key>IOClass</key><string>NioUfs</string>
-    <key>IOProviderClass</key><string>IOPlatformDevice</string>
-    <key>IOProbeScore</key><integer>1000</integer>
-  </dict></dict>
+  <key>IOKitPersonalities</key><dict>
+    <key>nio SM8250 UFSHCI</key><dict>
+      <key>IOClass</key><string>NioUfs</string>
+      <key>IOProviderClass</key><string>IOPlatformDevice</string>
+      <key>IOProbeScore</key><integer>1000</integer>
+    </dict>
+    <key>NioUfsRoot</key><dict>
+      <!-- The second personality the driver's own comment describes and its
+           probe already handles: it attaches to the root device, whose
+           provider is an IOPlatformExpertDevice.  Without it start() can
+           never do any work, because start() returns false unless its
+           provider is one of those; the UFSHCI personality above hands it an
+           IOPlatformDevice, which is not.  The root device starts before the
+           platform expert publishes IOResources, so the hardware probes run
+           before AMFI's start() panics over the missing PMGR. -->
+      <key>IOClass</key><string>NioUfs</string>
+      <key>IOProviderClass</key><string>IOPlatformExpertDevice</string>
+      <key>IOProbeScore</key><integer>500</integer>
+    </dict>
+  </dict>
 </dict></plist>
