@@ -117,8 +117,8 @@ def render(state):
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>nio 移植进度看板</title><style>%s</style></head><body>
-<h1>nio（小米 15 Pro / SM8250）iOS 移植 · 进度看板</h1>
-<div class="updated">更新于 %s</div>
+<h1>nio iOS 移植 · 进度看板</h1>
+<div class="updated">%s · 更新于 %s</div>
 <div class="headline"><b>当前：</b>%s</div>
 <div class="distance">%s</div>
 <h2>阶段总览</h2>
@@ -132,13 +132,15 @@ def render(state):
 <h2>纪律与备注</h2>
 <ul class="notes">%s</ul>
 </body></html>
-""" % (CSS, html.escape(state.get("updated", "")), html.escape(state.get("headline", "")),
+""" % (CSS, html.escape(state.get("device", "nio")), html.escape(state.get("updated", "")),
+       html.escape(state.get("headline", "")),
        html.escape(state.get("distance", "")), "".join(rail), "".join(phase_rows),
        "".join(round_rows), actions, notes)
 
 
 def render_md(state):
-    out = ["# nio 移植进度看板", "", "更新于 %s" % state.get("updated", ""), "",
+    out = ["# nio 移植进度看板", "", "设备：%s" % state.get("device", "nio"),
+           "更新于 %s" % state.get("updated", ""), "",
            "**当前：** %s" % state.get("headline", ""), "",
            "%s" % state.get("distance", ""), "", "## 阶段", ""]
     for p in state.get("phases", []):

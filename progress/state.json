@@ -1,4 +1,5 @@
 {
+  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
   "updated": "2026-11-16 14:00",
   "headline": "P1：UFS 设备没上线（HCS=0x8 → DP=0），根卷挂不上，启动停在 IOKit match ret=1 之后",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷 → P2 存储层 → P3 launchd 起用户态（之后才是 P3+ 各驱动）",
