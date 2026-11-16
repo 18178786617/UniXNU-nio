@@ -55,8 +55,11 @@ on:
         default: "nio_defconfig"
       runner:
         description: >-
-          Runner image. macos-26 is arm64 and is the pair UniXNU develops
-          against; when it is scheduled it builds in about nine minutes.
+          Runner image. Any label works here, so a runner of our own on a Mac
+          can be used by naming its label (nio-macos); that is the way out
+          when the hosted macOS machines are all busy. macos-26 is arm64 and
+          is the pair UniXNU develops against; when it is scheduled it builds
+          in about nine minutes.
           macos-15 is the same architecture and is the second choice: the
           macOS arm64 pool runs out of capacity at times, and a job that
           waits for a runner can be cancelled before it starts a single step
