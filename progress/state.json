@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 22:20",
-  "headline": "★ 根因定案并修正：ADT 有两个投递途径，fastboot 路径也走 DarwinBoot。nio.fdf:93 证明 DarwinBoot 在 FD 里；mkimg.sh --bakevol 证明 RAM 卷烘进 boot.img；卷契约写着 DarwinBoot 读 \\EFI\\UniXNU\\Payloads\\kernel.macho.adt。⇒ 不必刷 ESP，重新打包镜像即可带上新 ADT。而 20:49 那个镜像里的卷是 11-08 的旧 ADT ⇒ UFS 节点从未进过任何被刷过的镜像。现在：418 在 macos-26/15 全排队时用 Intel 跑（已启动）；打包会自动重新生成 ADT；auto-flash 会验证镜像里确实带着带 UFS 节点的树。",
+  "updated": "2026-11-16 23:20",
+  "headline": "★★★ 根因彻底翻转：静态 kext 的 personality 从来没发出过 ⇒ NioUfs 与 ArmDTPlatform 从未被匹配、从未启动，设备树从未被读过。（prelink info 的 36 条全是 Apple kext，我们的组件是 force_load 的静态 archive，没有 OSKext ⇒ 没人读它们的 Info.plist。）已修：内核在 IOKit 匹配前用 gIOCatalogue->addDrivers() 发布三条 personality；dt 诊断改成只打印指针不 dereference（它自己把 418 打死了）；NioUfs 加构造函数标记。419 在 Intel 上构建。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,25 +47,25 @@
   ],
   "rounds": [
     {
+      "run": 419,
+      "time": "23:20",
+      "marker": "nio: HB ",
+      "qemu": "含 personality 发布补丁",
+      "result": "构建中"
+    },
+    {
       "run": 418,
       "time": "22:10",
       "marker": "nio: HB ",
-      "qemu": "在 macos-15-intel 上跑（唯一能起的镜像）",
-      "result": "构建中；含 dt 诊断补丁"
-    },
-    {
-      "run": 413,
-      "time": "21:24",
-      "marker": "—",
-      "qemu": "—",
-      "result": "机主取消"
+      "qemu": "★ 崩了：一屏输出都没有",
+      "result": "真凶=dt 诊断补丁自己 dereference 未映射地址"
     },
     {
       "run": 410,
       "time": "20:56",
       "marker": "nio: HB ",
-      "qemu": "内核成功",
-      "result": "已上机，照片判读见台账"
+      "qemu": "★ 判决实验：410+新ADT ⇒ 正常跑到 IOKit match ret=1",
+      "result": "但仍无 nio: ufs probe ⇒ personality 从未发出"
     },
     {
       "run": 405,
@@ -83,29 +83,26 @@
     }
   ],
   "next_actions": [
-    "418 跑完 ⇒ 主管自动打包 ⇒ 打包会重新生成 ADT 并烘进卷 ⇒ auto-flash 验证后上机",
-    "上机后面板应出现 'nio: dt head=... arm-io=1 ufshc=1'（证明设备树到位）",
-    "再应出现 'nio: ufs probe #N provider=... compatible=\"qcom,ufshc\"' 与 'nio: ufs driver start enter'",
-    "若 dt head 显示 arm-io=0 ufshc=0 ⇒ 设备树还是没进去，回到 BootShim/卷这条线"
+    "419 跑完 ⇒ 主管自动打包 ⇒ auto-flash 自动上机",
+    "面板上应出现 'nio: ufs driver is linked in' ⇒ 静态 kext 在镜像里",
+    "与 'nio: publishing 3 static personalities' ⇒ personality 发布成功",
+    "与 'nio: ufs probe #N provider=... compatible=\"qcom,ufshc\"' ⇒ 匹配成功（首次！）",
+    "与 'nio: dt head=0x... len=14052' ⇒ 设备树到位"
   ],
   "notes": [
-    "★ UFS 根因（2026-11-16 定案）：镜像里卷的 .adt 是 11-08 的旧文件（无 UFS 节点）；DarwinBoot 从 RAM 卷读它填 boot_args.deviceTreeP。重新打包即修，不必刷 ESP。",
-    "★ DarwinBoot 在 FD 里（nio.fdf:93），且必须排在 NioBoot.inf 之上才被派发。",
-    "★ payload 卷被烘进 boot.img（mkimg.sh --bakevol），BootShim 在内核前拷到 0xA4000000。",
-    "★ DarwinBoot↔内核的 boot_args ABI：DeviceTree@0x60、DeviceTreeLength@0x68、CommandLine@0x6c。",
-    "★ CI 纪律：一次只推一个构建。workflow 的 concurrency 是 cancel-in-progress: false，所以每次 push 都往队列里叠一轮旧的，撤不掉 ⇒ 切镜像会造成堆积。",
-    "★ 主管已重写：只用 Intel、一次只推一轮、用 state 文件记住在飞的轮次、绝不叠队列。",
+    "★ 根因（2026-11-16 23:00 定案）：静态 kext 无 OSKext ⇒ personality 从未发出 ⇒ NioUfs/ArmDTPlatform 从未启动 ⇒ 设备树从未被读过。修复=内核在匹配前 addDrivers 发布。",
+    "★ 诊断代码也会是元凶：dt 诊断补丁 dereference 未映射地址，把 418 打成了一屏不出。",
+    "★ 判决实验要能二分：用 410 内核+新 ADT 10 分钟分开了'ADT 的锅'和'补丁的锅'。",
+    "★ DarwinBoot 每次启动会打印上一次内核留在 0xAF040000 的文字（≤1600 字节）⇒ 输出回读通道。",
+    "★ 面板上 'M r=1 num=1 span=... barea=...' 是内核分配器 zone 诊断，不是 dram-base（白天误判过）。",
+    "★ ADT 有两个投递途径，fastboot 路径走 RAM 卷（--bakevol），不必刷 ESP。",
+    "★ UFS(0x1d84000) 比 GIC(0x17a00000) 低 ⇒ 总线基址必须取 min（我改过一次，UFS 偏移会变负数）。",
+    "★ 纪律：一次只推一个构建。workflow 的 concurrency 是 cancel-in-progress: false。",
+    "★ 主管已重写：只用 Intel、一次只推一轮、state 文件记住在飞轮次、hold 文件可暂停。",
     "★ api.github.com 本机完全不可达（000），没有 token ⇒ push 是唯一的触发方式。",
-    "★ 校验方法：marker 必须在字节层面能失败（阴性对照）。",
-    "★ ADT 生成需要 --dram-size（board.toml 的 dram_size），且每次 random-seed 不同（无害）。",
-    "刷机是主动动作：watch-round.sh 默认 FLASH=0；刷 ESP 需先 fastboot fetch esp 备份。",
-    "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
-    "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据。",
-    "QEMU 本机：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
-    "QEMU monitor 走 TCP；QMP 必须先发 qmp_capabilities。",
-    "GDB：目标停下时 stub 会先回 stop reply，读寄存器前要先跳过它。",
+    "★ QEMU 本机 E://qemu//qemu-system-aarch64.exe；monitor 走 TCP；GDB 要先跳过 stop reply。",
     "读内核的 boot_args：tools/boot-args.py（const_boot_args 镜像里全零 ⇒ 运行时填）。",
-    "生成 patch 必须在'打过所有补丁的树'上做 A/B diff，否则会混入别的补丁的改动。"
+    "生成 patch 必须在'打过所有补丁的树'上做 A/B diff（apply-series.py 可在 CI 的树 aca3beaa3dfb 上验证）。"
   ],
   "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节"
 }
