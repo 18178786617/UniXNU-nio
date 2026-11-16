@@ -29,7 +29,7 @@ unless its provider is one of those.
 diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 --- a/iokit/Kernel/IOStartIOKit.cpp
 +++ b/iokit/Kernel/IOStartIOKit.cpp
-@@ -187,6 +187,57 @@
+@@ -187,6 +187,67 @@
  	 * the way out: a panel that shows match go and no match ret is still
  	 * matching, one that shows both has moved on to bsd_init. */
  	printf("\nnio: IOKit match go");
@@ -50,39 +50,49 @@ diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 +	 * The catalogue is the one OSKext publishes into, and this is the
 +	 * moment to use it: the matching sweep starts in the call below and
 +	 * reads what is in the catalogue when it starts.
++	 *
++	 * The values are held in shared pointers on purpose: withNumber() and
++	 * withCString() hand back a shared pointer, and taking the raw
++	 * pointer out of it while the temporary died would leave the
++	 * dictionary holding a reference nobody owns.
 +	 */
 +	{
-+		OSArray      *personalities = OSArray::withCapacity(3);
-+		OSDictionary *platformExpert = OSDictionary::withCapacity(4);
-+		OSDictionary *storage        = OSDictionary::withCapacity(3);
-+		OSDictionary *storageRoot    = OSDictionary::withCapacity(3);
++		OSPtr<OSArray>      personalities = OSArray::withCapacity(3);
++		OSPtr<OSDictionary> platformExpert = OSDictionary::withCapacity(4);
++		OSPtr<OSDictionary> storage        = OSDictionary::withCapacity(3);
++		OSPtr<OSDictionary> storageRoot    = OSDictionary::withCapacity(3);
++		OSPtr<OSString>     classPlatform  = OSString::withCString("ArmDTPlatform");
++		OSPtr<OSString>     classStorage   = OSString::withCString("NioUfs");
++		OSPtr<OSString>     providerExpert = OSString::withCString("IOPlatformExpertDevice");
++		OSPtr<OSString>     providerDevice = OSString::withCString("IOPlatformDevice");
++		OSPtr<OSString>     nameMatch      = OSString::withCString("device-tree");
++		OSPtr<OSNumber>     scorePlatform  = OSNumber::withNumber(5000, 32);
++		OSPtr<OSNumber>     scoreStorage   = OSNumber::withNumber(1000, 32);
++		OSPtr<OSNumber>     scoreRoot      = OSNumber::withNumber(500, 32);
 +
-+		if (personalities != NULL && platformExpert != NULL &&
-+		    storage != NULL && storageRoot != NULL) {
-+			platformExpert->setObject("IOClass", OSString::withCString("ArmDTPlatform"));
-+			platformExpert->setObject("IOProviderClass", OSString::withCString("IOPlatformExpertDevice"));
-+			platformExpert->setObject("IONameMatch", OSString::withCString("device-tree"));
-+			platformExpert->setObject("IOProbeScore", OSNumber::withNumber((int)5000));
-+			personalities->setObject(platformExpert);
++		if (personalities && platformExpert && storage && storageRoot &&
++		    classPlatform && classStorage && providerExpert && providerDevice &&
++		    nameMatch && scorePlatform && scoreStorage && scoreRoot) {
++			platformExpert->setObject("IOClass", classPlatform.get());
++			platformExpert->setObject("IOProviderClass", providerExpert.get());
++			platformExpert->setObject("IONameMatch", nameMatch.get());
++			platformExpert->setObject("IOProbeScore", scorePlatform.get());
++			personalities->setObject(platformExpert.get());
 +
-+			storage->setObject("IOClass", OSString::withCString("NioUfs"));
-+			storage->setObject("IOProviderClass", OSString::withCString("IOPlatformDevice"));
-+			storage->setObject("IOProbeScore", OSNumber::withNumber((int)1000));
-+			personalities->setObject(storage);
++			storage->setObject("IOClass", classStorage.get());
++			storage->setObject("IOProviderClass", providerDevice.get());
++			storage->setObject("IOProbeScore", scoreStorage.get());
++			personalities->setObject(storage.get());
 +
-+			storageRoot->setObject("IOClass", OSString::withCString("NioUfs"));
-+			storageRoot->setObject("IOProviderClass", OSString::withCString("IOPlatformExpertDevice"));
-+			storageRoot->setObject("IOProbeScore", OSNumber::withNumber((int)500));
-+			personalities->setObject(storageRoot);
++			storageRoot->setObject("IOClass", classStorage.get());
++			storageRoot->setObject("IOProviderClass", providerExpert.get());
++			storageRoot->setObject("IOProbeScore", scoreRoot.get());
++			personalities->setObject(storageRoot.get());
 +
 +			printf("\nnio: publishing %d static personalities",
 +			       (int) personalities->getCount());
-+			gIOCatalogue->addDrivers(personalities, false);
++			gIOCatalogue->addDrivers(personalities.get(), false);
 +		}
-+		if (personalities != NULL) { personalities->release(); }
-+		if (platformExpert != NULL) { platformExpert->release(); }
-+		if (storage != NULL) { storage->release(); }
-+		if (storageRoot != NULL) { storageRoot->release(); }
 +	}
  	bool ok = gRootNub->startIOServiceMatching();
  	printf("\nnio: IOKit match ret=%d", (int) ok);
