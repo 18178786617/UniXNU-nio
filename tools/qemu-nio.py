@@ -264,8 +264,13 @@ def main(argv):
     ba_pa = (adt_pa + len(adt) + PAGE_16K - 1) & ~(PAGE_16K - 1)
     top_of_kernel_data = ba_pa + PAGE_16K
 
+    # The kernel reads the tree with the MMU on, so deviceTreeP is a virtual
+    # address: physical minus the phys/virt offset, taken modulo 2**64.
+    adt_va = (adt_pa - pa_offset) & 0xFFFFFFFFFFFFFFFF
+    entry_pa = (entry + pa_offset) & 0xFFFFFFFFFFFFFFFF
+
     ba = build_boot_args(virt_base, KERNEL_PHYS_BASE, RAM_SIZE,
-                         adt_pa - pa_offset, len(adt), args.cmdline)
+                         adt_va, len(adt), args.cmdline)
     ba = bytearray(ba)
     struct.pack_into("<Q", ba, 32, top_of_kernel_data)
     ba = bytes(ba)
@@ -294,7 +299,7 @@ def main(argv):
     loaders.append((str(ba_path), ba_pa))
 
     print("virt_base 0x%x  phys_base 0x%x  entry va 0x%x pa 0x%x"
-          % (virt_base, KERNEL_PHYS_BASE, entry, (entry + pa_offset) & 0xFFFFFFFFFFFFFFFF))
+          % (virt_base, KERNEL_PHYS_BASE, entry, entry_pa))
     print("adt pa 0x%x len %d   boot_args pa 0x%x" % (adt_pa, len(adt), ba_pa))
 
     qemu_log = work / "qemu-stderr.log"
@@ -326,8 +331,8 @@ def main(argv):
     time.sleep(2)
     rsp = Rsp("127.0.0.1", 1234)
     rsp.set_register(0, ba_pa)          # x0 = boot_args (physical)
-    rsp.set_register(31, (entry + pa_offset) & 0xFFFFFFFFFFFFFFFF)  # pc
-    print("registers set: x0=0x%x pc=0x%x" % (ba_pa, (entry + pa_offset) & 0xFFFFFFFFFFFFFFFF))
+    rsp.set_register(31, entry_pa)     # pc
+    print("registers set: x0=0x%x pc=0x%x" % (ba_pa, entry_pa))
     rsp.cont()
 
     deadline = time.time() + args.seconds
