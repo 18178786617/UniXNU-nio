@@ -283,3 +283,4 @@ nio-start-name-direct.patch
 nio-arbitration-lock-probe.patch
 nio-mark-service-seq.patch
 nio-name-six-and-match-rounds.patch
+nio-arbitration-out-of-path.patch
