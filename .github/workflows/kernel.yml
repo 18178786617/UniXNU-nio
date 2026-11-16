@@ -573,13 +573,35 @@ jobs:
           # This step also fetches the pinned sources (no separate fetch step).
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # The pinned sources are cloned by the framework's own fetch, and it
+          # clones them anonymously: an environment variable does not reach
+          # it.  run-398 on the Intel image died there with "SoC sm8250 is not
+          # cached" -- the clone had failed and the message names the cache
+          # rather than the network.  Rewriting the URL makes every anonymous
+          # clone carry the token, which is also what the checkout step does.
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global --get-regexp '^url\.' || true
           # The build's own output is kept in a file as well as on the
           # console. The output of the pipeline itself -- the "kernel: ..."
           # lines and any Python error it ends with -- never reaches the log
           # tree under out/, so a failure in the plan or in the driver was
           # invisible to everything that reads those logs.
           set -o pipefail
-          ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
+          # The framework clones the pinned sources itself and does not retry,
+          # so one dropped connection costs the whole round.  Three attempts:
+          # the first one warms the feeds cache, and a retry after a partial
+          # clone usually finds it already in place.
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            echo "### build attempt $attempt"
+            ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
+            if find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1 | grep -q .; then
+              echo "### the kernel is there"
+              break
+            fi
+            attempt=$((attempt + 1))
+            [ "$attempt" -le 3 ] && sleep 20
+          done
 
           # The kernel, not unixnu's exit code, decides whether this step
           # failed.  Run 157 built the kernel and the recipe still returned
