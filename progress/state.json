@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 23:20",
-  "headline": "★★★ 根因彻底翻转：静态 kext 的 personality 从来没发出过 ⇒ NioUfs 与 ArmDTPlatform 从未被匹配、从未启动，设备树从未被读过。（prelink info 的 36 条全是 Apple kext，我们的组件是 force_load 的静态 archive，没有 OSKext ⇒ 没人读它们的 Info.plist。）已修：内核在 IOKit 匹配前用 gIOCatalogue->addDrivers() 发布三条 personality；dt 诊断改成只打印指针不 dereference（它自己把 418 打死了）；NioUfs 加构造函数标记。419 在 Intel 上构建。",
+  "updated": "2026-11-17 00:00",
+  "headline": "根因：静态 kext 的 personality 从没发出过（prelink info 的 36 条全是 Apple kext）。修复=内核在 IOKit 匹配前用 gIOCatalogue->addDrivers() 发布三条 personality。419 编译失败（withNumber 用错）⇒ 已修并用本地编译器验证类型用法（替身头文件，零错误）；422 在排队。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,18 +47,25 @@
   ],
   "rounds": [
     {
-      "run": 419,
-      "time": "23:20",
+      "run": 422,
+      "time": "00:00",
       "marker": "nio: HB ",
-      "qemu": "含 personality 发布补丁",
-      "result": "构建中"
+      "qemu": "编译修好的版本",
+      "result": "排队中"
+    },
+    {
+      "run": 419,
+      "time": "23:53",
+      "marker": "—",
+      "qemu": "—",
+      "result": "编译失败：withNumber 少一个参数（已修）"
     },
     {
       "run": 418,
       "time": "22:10",
       "marker": "nio: HB ",
       "qemu": "★ 崩了：一屏输出都没有",
-      "result": "真凶=dt 诊断补丁自己 dereference 未映射地址"
+      "result": "真凶=dt 诊断补丁 dereference 未映射地址"
     },
     {
       "run": 410,
@@ -66,20 +73,6 @@
       "marker": "nio: HB ",
       "qemu": "★ 判决实验：410+新ADT ⇒ 正常跑到 IOKit match ret=1",
       "result": "但仍无 nio: ufs probe ⇒ personality 从未发出"
-    },
-    {
-      "run": 405,
-      "time": "19:33",
-      "marker": "nio: HB ",
-      "qemu": "行为与 402 可复现",
-      "result": "CI 成功"
-    },
-    {
-      "run": 380,
-      "time": "13:24",
-      "marker": "nio: HB ",
-      "qemu": "—",
-      "result": "★★ 匹配完成：SM unlocked + IOKit match ret=1"
     }
   ],
   "next_actions": [
@@ -90,6 +83,8 @@
     "与 'nio: dt head=0x... len=14052' ⇒ 设备树到位"
   ],
   "notes": [
+    "★ 往 XNU 里塞新 C++ 代码前，先用替身头文件 out/patchwork/type-check.cpp 本地编译一遍（zig clang --target=aarch64-macos-none -c file.cpp -o out.o），再占 runner。419 就是因为没做这一步白等 25 分钟。",
+    "★ zig clang 的坑：-fsyntax-only 报 FileNotFound，必须用 -c；target 名是 aarch64-macos-none。",
     "★ 根因（2026-11-16 23:00 定案）：静态 kext 无 OSKext ⇒ personality 从未发出 ⇒ NioUfs/ArmDTPlatform 从未启动 ⇒ 设备树从未被读过。修复=内核在匹配前 addDrivers 发布。",
     "★ 诊断代码也会是元凶：dt 诊断补丁 dereference 未映射地址，把 418 打成了一屏不出。",
     "★ 判决实验要能二分：用 410 内核+新 ADT 10 分钟分开了'ADT 的锅'和'补丁的锅'。",
