@@ -1,0 +1,30 @@
+Mark the way into probeCandidates and into probe
+
+The panel stops on 'M33/2 IOHIDResource' and the console line that follows a
+probe call, 'nio: P ...', never appears -- so the candidate loop dies between
+the M print and inst->probe(), in the personality and module-load checks.
+
+Q after the M print says the call got past it; P1 right before the probe call
+says a candidate reached the driver.  Both go straight to the framebuffer, so
+a dead console cannot hide them.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 21a365e..ddfa5c2 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4084,6 +4084,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 			}
+ 		}
+ 		nio_match_progress++;
++		nio_u_mark("Q");
+ 		if ((++nio_probe_cand & 0x0u) == 0) {
+ 			uint64_t nio_abstime = 0, nio_ns = 0;
+ 
+@@ -4394,6 +4395,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 					    inst->getMetaClass()->getClassName(), getName());
+ 				}
+ #endif
++				nio_u_mark("\nP1");
+ 				newInst = inst->probe( this, &score );
+ 				printf("\nnio: P %s r=%p", symbol->getCStringNoCopy(), newInst);
+ 				inst->detach( this );
