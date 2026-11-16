@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 22:45",
-  "headline": "★ UFS 的真正根因找到了：内核从来没有拿到过设备树（不是驱动/节点/personality 问题）。证据：const_boot_args 在镜像里全零、运行时由 x0 填；x0 来自 Android ABL；PE_init_platform 用它设 PE_state.deviceTreeHead 再 SecureDTInit；面板的 dram-base=0x101000 与我们 ADT 的 0x80000000 对不上 ⇒ 读到的是垃圾。⇒ 之前所有'加 UFS 节点'的修复都不可能生效。推荐修法：让 BootShim 在内核前把 ADT 拷到固定物理地址并改写 boot_args 的 deviceTreeP（本地构建，不刷分区）。",
+  "updated": "2026-11-16 22:20",
+  "headline": "★ 根因定案：ESP 里的设备树是 11 月 8 日的旧文件（13628 字节，无 UFS 节点），而 DarwinBoot 读的正是它（kernel.macho.adt）。我们 11-16 加的 UFS 节点从未刷进 ESP。已修：make-payload-vol.sh 现在自动用最新的 out/nio.adt 刷新卷里的 .adt；下一步是刷一次 ESP（带新 ADT 的 payload 卷）。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -83,24 +83,24 @@
     }
   ],
   "next_actions": [
-    "411 那一轮上机：看 'nio: dt head=... len=... ufshc=...' 确认 deviceTreeP 是垃圾（一锤定音）",
-    "实施路 3：BootShim.S 里 .incbin ADT + 启动时拷到固定物理地址 + 改写 x0 指向的 boot_args 的 deviceTreeP/Length",
-    "round-image.sh 第 4 步重建 BootShim 时把 ADT 拷到位（本地构建，不占 CI）",
-    "验证：上机后面板应出现 dram-base=0x80000000（不再是 0x101000）与 'nio: ufs probe' 行"
+    "★ 刷 ESP：先 fastboot fetch esp 备份，再用新 payload 卷刷（这是分区写操作，需机主确认）",
+    "415（macos-26，含 dt 诊断）在跑 ⇒ 上机后看 'nio: dt head=... ufshc=...' 直接验证这条链",
+    "刷完 ESP 再 fastboot boot ⇒ 应出现 'nio: ufs probe #N' 与 'nio: ufs driver start enter'"
   ],
   "notes": [
-    "★ UFS 根因（2026-11-16 定位）：设备树从未加载 ⇒ UFS 节点/personality 全是下游问题。",
+    "★ UFS 根因（2026-11-16 定案）：ESP 上 \\EFI\\UniXNU\\Payloads\\kernel.macho.adt 是 11-08 的旧文件，无 UFS 节点；DarwinBoot 读它 ⇒ 内核拿到的设备树没有 UFS 节点。",
+    "★ 纪律：一次只推一个构建（机主要求，台账第 10 条）。会触发构建的路径要攒着推。",
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
-    "刷机是主动动作：watch-round.sh 默认 FLASH=0。",
+    "刷机是主动动作：watch-round.sh 默认 FLASH=0；刷 ESP 需先 fastboot fetch esp 备份。",
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
     "每轮 CI 结束后看护脚本自动更新看板。",
     "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
-    "CI 规则（机主定）：macos-15 → macos-26 → macos-15-intel；排队 3 分钟就换；两个 arm64 都排队就跳 Intel。",
+    "CI 镜像顺序：macos-26 → macos-15 → macos-15-intel；排队 3 分钟就换。",
     "开工信号：ci-started/run-N 分支是判断'拿到 runner'的依据（workflow 第 3 步推）。",
     "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。",
     "QEMU 本机：E://qemu//qemu-system-aarch64.exe（11.1.0），harness 一条命令 20 秒出结果。",
-    "QEMU monitor 走 TCP（unix socket 在 Windows 上没有）；QMP 必须先发 qmp_capabilities。",
-    "GDB：目标停下时 stub 会先回 stop reply（'T02thread:01;'），读寄存器前要先跳过它。",
+    "QEMU monitor 走 TCP；QMP 必须先发 qmp_capabilities。",
+    "GDB：目标停下时 stub 会先回 stop reply，读寄存器前要先跳过它。",
     "读内核的 boot_args：tools/boot-args.py（const_boot_args 镜像里全零 ⇒ 运行时填）。",
     "生成 patch 必须在'打过所有补丁的树'上做 A/B diff，否则会混入别的补丁的改动。"
   ],
