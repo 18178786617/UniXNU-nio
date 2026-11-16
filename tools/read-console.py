@@ -25,8 +25,19 @@ RAMOOPS_SIG = 0x43474244
 RAMOOPS_RING = 0x3F000
 
 
-def read_ramoops(path):
+def read_ramoops(path, base=None):
+    """Read the console ring out of a dump.
+
+    base is the physical address the dump starts at, so the same reader works
+    on a pmemsave of the ring alone (base None) and on a dump of the whole
+    guest memory (base 0x40000000).
+    """
     raw = pathlib.Path(path).read_bytes()
+    if base is not None:
+        off = RAMOOPS_CONSOLE - base
+        if off < 0 or off + 12 > len(raw):
+            raise SystemExit("the dump does not reach the console ring")
+        raw = raw[off:]
     if len(raw) < 12:
         raise SystemExit("dump too short: %d bytes" % len(raw))
     sig, start, size = struct.unpack_from("<III", raw, 0)
@@ -113,6 +124,8 @@ def main(argv):
                     help="the dump is a framebuffer, decode it with --font")
     ap.add_argument("--font", help="DiagFont.h with GLYPH_FONT")
     ap.add_argument("--tail", type=int, default=40, help="last N lines")
+    ap.add_argument("--base", type=lambda v: int(v, 0),
+                    help="physical address the dump starts at (whole guest memory)")
     args = ap.parse_args(argv)
 
     if args.decode:
@@ -120,7 +133,7 @@ def main(argv):
             raise SystemExit("--decode needs --font")
         lines = decode_fb(args.dump, parse_font(args.font))
     else:
-        lines = clean(read_ramoops(args.dump))
+        lines = clean(read_ramoops(args.dump, args.base))
 
     text = "\n".join(lines)
     if args.text:
