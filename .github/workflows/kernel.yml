@@ -64,7 +64,7 @@ on:
           after multiple attempts").  macos-15-intel is the x86_64 path and
           works, but it takes more than twenty minutes a round.
         required: false
-        default: "macos-15-intel"
+        default: "macos-15"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -146,7 +146,21 @@ permissions:
   contents: write
 
 concurrency:
-  group: nio-kernel-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}
+  # The group decides who waits for whom, and getting it wrong costs
+  # everything: a round that sits in the queue never gets a runner and the
+  # whole build looks broken while nothing is actually running.
+  #
+  # It used to be one group for everything, so a dispatch and a push landed
+  # in the same line and the second one waited for the first to finish --
+  # and with cancel-in-progress: false the waiting one was never withdrawn
+  # either, so the queue grew with every push.  A build that used to take
+  # nine minutes then took hours of waiting before it started.
+  #
+  # So the group names the event, the branch, the configuration and the
+  # image.  A push and a dispatch no longer wait for each other, and three
+  # images tried by hand no longer wait for each other either.  What is
+  # still serial is what should be: two pushes of the same branch.
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15' }}
   cancel-in-progress: false
 
 env:
@@ -174,7 +188,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
