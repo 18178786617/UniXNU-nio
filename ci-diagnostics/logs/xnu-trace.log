@@ -1,0 +1,15 @@
+[10:24:46] script start (bootstrap=1 jobs=4)
+  object MISSING
+  source sha d48af909f338b58d
+[10:27:02] before make (bootstrap=1 jobs=1)
+  object MISSING
+  source sha d48af909f338b58d
+[10:41:57] script start (bootstrap=0 jobs=4)
+  object 114432 bytes sha 7f754dae22a3ef0e
+  source sha d48af909f338b58d
+[10:41:58] before make (bootstrap=0 jobs=4)
+  object MISSING
+  source sha d48af909f338b58d
+[10:42:20] after make (bootstrap=0 jobs=4)
+  object 114432 bytes sha 7f754dae22a3ef0e
+  source sha d48af909f338b58d
