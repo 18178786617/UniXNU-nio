@@ -1,0 +1,87 @@
+{
+  "updated": "2026-11-16 14:00",
+  "headline": "P1：UFS 设备没上线（HCS=0x8 → DP=0），根卷挂不上，启动停在 IOKit match ret=1 之后",
+  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷 → P2 存储层 → P3 launchd 起用户态（之后才是 P3+ 各驱动）",
+  "phases": [
+    {
+      "id": "P0",
+      "name": "IOKit 匹配关",
+      "status": "done",
+      "criteria": "面板出现 SM unlocked 之后的新行",
+      "evidence": "run-380/381：SM enter → SM locked → b4busy cfg=1 → busy ok → SM unlocked，随后 nio: IOKit match ret=1。IOHIDResource 也真的匹配到了驱动并启动成功。",
+      "next": "—"
+    },
+    {
+      "id": "P1",
+      "name": "UFS 起来 + 挂上 APFS 根卷",
+      "status": "current",
+      "criteria": "根卷挂载成功的日志",
+      "evidence": "HCS=0x8：DP(设备在位)=0、UTRLRDY(链表就绪)=0 —— 设备始终没上线；控制台在 match ret=1 之后不再有新输出，启动停在这里。驱动已有 UIC 全套（DME_LINK_STARTUP=0x16）并试过唤醒，但链路没起来。",
+      "next": "两条路：(1) 走手机原厂 UEFI 建好 UFS 再交给我们（umi 验证过的路，需把 UNIXNU.EFI/DarwinBoot/载荷放进 ESP）；(2) 内核里解决 PHY 时钟（GCC 在安全域，读 0x62008 直接 abort）"
+    },
+    {
+      "id": "P2",
+      "name": "存储层（DSU 只读系统盘 / RAM 镜像根卷）",
+      "status": "todo",
+      "criteria": "/flash 挂上 DSU 里的 APFS + switch_root 成功",
+      "evidence": "配方已从小米15Pro 包里挖出：root 走 fastboot oem ramdisk，data 卷在 DSU 槽（system 4 GiB、data 32/64/128 GiB），内核挂成 /private/var。机主明确：DSU 属后面的事。",
+      "next": "P1 通了之后做"
+    },
+    {
+      "id": "P3",
+      "name": "launchd 起用户态",
+      "status": "todo",
+      "criteria": "看到 launchd / 用户态进程在跑",
+      "evidence": "boot-args 已备好 launchd_unsecure_cache=1、wdt=-1、wdt_test=no_user_checkin、-wdt_no_pmu",
+      "next": "按 ios-sweet 的墙序准备：AMFI（可用 launchd_unsecure_cache 绕过）→ watchdogd（需要 IOWatchdog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface"
+    },
+    {
+      "id": "P3+",
+      "name": "各子系统驱动（GPU/WiFi/BT/modem/audio）",
+      "status": "todo",
+      "criteria": "逐个子系统有实证",
+      "evidence": "小米10（refs/umi，同 SM8250）有完整驱动栈可参照；触摸与显示已完成",
+      "next": "P3 之后按顺序接"
+    }
+  ],
+  "rounds": [
+    {
+      "run": 384,
+      "time": "—",
+      "marker": "—",
+      "qemu": "运行中",
+      "result": "QEMU 步骤的输出这次会进已发布的 diagnostics 目录"
+    },
+    {
+      "run": 383,
+      "time": "13:55",
+      "marker": "nio: HB =yes",
+      "qemu": "失败（输出没进 diagnostics，已修）",
+      "result": "补丁 156 条全部应用干净"
+    },
+    {
+      "run": 381,
+      "time": "13:40",
+      "marker": "nio: HB =yes",
+      "qemu": "第一次尝试",
+      "result": "手机不再自动复位；V 计数涨到 29399"
+    },
+    {
+      "run": 380,
+      "time": "13:24",
+      "marker": "nio: HB =yes",
+      "qemu": "—",
+      "result": "★ 匹配完成：SM unlocked + IOKit match ret=1"
+    }
+  ],
+  "next_actions": [
+    "读 384 的 QEMU 日志（qemu-run.log / qemu-guest-errors.log / fb.bin），看匹配之后的完整启动轨迹与异常码",
+    "拍手机面板上的 UFS 相关行（控制器 HCS/HCE 诊断），确认 DP=0 的判断",
+    "若确认 DP=0，动手走「原厂 UEFI 建 UFS 链路」的路线"
+  ],
+  "notes": [
+    "校验方法：marker 必须在字节层面能失败（阴性对照）。今天上午 8 小时误判源于找一个编译器已优化掉的字符串。",
+    "刷机是主动动作：watch-round.sh 默认 FLASH=0，只打包抓日志；读完再决定是否上机。",
+    "QEMU harness 在 CI 跑道跑（brew 的 qemu-system-aarch64），产物随 diagnostics 分支发布，无需 token。"
+  ]
+}
