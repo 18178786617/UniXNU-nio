@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 18:35",
-  "headline": "CI 已切到 Intel 镜像（arm64 池整体枯竭，5 连败全是零步骤被取消）。Intel 上第一次真正跑起来就暴露了第二个问题：框架的 fetch 匿名 clone 且不重试，398 死在 'SoC sm8250 is not cached'。已推两处修复（git url 重写带 token、构建重试三次）并去掉 harness 的 4GB 转储，399 正在构建。",
+  "updated": "2026-11-16 19:00",
+  "headline": "399 在 Intel 上第一次真正构建出内核（sha256 5f84c8b8，指纹 nio: HB =yes）。token 重写让 SoC 模块到位，三次重试救下了第一次链接失败。QEMU 只差最后一个 bug：QMP 协议必须先握手 qmp_capabilities。已修并切回 macos-26，400 在跑。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,31 +47,31 @@
   ],
   "rounds": [
     {
-      "run": 399,
-      "time": "18:22",
+      "run": 400,
+      "time": "19:00",
       "marker": "—",
-      "qemu": "Intel；带 token 重写 + 三次重试 + 无 4GB 转储",
-      "result": "构建中"
+      "qemu": "macos-26；带 QMP 握手修复",
+      "result": "争取拿到 console.txt"
+    },
+    {
+      "run": 399,
+      "time": "18:46",
+      "marker": "nio: HB =yes",
+      "qemu": "★ 内核构建成功（sha256 5f84c8b8）；QMP 缺握手",
+      "result": "已修 QMP 握手"
     },
     {
       "run": 398,
       "time": "18:06",
       "marker": "—",
-      "qemu": "★ Intel 首次真跑；死在匿名 clone 失败",
-      "result": "已修（url 重写 + 重试）"
+      "qemu": "Intel 首次真跑；死在匿名 clone",
+      "result": "已修（token 重写 + 重试）"
     },
     {
       "run": 397,
       "time": "17:42",
       "marker": "—",
       "qemu": "arm64 池满，19 分钟零步骤",
-      "result": "失败"
-    },
-    {
-      "run": 396,
-      "time": "17:27",
-      "marker": "—",
-      "qemu": "arm64 池满，15 分钟零步骤",
       "result": "失败"
     },
     {
@@ -97,9 +97,9 @@
     }
   ],
   "next_actions": [
-    "399 出结果：ci-kernel/run-399 出现 ⇒ 主管自动打包，我立刻读 console.txt",
-    "若又是 ci-logs/run-399：读 status.txt（多半还是 clone，需要把 token 重写也用在 feeds 目录上）",
-    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了）"
+    "400 出结果：ci-kernel/run-400 ⇒ 主管自动打包，我立刻读 console.txt",
+    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了，驱动被匹配）",
+    "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）"
   ],
   "notes": [
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
