@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 17:40",
-  "headline": "CI 主管已上线（tools/ci-supervisor.sh）：轮次因 runner 容量拿不到时，自动在 macos-26 与 macos-15 之间切换并重推，不再需要人盯。393 的失败已定性为 runner 容量不足，与代码无关。",
+  "updated": "2026-11-16 17:55",
+  "headline": "arm64 runner 池整体枯竭：393(macos-15) 与 396(macos-26) 都被官方 annotation 证实为容量问题（零步骤、15 分钟被掐）。CI 主管已改为三镜像轮换（macos-26 → macos-15 → macos-15-intel，Intel 是另一个池），不用人盯，自动续跑。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,45 +47,52 @@
   ],
   "rounds": [
     {
+      "run": 397,
+      "time": "17:42",
+      "marker": "—",
+      "qemu": "排队中（macos-26）",
+      "result": "等 runner"
+    },
+    {
       "run": 396,
       "time": "17:27",
       "marker": "—",
-      "qemu": "macos-26；harness 已修（绝对路径/QMP 错误可见/兜底）",
-      "result": "争取拿到 console.txt"
+      "qemu": "★ arm64 池满，15 分钟零步骤被掐",
+      "result": "官方 annotation 证实"
     },
     {
       "run": 395,
       "time": "17:26",
       "marker": "—",
-      "qemu": "被 396 挤掉（concurrency 只留最新）",
+      "qemu": "被 397 挤掉（concurrency）",
       "result": "cancelled"
     },
     {
       "run": 394,
       "time": "17:22",
       "marker": "—",
-      "qemu": "macos-15 排队等 runner",
-      "result": "可能仍会因容量超时"
+      "qemu": "arm64 池满，8 分钟被掐",
+      "result": "cancelled"
     },
     {
       "run": 393,
       "time": "16:31",
       "marker": "—",
-      "qemu": "★ 不是构建错误：arm64 池无容量，job 零步骤被取消",
+      "qemu": "★ arm64 池满，15 分钟零步骤被掐",
       "result": "官方 annotation 证实"
     },
     {
       "run": 392,
       "time": "16:11",
       "marker": "nio: HB =yes",
-      "qemu": "内核跑满 90 秒无异常；pmemsave 相对路径",
-      "result": "已修（绝对路径）"
+      "qemu": "内核跑满 90 秒无异常",
+      "result": "harness 已能启动内核"
     },
     {
       "run": 391,
       "time": "16:05",
       "marker": "nio: HB =yes",
-      "qemu": "★ 内核在 QEMU 里跑起来 90 秒，guest errors 为空",
+      "qemu": "★ 内核在 QEMU 里跑起来",
       "result": "QMP 路径类型已修"
     },
     {
@@ -107,10 +114,10 @@
     "进 fastboot 一律用 adb reboot bootloader，不依赖音量键。",
     "每轮 CI 结束后看护脚本自动更新看板。",
     "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
-    "CI 镜像：macos-26 优先（约 9 分钟），macos-15 第二（同一架构不同容量池），不用 Intel（>20 分钟）。",
+    "CI 镜像三选一：macos-26 → macos-15 → macos-15-intel。前两个同一池，Intel 另一个池；池满时只有 Intel 能跑。",
     "runs-on 数组是 AND 语义，不能用 [a, b] 做多镜像回退。",
     "被取消的轮次不留分支 ⇒ 不能用轮次号+1 预测下一轮。",
-    "concurrency 只保留最新一次 push 的轮次。",
-    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs 判读；需要 API 时用 WebFetch。"
+    "concurrency 只保留最新一次 push 的轮次 ⇒ 推 paths 里的目录会挤掉排队的轮次。",
+    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs；需要 API 时用 WebFetch。"
   ]
 }
