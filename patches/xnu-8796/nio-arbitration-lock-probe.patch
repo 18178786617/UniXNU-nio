@@ -1,26 +1,26 @@
-Trace every arbitration lock acquire and release by thread
+Mark the take side of the arbitration lock
 
-run-297 shows two threads alternating and the last one never getting the lock;
-the pair of prints here says which thread released last and which one is asking,
-without needing the queue internals.
+run-372 shows B Arm as the last service name and then only U1 U2T U3 from other
+threads: the name is written before the console print, so the thread stops
+somewhere after it -- in the print or in lockForArbitration, which had no marks
+at all.  L1 before the global take and L2 once it is held separates a thread
+waiting for the lock from a console that stopped printing.
 ---
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
-index 6d7dd7e..144c4e7 100644
+index a2a6fd8..0673f28 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -1610,6 +1610,7 @@ IOService::setPMRootDomain( class IOPMrootDomain * rootDomain)
- bool
- IOService::lockForArbitration( bool isSuccessRequired )
- {
-+	printf("\nnio: LA want t=%p", current_thread());
- 	bool                          found;
- 	bool                          success;
- 	ArbitrationLockQueueElement * element;
-@@ -1880,6 +1881,7 @@ restart_sleep:                  wait_result = assert_wait( element,
- void
- IOService::unlockForArbitration( void )
- {
-+	printf("\nnio: LA free t=%p", current_thread());
- 	bool                          found;
- 	ArbitrationLockQueueElement * element;
+@@ -1693,8 +1693,13 @@ IOService::lockForArbitration( bool isSuccessRequired )
  
+ 	enum { kPutOnFreeQueue, kPutOnActiveQueue, kPutOnWaitingQueue } action;
+ 
++	/* nio: the lock side of the arbitration had no marks, so a thread that
++	 * stops here looks exactly like a console failure -- the panel shows
++	 * 'B Arm' and then nothing.  L1 before the take, L2 once it is held. */
++	nio_u_mark("\nL1");
+ 	// lock global access
+ 	IOTakeLock( gArbitrationLockQueueLock );
++	nio_u_mark(" L2");
+ 
+ 	// obtain an unused queue element
+ 	if (!queue_empty( &gArbitrationLockQueueFree )) {
