@@ -276,3 +276,5 @@ nio-direct-console-heartbeat.patch
 # 21:35 re-run to verify the framebuffer heartbeat strings land in the kernel
 nio-stall-framebuffer-message.patch
 nio-heartbeat-noinline.patch
+nio-arbitration-probe-decl.patch
+nio-arbitration-unlock-probe.patch

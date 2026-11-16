@@ -1,0 +1,25 @@
+Declare the arbitration probe before its first call
+
+The probe defines nio_u_mark next to the matching watchdog (line ~3918) and
+calls it from unlockForArbitration (line ~1946).  C++ wants the declaration
+first, so the file stopped with three undeclared-identifier errors -- exactly
+the failure that took the probe out of the series after run-342.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 5ea66c4..aca408e 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -88,6 +88,13 @@ enum{
+ 
+ #define super IORegistryEntry
+ 
++/* nio: the arbitration probe writes straight to the framebuffer through the
++ * console blob's writer.  Its definition sits next to the matching watchdog
++ * further down the file, so the calls in unlockForArbitration need this
++ * declaration; without it the compiler stops with one "use of undeclared
++ * identifier" per call, which is what run-342 hit and left in the series. */
++static void nio_u_mark(const char *s);
++
+ OSDefineMetaClassAndStructors(IOService, IORegistryEntry)
+ 
+ OSDefineMetaClassAndStructors(_IOServiceNotifier, IONotifier)
