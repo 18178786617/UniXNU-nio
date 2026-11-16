@@ -108,6 +108,25 @@ public:
 
 OSDefineMetaClassAndStructors (NioUfs, IOService)
 
+/*
+ * nio: say that the driver is in the kernel at all.
+ *
+ * This driver is linked into the kernel as a static archive, so it has no
+ * bundle, no prelink record entry and no OSKext object -- which means its
+ * Info.plist was never read by anything, and the personality in it never
+ * reached the matcher.  The kernel published that personality itself for
+ * a while (patch nio-static-kext-personalities), but the first thing to
+ * know is whether this file is even in the image that is running, and
+ * whether the class took its name.
+ */
+__attribute__((constructor)) static void nio_ufs_linked_in (void)
+{
+  // The metaclass is not touched here: the order in which the kernel's
+  // static constructors run is the linker's business, and reading
+  // gMetaClass before it is filled in would be a wild pointer.
+  printf ("\nnio: ufs driver is linked in\n");
+}
+
 static uint32_t read32 (uintptr_t base, unsigned offset)
 {
   return *reinterpret_cast<volatile uint32_t *> (base + offset);

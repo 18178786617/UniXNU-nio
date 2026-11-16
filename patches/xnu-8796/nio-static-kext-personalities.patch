@@ -1,0 +1,89 @@
+Publish the personalities of the drivers linked in as static archives
+
+A personality is normally published by OSKext, out of the kext's own info
+dictionary.  A static archive has no info dictionary: it is not a bundle, it
+is not in the prelink record, and there is no OSKext object for it, so
+nothing ever read the IOKitPersonalities in its Info.plist.
+
+The prelink record of this kernel holds thirty-six entries and every one of
+them is an Apple kext.  The two drivers on this board that matter are not
+among them: the platform expert that reads the device tree, and the storage
+driver that talks to the UFS controller.  Both are force-loaded static
+archives, so both had no way to be matched, their start() was never called,
+and their Info.plist files described wishes nobody heard.
+
+That is why the controller was never matched, however many times the device
+tree was fixed: the driver was never offered to the matcher in the first
+place.  The node in the tree, the compatible string and the probe score
+were all correct, and none of them could matter.
+
+The catalogue is the one OSKext publishes into, and this is the moment to
+use it: the matching sweep starts in the call below and reads what is in
+the catalogue when it starts.  The three personalities are the ones the two
+Info.plist files describe, including the second one for the storage driver
+that attaches to the root device -- the driver's own start() does no work
+unless its provider is one of those.
+
+---
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -187,6 +187,57 @@
+ 	 * the way out: a panel that shows match go and no match ret is still
+ 	 * matching, one that shows both has moved on to bsd_init. */
+ 	printf("\nnio: IOKit match go");
++	/*
++	 * nio: publish the personalities of the drivers that are linked into
++	 * this kernel as static archives.
++	 *
++	 * A personality is normally published by OSKext, out of the kext's own
++	 * info dictionary.  A static archive has no info dictionary: it is not
++	 * a bundle, it is not in the prelink record, and there is no OSKext
++	 * object for it, so nothing ever read the IOKitPersonalities in its
++	 * Info.plist.  The two drivers on this board that matter -- the
++	 * platform expert which reads the device tree, and the storage driver
++	 * which talks to the UFS controller -- were therefore never matched,
++	 * their start() was never called, and their Info.plist files described
++	 * wishes nobody heard.
++	 *
++	 * The catalogue is the one OSKext publishes into, and this is the
++	 * moment to use it: the matching sweep starts in the call below and
++	 * reads what is in the catalogue when it starts.
++	 */
++	{
++		OSArray      *personalities = OSArray::withCapacity(3);
++		OSDictionary *platformExpert = OSDictionary::withCapacity(4);
++		OSDictionary *storage        = OSDictionary::withCapacity(3);
++		OSDictionary *storageRoot    = OSDictionary::withCapacity(3);
++
++		if (personalities != NULL && platformExpert != NULL &&
++		    storage != NULL && storageRoot != NULL) {
++			platformExpert->setObject("IOClass", OSString::withCString("ArmDTPlatform"));
++			platformExpert->setObject("IOProviderClass", OSString::withCString("IOPlatformExpertDevice"));
++			platformExpert->setObject("IONameMatch", OSString::withCString("device-tree"));
++			platformExpert->setObject("IOProbeScore", OSNumber::withNumber((int)5000));
++			personalities->setObject(platformExpert);
++
++			storage->setObject("IOClass", OSString::withCString("NioUfs"));
++			storage->setObject("IOProviderClass", OSString::withCString("IOPlatformDevice"));
++			storage->setObject("IOProbeScore", OSNumber::withNumber((int)1000));
++			personalities->setObject(storage);
++
++			storageRoot->setObject("IOClass", OSString::withCString("NioUfs"));
++			storageRoot->setObject("IOProviderClass", OSString::withCString("IOPlatformExpertDevice"));
++			storageRoot->setObject("IOProbeScore", OSNumber::withNumber((int)500));
++			personalities->setObject(storageRoot);
++
++			printf("\nnio: publishing %d static personalities",
++			       (int) personalities->getCount());
++			gIOCatalogue->addDrivers(personalities, false);
++		}
++		if (personalities != NULL) { personalities->release(); }
++		if (platformExpert != NULL) { platformExpert->release(); }
++		if (storage != NULL) { storage->release(); }
++		if (storageRoot != NULL) { storageRoot->release(); }
++	}
+ 	bool ok = gRootNub->startIOServiceMatching();
+ 	printf("\nnio: IOKit match ret=%d", (int) ok);
+ 	if (__improbable(!ok)) {
