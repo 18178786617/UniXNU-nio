@@ -223,6 +223,7 @@ def qmp_exec(sock_path, command, arguments=None):
     for the serial port, and QEMU refuses to hand stdio to two character
     devices (it then exits before the gdb port is ever opened).
     """
+    sock_path = str(sock_path)
     deadline = time.time() + 30
     while time.time() < deadline:
         if os.path.exists(sock_path):
@@ -409,6 +410,11 @@ def main(argv):
         qmp_exec(qmp_sock, "pmemsave", {"val": FRAMEBUFFER_BASE,
                                         "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
                                         "filename": str(outdir / "fb.bin")})
+        # pmemsave writes the file from the monitor thread, so wait for it.
+        for _ in range(50):
+            if (outdir / "fb.bin").is_file():
+                break
+            time.sleep(0.2)
     except Exception as exc:               # noqa: BLE001
         print("pmemsave failed:", exc)
 
@@ -429,6 +435,10 @@ def main(argv):
         qmp_exec(qmp_sock, "pmemsave", {"val": RAMOOPS_CONSOLE,
                                         "size": RAMOOPS_RING + 12,
                                         "filename": str(outdir / "ramoops.bin")})
+        for _ in range(50):
+            if (outdir / "ramoops.bin").is_file():
+                break
+            time.sleep(0.2)
         raw = (outdir / "ramoops.bin").read_bytes()
         sig, start, size = struct.unpack_from("<III", raw, 0)
         if sig == 0x43474244:
