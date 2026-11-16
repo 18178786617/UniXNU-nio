@@ -216,51 +216,77 @@ class Rsp:
         self.sock.sendall(b"$" + body + b"#" + ("%02x" % (sum(body) % 256)).encode())
 
 
-def qmp_exec(sock_path, command, arguments=None):
-    """Send one QMP command over the monitor socket and read the reply.
+class Qmp:
+    """The monitor, kept open for the whole run.
 
-    The monitor lives on its own unix socket: -nographic already wants stdio
-    for the serial port, and QEMU refuses to hand stdio to two character
-    devices (it then exits before the gdb port is ever opened).
+    QEMU's monitor speaks QMP, which only starts after the capabilities have
+    been negotiated: until the qmp_capabilities command has been sent, every
+    command is refused with "Expecting capabilities negotiation with
+    'qmp_capabilities'".  The connection is kept open because the monitor is
+    a single client, and reopening it for every command is how a second
+    connection ends up talking to nobody.
     """
-    sock_path = str(sock_path)
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        if os.path.exists(sock_path):
-            break
-        time.sleep(0.2)
-    else:
-        raise RuntimeError("qmp socket never appeared: %s" % sock_path)
 
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(30)
-    sock.connect(sock_path)
-    try:
-        # greeting, then the command
-        greeting = sock.recv(4096)
-        sock.sendall(json.dumps({"execute": command,
-                                 "arguments": arguments or {}}).encode() + b"\n")
-        buf = b""
-        while b"\n" not in buf:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            buf += chunk
-        for line in buf.split(b"\n"):
-            line = line.strip()
-            if line.startswith(b"{"):
+    def __init__(self, sock_path, wait=30):
+        sock_path = str(sock_path)
+        deadline = time.time() + wait
+        last = None
+        while time.time() < deadline:
+            if os.path.exists(sock_path):
                 try:
-                    reply = json.loads(line.decode())
-                except ValueError:
-                    continue
-                if "error" in reply:
-                    raise RuntimeError("qmp %s failed: %s"
-                                       % (command, reply.get("error")))
-                if "return" in reply:
-                    return reply
+                    self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    self.sock.settimeout(30)
+                    self.sock.connect(sock_path)
+                    break
+                except OSError as exc:
+                    # the socket file appears before the monitor accepts a
+                    # client, so the connect can still fail
+                    last = exc
+                    try:
+                        self.sock.close()
+                    except Exception:          # noqa: BLE001
+                        pass
+            time.sleep(0.2)
+        else:
+            raise RuntimeError("could not connect to the monitor: %s (%s)"
+                               % (sock_path, last))
+
+        self.pending = b""
+        self._readline()                      # the greeting
+        self.execute("qmp_capabilities")
+
+    def _readline(self):
+        while b"\n" not in self.pending:
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise RuntimeError("the monitor closed the connection")
+            self.pending += chunk
+        line, self.pending = self.pending.split(b"\n", 1)
+        return line
+
+    def execute(self, command, arguments=None):
+        """Send one command and return its reply."""
+        self.sock.sendall(json.dumps({"execute": command,
+                                      "arguments": arguments or {}}).encode() + b"\n")
+        while True:
+            line = self._readline().strip()
+            if not line.startswith(b"{"):
+                continue
+            try:
+                reply = json.loads(line.decode())
+            except ValueError:
+                continue
+            if "error" in reply:
+                raise RuntimeError("qmp %s failed: %s" % (command, reply.get("error")))
+            if "return" in reply:
+                return reply
         return None
-    finally:
-        sock.close()
+
+    def close(self):
+        try:
+            self.sock.close()
+        except Exception:                      # noqa: BLE001
+            pass
 
 
 def write_png(path, width, height, rgba):
@@ -405,14 +431,25 @@ def main(argv):
     print("registers set: x0=0x%x pc=0x%x" % (ba_pa, entry_pa))
     rsp.cont()
 
+    # The monitor is opened while the guest is still running: once QEMU is
+    # terminated there is nobody left to talk to, and the socket file stays
+    # behind on the disk.
+    qmp = None
+    try:
+        qmp = Qmp(qmp_sock)
+    except Exception as exc:                   # noqa: BLE001
+        print("could not open the monitor:", exc)
+
     deadline = time.time() + args.seconds
     while time.time() < deadline and proc.poll() is None:
         time.sleep(1)
 
     try:
-        qmp_exec(qmp_sock, "pmemsave", {"val": FRAMEBUFFER_BASE,
-                                        "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
-                                        "filename": str((outdir / "fb.bin").resolve())})
+        if qmp is None:
+            raise RuntimeError("no monitor")
+        qmp.execute("pmemsave", {"val": FRAMEBUFFER_BASE,
+                                  "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
+                                  "filename": str((outdir / "fb.bin").resolve())})
         # pmemsave writes the file from the monitor thread, so wait for it.
         for _ in range(50):
             if (outdir / "fb.bin").is_file():
@@ -426,9 +463,11 @@ def main(argv):
         # carries more than a hundred megabytes, and the artifact would be
         # just as unwelcome.
         try:
-            qmp_exec(qmp_sock, "pmemsave",
-                     {"val": RAMOOPS_CONSOLE, "size": RAMOOPS_RING + 12,
-                      "filename": str((outdir / "ramoops.bin").resolve())})
+            if qmp is None:
+                raise RuntimeError("no monitor")
+            qmp.execute("pmemsave",
+                        {"val": RAMOOPS_CONSOLE, "size": RAMOOPS_RING + 12,
+                         "filename": str((outdir / "ramoops.bin").resolve())})
             for _ in range(50):
                 if (outdir / "ramoops.bin").is_file():
                     break
@@ -451,9 +490,11 @@ def main(argv):
 
     # The console ring: plain text, so it can be read as it is.
     try:
-        qmp_exec(qmp_sock, "pmemsave", {"val": RAMOOPS_CONSOLE,
-                                        "size": RAMOOPS_RING + 12,
-                                        "filename": str((outdir / "ramoops.bin").resolve())})
+        if qmp is None:
+            raise RuntimeError("no monitor")
+        qmp.execute("pmemsave", {"val": RAMOOPS_CONSOLE,
+                                  "size": RAMOOPS_RING + 12,
+                                  "filename": str((outdir / "ramoops.bin").resolve())})
         for _ in range(50):
             if (outdir / "ramoops.bin").is_file():
                 break
@@ -474,6 +515,9 @@ def main(argv):
             print("console ring: signature mismatch (0x%08x)" % sig)
     except Exception as exc:               # noqa: BLE001
         print("ramoops read failed:", exc)
+
+    if qmp is not None:
+        qmp.close()
 
     try:
         proc.terminate()
