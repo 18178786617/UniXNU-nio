@@ -297,10 +297,14 @@ def main(argv):
           % (virt_base, KERNEL_PHYS_BASE, entry, (entry + pa_offset) & 0xFFFFFFFFFFFFFFFF))
     print("adt pa 0x%x len %d   boot_args pa 0x%x" % (adt_pa, len(adt), ba_pa))
 
+    qemu_log = work / "qemu-stderr.log"
     cmd = [args.qemu, "-M", "virt,gic-version=3", "-cpu", "cortex-a76",
            "-m", str(RAM_SIZE // (1024 * 1024)), "-smp", str(args.smp),
            "-nographic", "-no-reboot", "-S", "-gdb", "tcp::1234",
-           "-qmp", "stdio"]
+           "-qmp", "stdio",
+           # guest_errors is what turns a data abort inside the kernel into a
+           # line we can read: ESR, FAR and the faulting virtual address.
+           "-d", "guest_errors", "-D", str(qemu_log)]
     for path, phys in loaders:
         cmd += ["-device", "loader,file=%s,addr=0x%x" % (path, phys)]
 
@@ -345,6 +349,12 @@ def main(argv):
     if proc.poll() is None:
         proc.kill()
     log.close()
+
+    if qemu_log.is_file():
+        text = qemu_log.read_text(errors="replace")
+        (outdir / "qemu-guest-errors.log").write_text(text)
+        if text.strip():
+            print("guest errors://n" + text[:2000])
 
     fb = outdir / "fb.bin"
     if fb.is_file() and fb.stat().st_size:

@@ -616,6 +616,15 @@ jobs:
             --adt out/qemu/kernel.adt --cmdline "$cmdline" \
             --seconds 90 --out out/qemu
           ls -la out/qemu || true
+          # The artifacts of a workflow run cannot be pulled without a token,
+          # so the QEMU output goes into the diagnostics tree as well.
+          base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
+          if [ -n "$base" ] && [ -d out/qemu ]; then
+            mkdir -p "$base/logs"
+            cp out/qemu/qemu.log out/qemu/qemu-guest-errors.log \
+               out/qemu/fb.bin "$base/logs/" 2>/dev/null || true
+            ls -la "$base/logs" | head -20
+          fi
 
       - name: Upload the QEMU framebuffer
         if: always()
