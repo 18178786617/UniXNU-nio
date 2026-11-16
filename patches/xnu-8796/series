@@ -281,3 +281,4 @@ nio-arbitration-unlock-probe.patch
 nio-arbitration-probe-u3.patch
 nio-start-name-direct.patch
 nio-arbitration-lock-probe.patch
+nio-mark-service-seq.patch
