@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 17:30",
-  "headline": "run-393 不是构建错误：GitHub 的 macOS arm64 runner 池没容量，job 一个步骤都没跑就被取消（官方 annotation 原文）。已按机主要求把默认镜像改成 macos-26（约 9 分钟），macos-15 留作第二镜像，Intel 不用。396 正在跑，带已修好的 QEMU harness。",
+  "updated": "2026-11-16 17:40",
+  "headline": "CI 主管已上线（tools/ci-supervisor.sh）：轮次因 runner 容量拿不到时，自动在 macos-26 与 macos-15 之间切换并重推，不再需要人盯。393 的失败已定性为 runner 容量不足，与代码无关。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -97,8 +97,8 @@
     }
   ],
   "next_actions": [
-    "读 396 的 console.txt（ramoops 环）——第一次拿到内核完整控制台文本",
-    "在文本里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了，驱动被匹配）",
+    "CI 主管在看：任何 >392 的新分支出现即自动打包（成功后我读 console.txt）",
+    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了）",
     "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）"
   ],
   "notes": [
@@ -109,6 +109,8 @@
     "凡是'我记得协议是这样'的约定，一律找权威出处核对。",
     "CI 镜像：macos-26 优先（约 9 分钟），macos-15 第二（同一架构不同容量池），不用 Intel（>20 分钟）。",
     "runs-on 数组是 AND 语义，不能用 [a, b] 做多镜像回退。",
-    "concurrency 只保留最新一次 push 的轮次：推 workflow 会让还没开始的轮次作废。"
+    "被取消的轮次不留分支 ⇒ 不能用轮次号+1 预测下一轮。",
+    "concurrency 只保留最新一次 push 的轮次。",
+    "api.github.com 本机被代理挡（502）⇒ 脚本只用 git refs 判读；需要 API 时用 WebFetch。"
   ]
 }
