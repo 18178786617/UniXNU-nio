@@ -253,7 +253,10 @@ def qmp_exec(sock_path, command, arguments=None):
                     reply = json.loads(line.decode())
                 except ValueError:
                     continue
-                if "return" in reply or "error" in reply:
+                if "error" in reply:
+                    raise RuntimeError("qmp %s failed: %s"
+                                       % (command, reply.get("error")))
+                if "return" in reply:
                     return reply
         return None
     finally:
@@ -409,7 +412,7 @@ def main(argv):
     try:
         qmp_exec(qmp_sock, "pmemsave", {"val": FRAMEBUFFER_BASE,
                                         "size": FRAMEBUFFER_PITCH * FRAMEBUFFER_HEIGHT,
-                                        "filename": str(outdir / "fb.bin")})
+                                        "filename": str((outdir / "fb.bin").resolve())})
         # pmemsave writes the file from the monitor thread, so wait for it.
         for _ in range(50):
             if (outdir / "fb.bin").is_file():
@@ -417,6 +420,15 @@ def main(argv):
             time.sleep(0.2)
     except Exception as exc:               # noqa: BLE001
         print("pmemsave failed:", exc)
+        # Fall back to dumping the whole guest memory: the region of interest
+        # can be carved out of it afterwards.
+        try:
+            qmp_exec(qmp_sock, "dump-guest-memory",
+                     {"filename": str((outdir / "guest-memory.bin").resolve()),
+                      "size": RAM_SIZE, "val": 0x40000000})
+            print("dumped the whole guest memory instead")
+        except Exception as exc2:          # noqa: BLE001
+            print("guest memory dump failed:", exc2)
 
     # The serial port went to a file; it carries whatever the kernel printed
     # before the framebuffer console came up.
@@ -434,7 +446,7 @@ def main(argv):
     try:
         qmp_exec(qmp_sock, "pmemsave", {"val": RAMOOPS_CONSOLE,
                                         "size": RAMOOPS_RING + 12,
-                                        "filename": str(outdir / "ramoops.bin")})
+                                        "filename": str((outdir / "ramoops.bin").resolve())})
         for _ in range(50):
             if (outdir / "ramoops.bin").is_file():
                 break
@@ -455,6 +467,19 @@ def main(argv):
             print("console ring: signature mismatch (0x%08x)" % sig)
     except Exception as exc:               # noqa: BLE001
         print("ramoops read failed:", exc)
+        guest = outdir / "guest-memory.bin"
+        if guest.is_file():
+            base = 0x40000000
+            off = RAMOOPS_CONSOLE - base
+            blob = guest.read_bytes()[off:off + RAMOOPS_RING + 12]
+            sig, start, size = struct.unpack_from("<III", blob, 0)
+            if sig == 0x43474244:
+                ring = blob[12:12 + min(size or RAMOOPS_RING, RAMOOPS_RING)]
+                (outdir / "console.txt").write_text(ring.decode("latin1"),
+                                                    encoding="utf-8")
+                print("console ring carved out of the guest memory dump")
+            else:
+                print("console ring not present (sig 0x%08x)" % sig)
 
     try:
         proc.terminate()
