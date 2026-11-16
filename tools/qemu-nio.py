@@ -155,59 +155,65 @@ def build_boot_args(virt_base, phys_base, mem_size, adt_va, adt_len, cmdline):
 
 
 class Rsp:
-    """Just enough of the GDB remote protocol to set two registers."""
+    """Just enough of the GDB remote protocol to set two registers.
+
+    The packet reader buffers: the stub's acknowledgement can arrive before
+    or after the reply, so a reader that expects a fixed order desynchronises
+    and then sees the '#' of a checksum as if it were the start of a packet.
+    """
+
+    # aarch64 register numbers as the remote protocol numbers them:
+    # 0..30 are x0..x30, 31 is sp, 32 is pc, 33 is cpsr.
+    REG_PC = 32
 
     def __init__(self, host, port):
         self.sock = socket.create_connection((host, port), timeout=20)
         self.sock.settimeout(20)
+        self.pending = bytearray()
 
-    def _read(self, count):
-        buf = b""
-        while len(buf) < count:
-            chunk = self.sock.recv(count - len(buf))
+    def _receive(self):
+        while True:
+            start = self.pending.find(b"$")
+            if start < 0:
+                # acknowledgements and noise before the reply
+                self.pending.clear()
+            else:
+                del self.pending[:start]
+                end = self.pending.find(b"#", 1)
+                if end >= 0 and len(self.pending) >= end + 3:
+                    data = self.pending[1:end]
+                    checksum = self.pending[end + 1:end + 3]
+                    del self.pending[:end + 3]
+                    if int(checksum, 16) != sum(data) % 256:
+                        raise RuntimeError("gdb checksum mismatch")
+                    self.sock.sendall(b"+")
+                    return data.decode()
+            chunk = self.sock.recv(65536)
             if not chunk:
-                raise EOFError("gdb stub closed")
-            buf += chunk
-        return buf
+                raise RuntimeError("gdb connection closed")
+            self.pending.extend(chunk)
 
-    def _packet(self, payload):
+    def request(self, payload):
         body = payload.encode()
-        frame = b"$" + body + b"#" + ("%02x" % (sum(body) & 0xFF)).encode()
-        self.sock.sendall(frame)
-        # the stub acknowledges with '+', optionally after the reply
-        ack = self._read(1)
-        if ack not in (b"+", b"-"):
-            # a '+' may arrive after the payload for some packets
-            pass
+        self.sock.sendall(b"$" + body + b"#" + ("%02x" % (sum(body) % 256)).encode())
+        return self._receive()
 
     def read_registers(self):
-        self._packet("g")
-        reply = self._read(1)
-        if reply != b"$":
-            raise EOFError("unexpected gdb reply %r" % reply)
-        out = b""
-        while True:
-            ch = self._read(1)
-            if ch == b"#":
-                break
-            out += ch
-        self._read(2)
-        self.sock.sendall(b"+")
-        return out
-
-    def write_registers(self, blob):
-        hexed = blob.hex()
-        self._packet("M%x,%s" % (0, hexed))
-        self.sock.sendall(b"+")
+        return bytes.fromhex(self.request("g"))
 
     def set_register(self, index, value):
-        blob = bytearray(self.read_registers())
-        struct.pack_into("<Q", blob, index * 8, value)
-        self.write_registers(bytes(blob))
+        # P<regnum>=<value> writes one register; the value is in target byte
+        # order, which is little endian for arm64.
+        raw = struct.pack("<Q", value).hex()
+        reply = self.request("P%x=%s" % (index, raw))
+        if reply != "OK":
+            raise RuntimeError("could not set register %d: %r" % (index, reply))
 
     def cont(self):
-        self._packet("c")
-        self.sock.sendall(b"+")
+        # 'c' has no reply until the target stops; the socket is only used for
+        # the reading above, so the answer is not waited for.
+        body = b"c"
+        self.sock.sendall(b"$" + body + b"#" + ("%02x" % (sum(body) % 256)).encode())
 
 
 def qmp_exec(sock_path, command, arguments=None):
@@ -390,8 +396,8 @@ def main(argv):
             (outdir / "qemu-guest-errors.log").write_text(
                 qemu_log.read_text(errors="replace"))
         return 1
-    rsp.set_register(0, ba_pa)          # x0 = boot_args (physical)
-    rsp.set_register(31, entry_pa)     # pc
+    rsp.set_register(0, ba_pa)               # x0 = boot_args (physical)
+    rsp.set_register(Rsp.REG_PC, entry_pa)   # pc (register 32 on arm64)
     print("registers set: x0=0x%x pc=0x%x" % (ba_pa, entry_pa))
     rsp.cont()
 
@@ -405,6 +411,18 @@ def main(argv):
                                         "filename": str(outdir / "fb.bin")})
     except Exception as exc:               # noqa: BLE001
         print("pmemsave failed:", exc)
+
+    # The serial port went to a file; it carries whatever the kernel printed
+    # before the framebuffer console came up.
+    try:
+        if serial_log.is_file():
+            text = serial_log.read_text(errors="replace")
+            (outdir / "serial.log").write_text(text, encoding="utf-8")
+            print("serial log: %d bytes" % len(text))
+            for ln in [l for l in text.splitlines() if l.strip()][-8:]:
+                print("  s| " + ln[:150])
+    except Exception as exc:               # noqa: BLE001
+        print("serial read failed:", exc)
 
     # The console ring: plain text, so it can be read as it is.
     try:
