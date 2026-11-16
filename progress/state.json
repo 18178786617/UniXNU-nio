@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 22:02",
-  "headline": "QEMU 本地跑通（E://qemu，秒级迭代），抓到内核第一个异常（prelink 空洞，QEMU 特有，与 UFS 无关）。run-387 的 UFS 节点修复已静态验证为完整正确：节点在 /arm-io 下 ✓、ArmDTPlatform 会发布每个 arm-io 子节点 ✓、compatible 匹配 ✓、映射窗口覆盖 ✓。剩下的唯一未知是运行时：NioUfs::start() 是否被调用 —— 402 内核已打包待上机。",
+  "updated": "2026-11-16 20:58",
+  "headline": "402 上机照片判读完成：面板没有 'nio: ufs driver start enter' ⇒ start() 一次都没被调用。同时 'IOKit match ret=1' 是成功（匹配门已开），NioUfs 确实链进了内核。找到真原因：Info.plist 缺了 NioUfsRoot personality（provider 必须是 IOPlatformExpertDevice 驱动才干活）。已推 probe 诊断 + 补上该 personality，下一轮上机一次定位。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,39 +47,32 @@
   ],
   "rounds": [
     {
+      "run": 410,
+      "time": "20:56",
+      "marker": "—",
+      "qemu": "带 UFS probe 诊断 + NioUfsRoot personality",
+      "result": "构建中"
+    },
+    {
+      "run": 409,
+      "time": "20:49",
+      "marker": "nio: HB =yes",
+      "qemu": "—",
+      "result": "CI 成功，已打包"
+    },
+    {
       "run": 402,
       "time": "19:09",
       "marker": "nio: HB =yes",
-      "qemu": "★★ 帧缓冲 10.9MB；QMP 握手生效",
-      "result": "内核构建成功，已打包"
-    },
-    {
-      "run": 405,
-      "time": "19:33",
-      "marker": "nio: HB =yes",
-      "qemu": "内核成功；行为与 402 可复现",
-      "result": "ci-started 开工信号验证"
+      "qemu": "★★ 帧缓冲 10.9MB；内核构建成功",
+      "result": "★ 已上机，照片判读见台账"
     },
     {
       "run": 399,
       "time": "18:22",
       "marker": "nio: HB =yes",
-      "qemu": "★ 内核构建成功（CI 判 success）",
-      "result": "token 重写 + 三次重试"
-    },
-    {
-      "run": 398,
-      "time": "18:06",
-      "marker": "—",
-      "qemu": "Intel 首次真跑；死在匿名 clone",
-      "result": "已修"
-    },
-    {
-      "run": 392,
-      "time": "16:11",
-      "marker": "nio: HB =yes",
-      "qemu": "内核跑满 90 秒无异常",
-      "result": "harness 已能启动内核"
+      "qemu": "★ 内核构建成功",
+      "result": "CI 判 success"
     },
     {
       "run": 380,
@@ -90,10 +83,10 @@
     }
   ],
   "next_actions": [
-    "上机验证 402 内核（out/Mu-nio-0.img，19:37 打包）：看面板有没有 'nio: ufs driver start enter'",
-    "有 ⇒ NioUfs::start() 被调用了（UFS 节点修复生效），下一步看 UFS 链路/时钟诊断",
-    "没有 ⇒ 匹配仍失败，回查 ArmDTPlatform 的发布顺序与 personality",
-    "CI 主管按机主规则自动跑：macos-15 → macos-26 → Intel，排队 3 分钟就换"
+    "410 构建完 → 打包 → 上机 → 看面板有没有 'nio: ufs probe #N provider=... compatible=...'",
+    "有 probe 行：compatible 对不对？不对 ⇒ 查 ADT 里 UFS 节点是否真在 /arm-io 下",
+    "没有 probe 行 ⇒ personality 没发出去，查 Info.plist 是否进了 OSBundle",
+    "若 ArmDTPlatform 仍是盲区：给 UniXNU/ArmDTPlatform 仓库加 nub 计数诊断 + 改 components.toml 的 pin"
   ],
   "notes": [
     "校验方法：marker 必须在字节层面能失败（阴性对照）。",
