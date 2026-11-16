@@ -1,0 +1,106 @@
+base=out/nio/ios-16.5-20F66/nio
+installing qemu
+[32m==>[0m [1mDownloading bottle manifests[0m
+✔︎ Bottle Manifest qemu (11.1.3)
+[34m==>[0m [1mWould install 1 formula:[0m
+qemu 11.1.3
+[34m==>[0m [1mWould install 6 dependencies for qemu:[0m
+capstone  5.0.9
+libslirp  4.9.7
+libssh    0.12.2_1
+ncurses   6.6
+snappy    1.3.1
+vde       2.3.3
+[32m==>[0m [1mFetching downloads for: [32mqemu[39m[0m
+✔︎ Bottle Manifest capstone (5.0.9)
+✔︎ Bottle Manifest libslirp (4.9.7)
+✔︎ Bottle Manifest libssh (0.12.2_1)
+✔︎ Bottle Manifest ncurses (6.6)
+✔︎ Bottle Manifest snappy (1.3.1)
+✔︎ Bottle Manifest vde (2.3.3)
+✔︎ Bottle snappy (1.3.1)
+✔︎ Bottle libslirp (4.9.7)
+✔︎ Bottle libssh (0.12.2_1)
+✔︎ Bottle capstone (5.0.9)
+✔︎ Bottle ncurses (6.6)
+✔︎ Bottle vde (2.3.3)
+✔︎ Bottle qemu (11.1.3)
+[32m==>[0m [1mInstalling dependencies for qemu:[0m [32mcapstone[39m, [32mlibslirp[39m, [32mlibssh[39m, [32mncurses[39m, [32msnappy[39m and [32mvde[39m[0m
+[32m==>[0m [1mInstalling qemu dependency: [32mcapstone[39m (5.0.9)[0m
+[34m==>[0m [1mPouring capstone--5.0.9.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/capstone/5.0.9: 31 files, 23.4MB
+[32m==>[0m [1mInstalling qemu dependency: [32mlibslirp[39m (4.9.7)[0m
+[34m==>[0m [1mPouring libslirp--4.9.7.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/libslirp/4.9.7: 13 files, 433.4KB
+[32m==>[0m [1mInstalling qemu dependency: [32mlibssh[39m (0.12.2_1)[0m
+[34m==>[0m [1mPouring libssh--0.12.2_1.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/libssh/0.12.2_1: 25 files, 1.7MB
+[32m==>[0m [1mInstalling qemu dependency: [32mncurses[39m (6.6)[0m
+[34m==>[0m [1mPouring ncurses--6.6.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/ncurses/6.6: 4,086 files, 10.3MB
+[32m==>[0m [1mInstalling qemu dependency: [32msnappy[39m (1.3.1)[0m
+[34m==>[0m [1mPouring snappy--1.3.1.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/snappy/1.3.1: 20 files, 171.6KB
+[32m==>[0m [1mInstalling qemu dependency: [32mvde[39m (2.3.3)[0m
+[34m==>[0m [1mPouring vde--2.3.3.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/vde/2.3.3: 67 files, 1.2MB
+[32m==>[0m [1mInstalling [32mqemu[39m[0m
+[34m==>[0m [1mPouring qemu--11.1.3.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/qemu/11.1.3: 170 files, 729MB
+QEMU emulator version 11.1.3
+wrote out/qemu/kernel.adt (12384 bytes) from nio-qemu-hardware.json
+cmdline: -v keepsyms=1 kt_fixed_zones=120 nio-gpu=8 native-ufs-root=1 native-ufs-probe=12 native-ufs-diagnostics=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 -wdt_no_pmu wdt=-1 wdt_test=no_user_checkin amfi_get_out_of_my_way=1 amfi_allow_any_signature=1
+kernel: out/nio/ios-16.5-20F66/nio/kernel/kernel.macho
+seg __TEXT               va 0xfffffff007004000 -> pa 0x83234000 (1474560 bytes)
+seg __DATA_CONST         va 0xfffffff00716c000 -> pa 0x8339c000 (884736 bytes)
+seg __TEXT_EXEC          va 0xfffffff007244000 -> pa 0x83474000 (8388608 bytes)
+seg __KLD                va 0xfffffff007a44000 -> pa 0x83c74000 (16384 bytes)
+seg __LASTDATA_CONST     va 0xfffffff007a48000 -> pa 0x83c78000 (16384 bytes)
+seg __KLDDATA            va 0xfffffff007a4c000 -> pa 0x83c7c000 (16384 bytes)
+seg __DATA               va 0xfffffff007a50000 -> pa 0x83c80000 (1327104 bytes)
+seg __BOOTDATA           va 0xfffffff007b94000 -> pa 0x83dc4000 (344064 bytes)
+seg __PRELINK_TEXT       va 0xfffffff003dd0000 -> pa 0x80000000 (8142848 bytes)
+seg __PRELINK_INFO       va 0xfffffff0082fc000 -> pa 0x8452c000 (446464 bytes)
+seg __PLK_TEXT_EXEC      va 0xfffffff004594000 -> pa 0x807c4000 (23904256 bytes)
+seg __PRELINK_DATA       va 0xfffffff006a04000 -> pa 0x82c34000 (1785856 bytes)
+seg __PLK_DATA_CONST     va 0xfffffff005c60000 -> pa 0x81e90000 (3817472 bytes)
+seg __LINKINFO           va 0xfffffff007be8000 -> pa 0x83e18000 (278528 bytes)
+seg __LINKEDIT           va 0xfffffff007c2c000 -> pa 0x83e5c000 (7143424 bytes)
+virt_base 0xfffffff003dd0000  phys_base 0x80000000  entry va 0xfffffff0073eb488 pa 0x8361b488
+adt pa 0x84599000 len 12384   boot_args pa 0x845a0000
++ qemu-system-aarch64 -M virt,gic-version=3 -cpu cortex-a76 -m 4096 -smp 8 -display none -no-reboot -S -gdb tcp::1234 -serial file:/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/serial.log -qmp unix:/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/qmp.sock,server=on,wait=off -d guest_errors -D /var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/qemu-stderr.log -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg00-__TEXT.bin,addr=0x83234000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg01-__DATA_CONST.bin,addr=0x8339c000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg02-__TEXT_EXEC.bin,addr=0x83474000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg03-__KLD.bin,addr=0x83c74000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg04-__LASTDATA_CONST.bin,addr=0x83c78000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg05-__KLDDATA.bin,addr=0x83c7c000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg06-__DATA.bin,addr=0x83c80000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg07-__BOOTDATA.bin,addr=0x83dc4000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg08-__PRELINK_TEXT.bin,addr=0x80000000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg09-__PRELINK_INFO.bin,addr=0x8452c000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg10-__PLK_TEXT_EXEC.bin,addr=0x807c4000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg11-__PRELINK_DATA.bin,addr=0x82c34000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg12-__PLK_DATA_CONST.bin,addr=0x81e90000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg13-__LINKINFO.bin,addr=0x83e18000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/seg14-__LINKEDIT.bin,addr=0x83e5c000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/adt.bin,addr=0x84599000 -device loader,file=/var/folders/9d/l02zfgrs7c16twd3wbpdmhkc0000gn/T/qemu-nio-wul6tzkz/bootargs.bin,addr=0x845a0000
+registers set: x0=0x845a0000 pc=0x8361b488
+pmemsave failed: a bytes-like object is required, not 'PosixPath'
+serial log: 0 bytes
+ramoops read failed: a bytes-like object is required, not 'PosixPath'
+qemu log -> out/qemu/qemu.log
+total 40
+drwxr-xr-x  6 runner  staff    192 Nov 16 08:06 .
+drwxr-xr-x  7 runner  staff    224 Nov 16 08:04 ..
+-rw-r--r--  1 runner  staff  12384 Nov 16 08:04 kernel.adt
+-rw-r--r--  1 runner  staff      0 Nov 16 08:06 qemu-guest-errors.log
+-rw-r--r--  1 runner  staff     81 Nov 16 08:06 qemu.log
+-rw-r--r--  1 runner  staff      0 Nov 16 08:06 serial.log
+missing out/qemu/fb.bin
+missing out/qemu/console.txt
+missing out/qemu/fb.png
+total 624592
+drwxr-xr-x  27 runner  staff        864 Nov 16 08:06 .
+drwxr-xr-x   8 runner  staff        256 Nov 16 08:04 ..
+-rw-r--r--   1 runner  staff        227 Nov 16 08:03 archive-01-build-corecrypto-14.log
+-rw-r--r--   1 runner  staff        237 Nov 16 08:03 archive-02-build-corecrypto-14.log
+-rw-r--r--   1 runner  staff         72 Nov 16 08:03 archive-06-build-software-aes-bindings.log
+-rw-r--r--   1 runner  staff        177 Nov 16 08:03 archive-07-build-mockfs-fixture.log
+-rw-r--r--   1 runner  staff        308 Nov 16 08:03 archive-08-build-libpthread-kernel.log
+-rw-r--r--   1 runner  staff        167 Nov 16 08:03 archive-09-build-adreno650.log
+-rw-r--r--   1 runner  staff        409 Nov 16 08:03 archive-10-build-link-stubs.log
+-rw-r--r--   1 runner  staff        156 Nov 16 08:03 archive-12-build-nio-ufs-archive.log
+-rw-r--r--   1 runner  staff       2733 Nov 16 08:03 archive-13-build-storage-bindings.log
+-rw-r--r--   1 runner  staff        156 Nov 16 08:03 archive-14-build-verified-root.log
+-rw-r--r--   1 runner  staff       8101 Nov 16 08:04 ci-steps.log
+-rw-r--r--   1 runner  staff         66 Nov 16 08:03 component-ArmCpu.log
+-rw-r--r--   1 runner  staff         73 Nov 16 08:03 component-ArmDTPlatform.log
+-rw-r--r--   1 runner  staff         66 Nov 16 08:03 component-NioUfs.log
+-rw-r--r--   1 runner  staff         71 Nov 16 08:03 component-SoftwareAES.log
+-rw-r--r--   1 runner  staff  303626215 Nov 16 08:02 kernel-bootstrap.log
+-rw-r--r--   1 runner  staff     909416 Nov 16 08:04 kernel.log
