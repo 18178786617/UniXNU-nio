@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-16 19:00",
-  "headline": "399 在 Intel 上第一次真正构建出内核（sha256 5f84c8b8，指纹 nio: HB =yes）。token 重写让 SoC 模块到位，三次重试救下了第一次链接失败。QEMU 只差最后一个 bug：QMP 协议必须先握手 qmp_capabilities。已修并切回 macos-26，400 在跑。",
+  "updated": "2026-11-16 19:10",
+  "headline": "402 在 Intel 上跑（带 QMP 握手修复）—— 这是第一次有机会拿到内核的完整控制台文本。399 已经在 Intel 上成功构建出内核（sha256 5f84c8b8，指纹 nio: HB =yes），当时只差 QMP 的 capabilities 协商。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,32 +47,39 @@
   ],
   "rounds": [
     {
-      "run": 400,
-      "time": "19:00",
+      "run": 402,
+      "time": "19:09",
       "marker": "—",
-      "qemu": "macos-26；带 QMP 握手修复",
+      "qemu": "Intel；带 QMP 握手修复",
       "result": "争取拿到 console.txt"
     },
     {
+      "run": 401,
+      "time": "19:07",
+      "marker": "—",
+      "qemu": "arm64 池排队，被取消",
+      "result": "机主取消"
+    },
+    {
+      "run": 400,
+      "time": "19:00",
+      "marker": "—",
+      "qemu": "arm64 池排队，被取消",
+      "result": "机主取消"
+    },
+    {
       "run": 399,
-      "time": "18:46",
+      "time": "18:22",
       "marker": "nio: HB =yes",
-      "qemu": "★ 内核构建成功（sha256 5f84c8b8）；QMP 缺握手",
-      "result": "已修 QMP 握手"
+      "qemu": "★ 内核构建成功；QMP 缺握手",
+      "result": "CI 判 success"
     },
     {
       "run": 398,
       "time": "18:06",
       "marker": "—",
       "qemu": "Intel 首次真跑；死在匿名 clone",
-      "result": "已修（token 重写 + 重试）"
-    },
-    {
-      "run": 397,
-      "time": "17:42",
-      "marker": "—",
-      "qemu": "arm64 池满，19 分钟零步骤",
-      "result": "失败"
+      "result": "已修"
     },
     {
       "run": 392,
@@ -80,13 +87,6 @@
       "marker": "nio: HB =yes",
       "qemu": "内核跑满 90 秒无异常",
       "result": "harness 已能启动内核"
-    },
-    {
-      "run": 391,
-      "time": "16:05",
-      "marker": "nio: HB =yes",
-      "qemu": "★ 内核在 QEMU 里跑起来",
-      "result": "QMP 路径类型已修"
     },
     {
       "run": 380,
@@ -97,8 +97,8 @@
     }
   ],
   "next_actions": [
-    "400 出结果：ci-kernel/run-400 ⇒ 主管自动打包，我立刻读 console.txt",
-    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了，驱动被匹配）",
+    "402 出结果 ⇒ 主管自动打包，我立刻读 console.txt（ramoops 环，纯文本）",
+    "console.txt 里搜 'nio: ufs driver start enter'（有 ⇒ nub 通了）",
     "看 'IOKit match ret=1' 之后停在哪一行（root mount？launchd？）"
   ],
   "notes": [
