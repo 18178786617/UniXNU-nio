@@ -73,25 +73,25 @@ diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 +		if (personalities && platformExpert && storage && storageRoot &&
 +		    classPlatform && classStorage && providerExpert && providerDevice &&
 +		    nameMatch && scorePlatform && scoreStorage && scoreRoot) {
-+			platformExpert->setObject("IOClass", classPlatform.get());
-+			platformExpert->setObject("IOProviderClass", providerExpert.get());
-+			platformExpert->setObject("IONameMatch", nameMatch.get());
-+			platformExpert->setObject("IOProbeScore", scorePlatform.get());
-+			personalities->setObject(platformExpert.get());
++			platformExpert->setObject("IOClass", classPlatform);
++			platformExpert->setObject("IOProviderClass", providerExpert);
++			platformExpert->setObject("IONameMatch", nameMatch);
++			platformExpert->setObject("IOProbeScore", scorePlatform);
++			personalities->setObject(platformExpert);
 +
-+			storage->setObject("IOClass", classStorage.get());
-+			storage->setObject("IOProviderClass", providerDevice.get());
-+			storage->setObject("IOProbeScore", scoreStorage.get());
-+			personalities->setObject(storage.get());
++			storage->setObject("IOClass", classStorage);
++			storage->setObject("IOProviderClass", providerDevice);
++			storage->setObject("IOProbeScore", scoreStorage);
++			personalities->setObject(storage);
 +
-+			storageRoot->setObject("IOClass", classStorage.get());
-+			storageRoot->setObject("IOProviderClass", providerExpert.get());
-+			storageRoot->setObject("IOProbeScore", scoreRoot.get());
-+			personalities->setObject(storageRoot.get());
++			storageRoot->setObject("IOClass", classStorage);
++			storageRoot->setObject("IOProviderClass", providerExpert);
++			storageRoot->setObject("IOProbeScore", scoreRoot);
++			personalities->setObject(storageRoot);
 +
 +			printf("\nnio: publishing %d static personalities",
 +			       (int) personalities->getCount());
-+			gIOCatalogue->addDrivers(personalities.get(), false);
++			gIOCatalogue->addDrivers(personalities, false);
 +		}
 +	}
  	bool ok = gRootNub->startIOServiceMatching();
