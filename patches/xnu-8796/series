@@ -286,3 +286,4 @@ nio-name-six-and-match-rounds.patch
 nio-arbitration-out-of-path.patch
 nio-probe-entry-marks.patch
 nio-skip-unmatched-classes.patch
+nio-busy-beacon.patch
