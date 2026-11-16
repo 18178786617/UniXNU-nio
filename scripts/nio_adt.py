@@ -338,8 +338,15 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
     dist, redist = gic["distributor"], gic["redistributor"]
     # A logical translation window enclosing only the published GIC regions.
     # It does not reserve physical RAM or initialize the peripheral.
-    bus_base = min(dist["base"], redist["base"])
-    bus_size = max(dist["base"] + dist["size"], redist["base"] + redist["size"]) - bus_base
+    ufs = hardware.get("ufs")
+    regions = [(dist["base"], dist["size"]), (redist["base"], redist["size"])]
+    if ufs:
+        # The UFS host controller and its PHY have to be inside the same
+        # translation window: their nubs are published from these nodes.
+        regions.append((ufs["host"]["base"], ufs["host"]["size"]))
+        regions.append((ufs["phy"]["base"], ufs["phy"]["size"]))
+    bus_base = min(base for base, _ in regions)
+    bus_size = max(base + size for base, size in regions) - bus_base
     children = [
         Node("chosen", chosen, [Node("memory-map", handoff), Node("manifest-properties")]),
         Node("cpus", children=cpus),
@@ -358,7 +365,20 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
             "reg": struct.pack("<QQQQ", dist["base"] - bus_base, dist["size"],
                                redist["base"] - bus_base, redist["size"]),
             "redistributor-stride": u64(gic["redistributor_stride"]),
-        })]),
+        })] + ([
+            Node("ufs", {
+                "compatible": string(ufs["host"]["compatible"]),
+                "reg": struct.pack("<QQ", ufs["host"]["base"] - bus_base,
+                                   ufs["host"]["size"]),
+                "device_type": string("ufs"),
+            }),
+            Node("ufsphy", {
+                "compatible": string(ufs["phy"]["compatible"]),
+                "reg": struct.pack("<QQ", ufs["phy"]["base"] - bus_base,
+                                   ufs["phy"]["size"]),
+                "device_type": string("ufs-phy"),
+            }),
+        ] if ufs else [])),
     ]
     if len(cpus) > 1:
         children.append(Node("psci", {"compatible": string(hardware["psci"]["compatible"]),

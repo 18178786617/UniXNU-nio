@@ -122,5 +122,18 @@
     "running_dtb_sha256": null,
     "evidence_snapshot": "2026-10-31 nio dump (fastboot oem partition / oem hw / getevent, LineageOS extracted DTs)",
     "uefi_fd_sha256": null
+  },
+  "ufs": {
+    "host": {
+      "base": 30949376,
+      "size": 12288,
+      "compatible": "qcom,ufshc"
+    },
+    "phy": {
+      "base": 30961664,
+      "size": 57344,
+      "compatible": "qcom,ufs-phy-qmp-v4"
+    },
+    "_note": "kona UFS host and PHY, taken from the live device tree of the Mi 10 (refs/umi/devices/xiaomi-mi-10/prebuilt/device-tree.dtb, same SoC): /soc/ufshc@1d84000 reg 0x1d84000+0x3000 and /soc/ufsphy_mem@1d87000 reg 0x1d87000+0xe000.  The driver maps UFS_HC_BASE 0x1d84000, which is exactly this address.  The nodes have to exist in the tree: ArmDTPlatform publishes a nub for every /arm-io child, and the NioUfs personality matches an IOPlatformDevice -- with no UFS node there is no nub, the driver's start() never runs, no root device is published and the root volume never appears."
   }
 }
