@@ -199,7 +199,21 @@ class Rsp:
         return self._receive()
 
     def read_registers(self):
-        return bytes.fromhex(self.request("g"))
+        # When the target stops, the stub sends a stop reply -- "T02thread:01;"
+        # for instance -- before it answers anything else.  That reply has to
+        # be read and put aside, or it is mistaken for the answer to the
+        # register request.
+        reply = self.request("g")
+        while reply.startswith("T") or reply.startswith("S") or reply.startswith("W"):
+            print("gdb stop reply: %r" % reply)
+            reply = self.request("g")
+        text = reply.strip()
+        if not text:
+            raise RuntimeError("the gdb stub returned no registers")
+        try:
+            return bytes.fromhex(text)
+        except ValueError:
+            raise RuntimeError("the gdb stub returned %r" % text[:80])
 
     def set_register(self, index, value):
         # P<regnum>=<value> writes one register; the value is in target byte
@@ -225,32 +239,27 @@ class Qmp:
     'qmp_capabilities'".  The connection is kept open because the monitor is
     a single client, and reopening it for every command is how a second
     connection ends up talking to nobody.
+
+    The monitor is reached over TCP rather than a unix socket: a unix socket
+    is not available on every host this runs on, and TCP works everywhere.
     """
 
-    def __init__(self, sock_path, wait=30):
-        sock_path = str(sock_path)
+    def __init__(self, host, port, wait=30):
         deadline = time.time() + wait
         last = None
         while time.time() < deadline:
-            if os.path.exists(sock_path):
-                try:
-                    self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                    self.sock.settimeout(30)
-                    self.sock.connect(sock_path)
-                    break
-                except OSError as exc:
-                    # the socket file appears before the monitor accepts a
-                    # client, so the connect can still fail
-                    last = exc
-                    try:
-                        self.sock.close()
-                    except Exception:          # noqa: BLE001
-                        pass
-            time.sleep(0.2)
+            try:
+                self.sock = socket.create_connection((host, port), timeout=10)
+                break
+            except OSError as exc:
+                # the monitor starts listening a moment after QEMU does
+                last = exc
+                time.sleep(0.3)
         else:
-            raise RuntimeError("could not connect to the monitor: %s (%s)"
-                               % (sock_path, last))
+            raise RuntimeError("could not connect to the monitor on %s:%s (%s)"
+                               % (host, port, last))
 
+        self.sock.settimeout(30)
         self.pending = b""
         self._readline()                      # the greeting
         self.execute("qmp_capabilities")
@@ -315,6 +324,12 @@ def main(argv):
     ap.add_argument("--out", default="out/qemu")
     ap.add_argument("--qemu", default="qemu-system-aarch64")
     ap.add_argument("--smp", type=int, default=8)
+    ap.add_argument("--qmp-port", type=int, default=4444,
+                    help="TCP port for the QEMU monitor")
+    ap.add_argument("--report-stop", action="store_true",
+                    help="say where the kernel stopped")
+    ap.add_argument("--trace-exceptions", action="store_true",
+                    help="ask QEMU to log every exception the guest takes")
     args = ap.parse_args(argv)
 
     if shutil.which(args.qemu) is None:
@@ -370,17 +385,21 @@ def main(argv):
 
     qemu_log = work / "qemu-stderr.log"
     serial_log = work / "serial.log"
-    qmp_sock = work / "qmp.sock"
+    qmp_port = args.qmp_port
     cmd = [args.qemu, "-M", "virt,gic-version=3", "-cpu", "cortex-a76",
            "-m", str(RAM_SIZE // (1024 * 1024)), "-smp", str(args.smp),
            "-display", "none", "-no-reboot", "-S", "-gdb", "tcp::1234",
            "-serial", "file:%s" % serial_log,
            # The monitor gets its own socket; stdio is taken by the serial log
            # and QEMU will not share it.
-           "-qmp", "unix:%s,server=on,wait=off" % qmp_sock,
+           "-qmp", "tcp:127.0.0.1:%d,server=on,wait=off" % qmp_port,
            # guest_errors is what turns a data abort inside the kernel into a
            # line we can read: ESR, FAR and the faulting virtual address.
-           "-d", "guest_errors", "-D", str(qemu_log)]
+           # "int" is the exception trace: it names every exception the guest
+           # takes, which is how a kernel that stops inside its own vector
+           # table says what went wrong.
+           "-d", ",".join(["guest_errors"] + (["int"] if args.trace_exceptions else [])),
+           "-D", str(qemu_log)]
     for path, phys in loaders:
         cmd += ["-device", "loader,file=%s,addr=0x%x" % (path, phys)]
 
@@ -436,13 +455,42 @@ def main(argv):
     # behind on the disk.
     qmp = None
     try:
-        qmp = Qmp(qmp_sock)
+        qmp = Qmp("127.0.0.1", qmp_port)
     except Exception as exc:                   # noqa: BLE001
         print("could not open the monitor:", exc)
 
     deadline = time.time() + args.seconds
     while time.time() < deadline and proc.poll() is None:
         time.sleep(1)
+
+    # Where did the kernel stop?  The frame buffer is black and the console
+    # ring is empty, which means the kernel did not reach the console and did
+    # not fault either.  Reading the program counter tells more than that.
+    if args.report_stop:
+        try:
+            # The gdb stub only answers while the target is stopped, and the
+            # kernel is running: the monitor has to pause the cpu first.
+            if qmp is not None:
+                qmp.execute("stop")
+                time.sleep(1)
+            blob = rsp.read_registers()
+            print("register blob: %d bytes, starts %r" % (len(blob), blob[:40]))
+            if len(blob) >= 33 * 8:
+                # index 32 is the pc and 31 is the stack pointer; the offset
+                # into the blob is the index times eight, not the index
+                pc = struct.unpack_from("<Q", blob, 32 * 8)[0]
+                sp = struct.unpack_from("<Q", blob, 31 * 8)[0]
+                x0 = struct.unpack_from("<Q", blob, 0)[0]
+                lr = struct.unpack_from("<Q", blob, 30 * 8)[0]
+                print("stopped: pc=0x%x sp=0x%x lr=0x%x x0=0x%x"
+                      % (pc, sp, lr, x0))
+                # the kernel's own text starts at this virtual address; the
+                # offset into it says how far it got
+                base = 0xfffffff003dd0000
+                if base <= pc < base + (1 << 30):
+                    print("offset into __PRELINK_TEXT: 0x%x" % (pc - base))
+        except Exception as exc:           # noqa: BLE001
+            print("could not read the registers:", exc)
 
     try:
         if qmp is None:

@@ -1,0 +1,1 @@
+round on macos-15-intel, asked for at 2026-11-16 22:09:58: the owner reported that every macos-26 and macos-15 round sat in the queue all day and only the Intel image started, so the workflow now names Intel.

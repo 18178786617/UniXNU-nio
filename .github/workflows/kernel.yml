@@ -64,7 +64,7 @@ on:
           after multiple attempts").  macos-15-intel is the x86_64 path and
           works, but it takes more than twenty minutes a round.
         required: false
-        default: "macos-15"
+        default: "macos-15-intel"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -174,7 +174,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15' }}
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
