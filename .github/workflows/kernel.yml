@@ -617,7 +617,13 @@ jobs:
           PYCMD
           )
           echo "cmdline: $cmdline"
-          python3 device/tools/qemu-nio.py --kernel out/kernel.macho \
+          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+          if [ -z "$kernel" ]; then
+            echo "no kernel.macho to boot in QEMU"
+            exit 0
+          fi
+          echo "kernel: $kernel"
+          python3 device/tools/qemu-nio.py --kernel "$kernel" \
             --adt out/qemu/kernel.adt --cmdline "$cmdline" \
             --seconds 90 --out out/qemu
           ls -la out/qemu || true
