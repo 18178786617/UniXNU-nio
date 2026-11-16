@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "device": "nio-qemu",
+  "soc": "QEMU-virt",
+  "model": "iPhone10,3",
+  "compatible": ["D22AP"],
+  "product_name": "iPhone",
+  "_note": "QEMU virt (arm64) profile for the host-side harness in tools/qemu-nio.py. The memory map is QEMU's: RAM at 0x40000000, 4 GiB, so the console blob's framebuffer at 0x9c000000 lands in ordinary memory. The GIC is the virt one (distributor 0x08000000, redistributors 0x080a0000, stride 0x20000, the same stride nio uses), PSCI is hvc because virt has no SMC conduit, and CNTFRQ is virt's 62.5 MHz.",
+  "memory_banks": [
+    { "base": 1073741824, "size": 4294967296, "source": "QEMU virt RAM: 4 GiB at 0x40000000" }
+  ],
+  "dram_total_expected": 4294967296,
+  "cpus": [
+    { "affinity": 0, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 1, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 2, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 3, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 4, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 5, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 6, "compatible": ["arm,cortex-a76"] },
+    { "affinity": 7, "compatible": ["arm,cortex-a76"] }
+  ],
+  "psci": { "compatible": "arm,psci-1.0", "method": "hvc" },
+  "timer": {
+    "frequency_hz": 62500000,
+    "virtual_timer_intid": 27,
+    "note": "QEMU virt counts at 62.5 MHz; nio counts at 19.2 MHz, so the tick rate differs between the two."
+  },
+  "gic": {
+    "compatible": "arm,gic-v3",
+    "distributor": { "base": 134217728, "size": 65536 },
+    "redistributor": { "base": 134479872, "size": 16777216 },
+    "redistributor_stride": 131072
+  }
+}

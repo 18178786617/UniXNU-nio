@@ -592,6 +592,43 @@ jobs:
           python3 device/tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
             | tee -a "${base:-out}/logs/ci-steps.log" || true
 
+      - name: Boot the kernel in QEMU
+        # The phone gives us 30 seconds and a console that dies; QEMU gives us a
+        # full console, an exception log and a framebuffer we can read back.
+        # tools/qemu-nio.py does what DarwinBoot does: place the segments, put
+        # the tree and a boot_args struct behind the kernel, jump to the entry.
+        if: always()
+        continue-on-error: true
+        run: |
+          if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
+            brew install qemu
+          fi
+          qemu-system-aarch64 --version | head -1
+          python3 scripts/make-qemu-adt.py --output out/qemu/kernel.adt
+          cmdline=$(python3 - <<'PYCMD'
+          import tomllib
+          board = tomllib.load(open("board.toml", "rb"))
+          print(" ".join(board["payload"]["kernel_args"]))
+          PYCMD
+          )
+          echo "cmdline: $cmdline"
+          python3 tools/qemu-nio.py --kernel out/kernel.macho \
+            --adt out/qemu/kernel.adt --cmdline "$cmdline" \
+            --seconds 90 --out out/qemu
+          ls -la out/qemu || true
+
+      - name: Upload the QEMU framebuffer
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-framebuffer
+          path: |
+            out/qemu/fb.png
+            out/qemu/fb.bin
+            out/qemu/qemu.log
+          if-no-files-found: ignore
+
       - name: Fingerprint where the round's marker lives
         # run-337 onward publish a core without the new strings although the
         # log shows the series applied and startup.o compiled.  Three places
