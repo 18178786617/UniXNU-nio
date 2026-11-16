@@ -1,0 +1,49 @@
+Keep the two classes this kernelcache lacks out of matching
+
+run-377 and run-378 both end on M33/2 IOHIDResource after M32/2
+AppleMobileFileIntegrity, with the candidate dropped (mx23) and no probe call:
+neither class exists in this kernel image, so their candidate lists come back
+r=5,5 every round and the same nubs return to the queue for ever.
+
+Skip matching for both by name, and say SKIP <name> on the framebuffer so the
+skip is visible.  Reversible: authentication is already off on the command line
+and the touch path is not connected yet.
+---
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index ddfa5c2..7870f25 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1119,10 +1119,29 @@ IOService::startMatching( IOOptionBits options )
+ 	 * The CPU interrupt controller has no driver to match against and only
+ 	 * needs to be linked and announced, so skip matching for it once, and
+ 	 * say so. */
+-	if (getProvider() == NULL && getName()
+-	    && !strcmp(getName(), "IOCPUInterruptController")) {
+-		printf("\nnio: SM skip cpuic");
+-		return;
++	/* nio: the three names that cannot settle.  The CPU interrupt
++	 * controller re-enters matching from a kext start; AppleMobileFileIntegrity
++	 * and IOHIDResource are Apple classes this kernelcache does not carry, and
++	 * their candidate lists end r=5,5 every round, so the same nubs come back
++	 * and the loop never drains.  Skipping is reversible: authentication is
++	 * already off on the command line and the touch path is not connected. */
++	if (getName() != NULL) {
++		const char * nio_skip_names[] = {
++			"AppleMobileFileIntegrity",
++			"IOHIDResource",
++		};
++		for (unsigned nio_i = 0; nio_i < 2; nio_i++) {
++			if (!strcmp(getName(), nio_skip_names[nio_i])) {
++				nio_u_mark("\nSKIP ");
++				nio_u_mark(nio_skip_names[nio_i]);
++				return;
++			}
++		}
++		if (getProvider() == NULL
++		    && !strcmp(getName(), "IOCPUInterruptController")) {
++			printf("\nnio: SM skip cpuic");
++			return;
++		}
+ 	}
+ 
+ 	/* nio: how many matching rounds run, against how many services start. */
