@@ -159,6 +159,10 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★ 2026-11-18 00:50 路线图与难点估算（依据：代码里的确切步骤 + 461→468 实测速率 153 分钟/7 轮）",
+    "★★★ 2026-11-17 23:47 run-470 失败：编译错误（我引入的）—— nioUfsSpin 放在文件顶部却读了定义在后面的 read32/gHost。\n      ⇒ 已加 tools/check-driver-order.py（读真实源码：函数与文件级符号对照 + printf 格式串与参数计数），\n        双向验证过（故意挪到末尾 → 报 7 处；放回 → 干净）。",
+    "★★★ 2026-11-17 23:40 run-470 前的根因：卡在 IODelay(1000)。\n      IODelay → delay_for_interval → _clock_delay_until_deadline → machine_delay_until →\n      do { WFE; mach_absolute_time(); } while (now < deadline)\n      ★ 这块板子的 mach_absolute_time 是内核用时钟中断累加的软件时基 ⇒ 中断一关就冻结；\n        而 IOKit 匹配路径就是关中断跑的 ⇒ 忙等永远不结束。\n      ★ 修法（473）：延时改用**硬件计数器 CNTPCT_EL0**（驱动已有的 timerTicks，注释明说\n        'it needs no clock subsystem to be up'）⇒ 不依赖时钟中断。\n      ★ 探针同时读两个时钟：nio: ufs bu clock hw=<计数器> kernel=<内核时基> ⇒ hw≠0/kernel=0 即坐实。",
+    "★★★ 2026-11-18 00:20 用户反馈：macos-15 与 macos-26 **都要排队** ⇒ 继续用 Intel（macos-15-intel）。",
     "★★★★★ 2026-11-17 22:59 run-468 里程碑：**UFS 控制器第一次看见设备**。\n      面板：'nio: ufs bu queue-up dp=1 hcs=0000010f'\n      · HCS(0x30) 的 bit0=DP（device present）= **1**，bit3=UCRDY=1\n      · **历史卡点 hcs=0x8（DP=0，控制器看不见设备）解除** —— 从 453 到 468 追了 15 轮\n      · 同时 'nio: SM queued ArmDTPlatform' ⇒ **迭代化生效**（入队而非递归），且没有 panic\n      · 'nio: ufs driver start enter' + 'startRoot enter' + 'step 1 bringup' ⇒ 驱动启动、root 路径开始\n      · stop-queue / smmu 两步都过了 ⇒ hostStopQueue 与 SMMU bypass 成功\n      · ★ 停在 bu queue-up 之后：无 panic、beacon（V 序列）继续跑 ⇒ 线程卡住但系统没死\n      · ★ 两个候选卡点：① console 环排不空 ⇒ printf 永久阻塞（19:00 就记下过这个独立问题）\n        ② 第二次读 HC 寄存器 0x30 时 fabric 挂住（hostStartQueue 已 ring doorbell，\n        历史 run-63/65/66 就是 'ringing the first doorbell hung the fabric'）\n      · ⇒ 469 两手都做：console_write 排不空时**直写输出**（根治①）；\n        采样循环**读前/读后**各打一行（分辨②）；\n        UFS 的 24 条进度行改走 **vcputc_options 直写帧缓冲**（双保险，printf 卡住也看得到）",
     "★★★ 2026-11-17 23:30 run-469 已推（24d722d）",
     "★★★ 2026-11-17 22:43 删除规矩（机主定的）：\n      ① **不直接 rm**，删除 = 移到 E://待删-2026-11-17///n      ② **不清回收站**（最后一道兜底）\n      ③ 移进来之前先把要移的列给机主看\n      ④ 移走之前先核 device/UniXNU-nio/docs/KEEP-LIST.txt\n      · ★ 22:38 我清空了 E 盘回收站（40.3 GB）—— 机主事后说不敢清，回收站正是兜底。\n        三个别机型的包真没了：Xiaomi15-...DSU.zip(2.8G)、ios15pro/(198M)、\n        ios-payload-dada-源码.zip(493M)。ios16.5-15Pro-xnu.zip 可从 GitHub 重下。\n      · 受保护清单已进 git：docs/KEEP-LIST.txt（commit 307a3d3）",
@@ -225,5 +229,39 @@
     "★★ series 文件是 CRLF ⇒ shell 里读它必须剥掉行尾的 \\r（p=${p%$'\\r'}），否则路径拼错、全部补丁静默跳过。",
     "★ Python 脚本改 CRLF 源文件时：读用 newline=''，写时按行处理、只补 \\r（join 会补 \\n），多补一次行尾会写出 \\r\\r\\n，diff 里会变成一堆空行。"
   ],
-  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。"
+  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
+  "roadmap": {
+    "P1_UFS_起来_挂APFS根卷": {
+      "status": "进行中（bring-up 的等待处；473 已推待验证）",
+      "done": "匹配链通(461) → 驱动启动(468) → 控制器看见设备 DP=1(468/469)",
+      "remaining_6_steps": [
+        "1. NOP OUT —— 证明传输层（hostNop）",
+        "2. power mode query（hostQueryRead 0x03/0x02）",
+        "3. wake (START STOP UNIT) —— 发唤醒命令",
+        "4. LUN ready 轮询 —— 等 gHost.ready=true",
+        "5. 读根卷布局 + manifest 校验（findRootLayout）★ 第一次真正用 UFS 读数据",
+        "6. 发布根卷窗口 + APFS 卷身份 + 媒体等待（publishThread）★ 集成度最高"
+      ],
+      "estimate": "乐观 8-14 轮；按 22-35 分钟/轮（461→468 实测 153 分钟/7 轮）≈ 4-7 小时；悲观 2-3 天",
+      "hardest": "第 5 步（读布局+manifest）：第一次真正读数据；不通则问题在 fabric/请求列表/SMMU 三者之一，而它们都在内核里、IOLog 到不了屏，只能靠直写探针逐行试。manifest 有 7 种失败码对应 7 类原因。"
+    },
+    "P2_存储层_DSU只读系统盘": {
+      "status": "未开始",
+      "remaining": "4GB 读出做成 rootfs.img + boot 镜像换掉十几 MB",
+      "estimate": "构建侧为主，1-3 天",
+      "hardest": "DSU 分区边界与 system staged over ufs=false 的容量布局"
+    },
+    "P3_launchd起用户态": {
+      "status": "未开始，但★准备已就位",
+      "ready": "boot-args 全套齐了：unentitled_ios_sim_launch / launchd_unsecure_cache / wdt=-1 / wdt_test=no_user_checkin / amfi_get_out_of_my_way / amfi_allow_any_signature / nio_skip_security_extensions；rootfs.img 在（1.45 MB）",
+      "estimate": "半天到 1 天",
+      "hardest": "不是配置，是内核能否挂上根卷并把控制交给 launchd —— 那正是 P1 的第 6 步"
+    },
+    "P3plus_拨号_GPU_WiFi_BT_modem_audio": {
+      "status": "未开始",
+      "estimate": "每个都是独立项目；WiFi 最难（协议栈+固件+驱动三样）",
+      "hardest": "WiFi：nok10 只有 retinum 的基础驱动；modem/audio 次之；GPU 相对可控（Adreno650 已移植）"
+    },
+    "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
+  }
 }
