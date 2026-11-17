@@ -2222,8 +2222,12 @@ static void publishThread (void *, wait_result_t)
       gRootDiagnostic.stage = "root window service start";
       gRootDiagnostic.publicationPhase = static_cast<unsigned> (UfsRootPhase::Start);
       gRootDiagnostic.publicationWindow = index;
-      if (!device->start (gPendingProvider)) return false;
+      if (!device->start (gPendingProvider)) {
+        printf ("nio: ufs publish FAIL start window=%u\n", index);
+        return false;
+      }
       native_ufs_blocks_published = native_ufs_blocks_published + 1;
+      printf ("nio: ufs published %s\n", device->windowLabel ());
       IOLog ("NioUfs: published %s\n", device->windowLabel ());
       return true;
     }
@@ -2240,6 +2244,7 @@ static void publishThread (void *, wait_result_t)
         if (ready || tick == 300) break;
         IOSleep (100);
       }
+      printf ("nio: ufs wait media %s\n", device->windowLabel ());
       IOLog ("NioUfs: %s volume %s %s\n", device->windowLabel (), uuid, ready ? "ready" : "not ready");
       if (!ready) captureMissingMedia (uuid);
       return ready;
@@ -2252,6 +2257,8 @@ static void publishThread (void *, wait_result_t)
     const char *reason = result.phase == UfsRootPhase::Start ? "root window service start failed" :
       (!strcmp (gPendingDevice[result.index]->windowLabel (), "SystemOS") ?
        "SystemOS signed volume not found" : "signed root window volume not found");
+    printf ("nio: ufs publish FAIL phase=%u window=%u published=%u reason=%s\n",
+            static_cast<unsigned> (result.phase), result.index, result.published, reason);
     IOLog ("NioUfs: root publisher stopped at window %u; published=%u\n", result.index, result.published);
     // Start failures have already released their unpublished object; do not
     // dereference it here. The media-failure object is deliberately retained.
@@ -2706,11 +2713,15 @@ bool NioUfs::startRoot (IOService *provider)
       gRootDiagnostic.publicationWindow = 0xffffffff;
       thread_t thread = nullptr;
       owner->retain ();
-      if (kernel_thread_start (publishThread, nullptr, &thread) != KERN_SUCCESS) {
-        owner->release ();
-        return false;
-      }
-      thread_deallocate (thread);
+      /* nio: a thread that kernel_thread_start creates does not run on this
+       * board: run 459 showed the configuration thread created with a real
+       * handle ('CFG mk ok') and its body never entered ('CFG alive' never
+       * appeared), and the same would hold for this one.  The publication is
+       * therefore done here, on the calling thread.  The retain above and
+       * the release at the end of publishThread still balance, because
+       * publishThread is entered the same way. */
+      printf ("nio: ufs publish in place\n");
+      publishThread (nullptr, 0);
       return true;
     }
     void discard (unsigned index) { discardPendingWindow (index); }
@@ -2721,6 +2732,8 @@ bool NioUfs::startRoot (IOService *provider)
     gPending = 0;
     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
+    printf ("nio: ufs FAIL prepare phase=%u window=%u\n",
+            static_cast<unsigned> (result.phase), result.index);
     IOLog ("NioUfs: root preparation failed phase=%u window=%u; nothing published\n",
            static_cast<unsigned> (result.phase), result.index);
     IOService::stop (provider);
