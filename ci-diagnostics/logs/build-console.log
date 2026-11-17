@@ -1,0 +1,37 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree
+== kernel: XNU
+== kernel: bootstrap pass for the compile records
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+  223 |                 OSPtr<OSNumber>     scorePlatform  = OSNumber::withNumber(5000, 32);
+      |                 ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:224:3: warning: use of OSPtr outside of a return type [-Wossharedptr-misuse]
+  224 |                 OSPtr<OSNumber>     scoreStorage   = OSNumber::withNumber(1000, 32);
+      |                 ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:225:3: warning: use of OSPtr outside of a return type [-Wossharedptr-misuse]
+  225 |                 OSPtr<OSNumber>     scoreRoot      = OSNumber::withNumber(500, 32);
+      |                 ^~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:256:5: error: unknown type name 'DTEntry'
+  256 |                                 DTEntry found;
+      |                                 ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:257:21: error: use of undeclared identifier 'kSuccess'
+  257 |                                 int hasArmIo = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io", &found));
+      |                                                 ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:258:21: error: use of undeclared identifier 'kSuccess'
+  258 |                                 int hasIntc  = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io/intc", &found));
+      |                                                 ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOStartIOKit.cpp:259:21: error: use of undeclared identifier 'kSuccess'
+  259 |                                 int hasUfs   = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io/ufs", &found));
+      |                                                 ^
+899 warnings and 4 errors generated.
+make[7]: *** [IOStartIOKit.cpo] Error 1
+make[6]: *** [build_all] Error 2
+make[5]: *** [do_all] Error 2
+make[4]: *** [build_all] Error 2
+make[3]: *** [build_all_recurse_into_conf] Error 2
+make[2]: *** [build_all_recurse_into_iokit] Error 2
+make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^BCM2837] Error 2
+make: *** [build] Error 2
+build-xnu-4k-baseline.sh: line 866: make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="$XNU_ARCH_STRING" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION -DXNU_TARGET_OS_IOS" DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_VERSION" RC_DARWIN_KERNEL_VERSION="$XNU_DARWIN" RC_ProjectSourceVersion="$XNU_VERSION" BUILD_LTO=0 BOUND_CHECKS=0 BUILD_WERROR="${XNU_BUILD_WERROR:-0}" MAKEJOBS=-j"${JOBS:-4}" CFLAGS_EXTRA="$EXTRA_CFLAGS" "${EXTRA_MAKE_ARGS[@]}" ${XNU_HOST_MAKE_ARGS[@]+"${XNU_HOST_MAKE_ARGS[@]}"} OBJROOT="$ROOT/build/xnu/ios-obj" SYMROOT="$ROOT/build/xnu/ios-sym" DSTROOT="$ROOT/build/xnu/ios-dst" failed
+unixnu: bash failed (2); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/logs/kernel-bootstrap.log
