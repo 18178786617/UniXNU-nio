@@ -1,6 +1,6 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 20:47（463 已推；两轮在飞但串行）",
+  "updated": "2026-11-17 23:35（468 里程碑：DP=1 设备被看见；469 已推修 console 环）",
   "headline": "★★★★ 里程碑：run-461 照片证明**匹配链通了**。'root nub 就地匹配'（461 的改动）生效后，面板出现 'nio: SM locked ArmDTPlatform' → 'nio: ufs driver start enter' → 'nio: ufs startRoot enter' ⇒ **NioUfs 的 personality attach 成功、驱动真的启动了、根卷流程开始了**。（另外 MKOK 有、ALIVE 无 ⇒ 配置线程仍不跑，但已不再是阻塞项。）★★ 461 面板暴露的最后一个盲区：UFS 根路径**失败时只走 IOLog，而 IOLog 到不了屏幕**（代码注释反复说'驱动的 printf/IOLog 到不了屏'，但 'nio: ufs driver start enter' 证明**驱动 printf 能上屏**）。⇒ 已推 462（3c8fe3d）：给 UFS 根路径每一步加 printf 进度与失败原因，并打出 **HCS.DP（设备是否被控制器看见）与 HCS 实测值** —— 一眼分开'供电/时钟问题'与'链路问题'。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：457 待判决配置线程为何不存在） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部三个硬闸门：① 配置线程起来（当前卡点） ② NioUfs personality 匹配并 attach 到 /arm-io/ufs ③ 链路 + LUN/GPT 枚举（HCS=0x8 → DP=0 是历史卡点） ④ APFS 根卷只读挂载。",
   "phases": [
@@ -17,8 +17,8 @@
       "name": "UFS 起来 + 挂上 APFS 根卷",
       "status": "current",
       "criteria": "根卷挂载成功的日志",
-      "evidence": "★★★★ run-461 照片（里程碑）：匹配链打通 —— 'nio: SM locked ArmDTPlatform t=0xfffffffff302438980'（平台专家匹配上了）、'nio: CFG enq ArmDTPlatform out=20 wt=27 ct=27'、'nio: ufs driver start enter'（★ NioUfs 驱动 start）、'nio: ufs startRoot enter'（★ 根卷流程开始）。'nio: SMU sc0=270406 globally bypassed, stream 60 needs no ent' 之后 UFS 就没声了，而 IOKit 还在继续匹配（S #28、B29 ArmDTIP）。⇒ ★★ 盲区定位：根路径的失败只写 IOLog，而 IOLog 到不了屏幕；驱动的 printf 是能上屏的（start enter 就是证据）。⇒ 462 给每一步加 printf 进度 + 失败原因 + HCS.DP/HCS 实测值。",
-      "next": "462（已推 3c8fe3d，CI 在跑）：UFS 根路径的每一步都上屏。判读：'nio: ufs bu stop-queue' 之后没有 'bu smmu' ⇒ hostStopQueue 失败（why 会带原因）；有 'bu queue-up dp=N hcs=XXXXXXXX' ⇒ DP 是 1 还是 0（0 ⇒ 控制器看不见设备＝供电/时钟/复位问题；1 ⇒ 传输层在，是链路问题）；有 'bu nop-out begin' 无 'bu power-query' ⇒ NOP OUT 卡住；'step 1 ok' ⇒ bring-up 成功，接着看 'step 2 layout'（读 userdata 的根卷布局）与 'step 3'（manifest 校验）。"
+      "evidence": "★★★★★ run-468 照片（里程碑）：**UFS 控制器第一次看见设备** —— 'nio: ufs bu queue-up dp=1 hcs=0000010f'（HCS bit0=DP=1，历史卡点 hcs=0x8 解除）；'nio: SM queued ArmDTPlatform'（迭代化生效）；'nio: ufs driver start enter' + 'startRoot enter' + 'step 1 bringup'；'bu stop-queue' + 'bu smmu' 都过了；★ 停在 bu queue-up 之后，无 panic，beacon 继续跑 ⇒ 线程卡住但系统没死。",
+      "next": "469（已推 24d722d）：① console_write 排不空时直写输出（根治 console 环阻塞）② 采样循环读前/读后各打一行（分辨是读挂住还是环满）③ UFS 的 24 条进度行改走 vcputc_options 直写帧缓冲。判读：'poll N read' 有而 'poll N got' 无 ⇒ 读 HC 寄存器挂住（fabric）；两条都有 ⇒ 是 console 环。"
     },
     {
       "id": "P2",
@@ -46,6 +46,20 @@
     }
   ],
   "rounds": [
+    {
+      "run": 469,
+      "time": "23:30",
+      "marker": "nio: ufs bu poll N read / got",
+      "qemu": "macos-15-intel（Intel 池通畅：467 用它 21:36 拿到 runner、22:04 出内核）",
+      "result": "已推 24d722d：★ console 环不再永久阻塞 + 直写进度行（printf 卡住也看得到）"
+    },
+    {
+      "run": 468,
+      "time": "22:27",
+      "marker": "nio: ufs bu queue-up dp=1 hcs=0000010f",
+      "qemu": "macos-15-intel",
+      "result": "★★★ 里程碑：DP=1，控制器第一次看见设备（历史卡点 hcs=0x8 解除）；迭代化生效（SM queued）；驱动启动、root 路径开始；停在 queue-up 之后"
+    },
     {
       "run": 463,
       "time": "20:45",
@@ -139,12 +153,16 @@
     }
   ],
   "next_actions": [
-    "★ 只等 463：它含 462 的全部诊断打印 + 全部 nub 就地匹配 + 发布就地 ⇒ 一张面板给全貌。",
-    "★ 463 面板判读：'SM inline <nub>' 后紧跟 'SM inline done' ⇒ 该 nub 就地匹配完成；缺 'done' ⇒ 卡在该 nub。'nio: ufs publish in place' ⇒ 走到根卷发布；'nio: ufs published <name>' ⇒ 根卷窗口发布成功；'nio: ufs bu ...' ⇒ UFS bring-up 位置。",
-    "★ 进用户层后：**单独一轮**做清理（46 个文件 + E 盘 tmp/ 4.4G）—— 详见 notes 里的清理计划。删 patches/** 会触发 CI，所以清理不能与功能改动混在一起。",
+    "★ 只等 469：它一次分辨两个候选卡点（读挂住 vs console 环），且进度行改直写保证看得见。",
+    "★ 469 判读：'poll N read' 有 / 'poll N got' 无 ⇒ 读 HC 寄存器挂住（fabric 侧）；两条都有 ⇒ 是 console 环（已被 469 的补丁根治，应当不再发生）。",
+    "★ 进用户层后单独一轮做清理（46 个零引用补丁文件 + E 盘待删目录）。",
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-17 22:59 run-468 里程碑：**UFS 控制器第一次看见设备**。\n      面板：'nio: ufs bu queue-up dp=1 hcs=0000010f'\n      · HCS(0x30) 的 bit0=DP（device present）= **1**，bit3=UCRDY=1\n      · **历史卡点 hcs=0x8（DP=0，控制器看不见设备）解除** —— 从 453 到 468 追了 15 轮\n      · 同时 'nio: SM queued ArmDTPlatform' ⇒ **迭代化生效**（入队而非递归），且没有 panic\n      · 'nio: ufs driver start enter' + 'startRoot enter' + 'step 1 bringup' ⇒ 驱动启动、root 路径开始\n      · stop-queue / smmu 两步都过了 ⇒ hostStopQueue 与 SMMU bypass 成功\n      · ★ 停在 bu queue-up 之后：无 panic、beacon（V 序列）继续跑 ⇒ 线程卡住但系统没死\n      · ★ 两个候选卡点：① console 环排不空 ⇒ printf 永久阻塞（19:00 就记下过这个独立问题）\n        ② 第二次读 HC 寄存器 0x30 时 fabric 挂住（hostStartQueue 已 ring doorbell，\n        历史 run-63/65/66 就是 'ringing the first doorbell hung the fabric'）\n      · ⇒ 469 两手都做：console_write 排不空时**直写输出**（根治①）；\n        采样循环**读前/读后**各打一行（分辨②）；\n        UFS 的 24 条进度行改走 **vcputc_options 直写帧缓冲**（双保险，printf 卡住也看得到）",
+    "★★★ 2026-11-17 23:30 run-469 已推（24d722d）",
+    "★★★ 2026-11-17 22:43 删除规矩（机主定的）：\n      ① **不直接 rm**，删除 = 移到 E://待删-2026-11-17///n      ② **不清回收站**（最后一道兜底）\n      ③ 移进来之前先把要移的列给机主看\n      ④ 移走之前先核 device/UniXNU-nio/docs/KEEP-LIST.txt\n      · ★ 22:38 我清空了 E 盘回收站（40.3 GB）—— 机主事后说不敢清，回收站正是兜底。\n        三个别机型的包真没了：Xiaomi15-...DSU.zip(2.8G)、ios15pro/(198M)、\n        ios-payload-dada-源码.zip(493M)。ios16.5-15Pro-xnu.zip 可从 GitHub 重下。\n      · 受保护清单已进 git：docs/KEEP-LIST.txt（commit 307a3d3）",
+    "★★★ 2026-11-17 22:50 打包依赖自动检查（机主担心'等下打包又缺什么'）：\n      · tools/check-packaging-inputs.sh —— 打包前逐项检查 27 个依赖，缺哪个+从哪来\n      · 已接到 round-image.sh 开头 ⇒ 缺东西直接停下报缺什么，不再跑到一半才炸\n      · ★ 两个来源不明的：patch-xnu-entry-probe.py 必须是我们仓 scripts/console/ 的\n        **4 值版**（上游 refs/UniXNU 是 3 值版，接口不匹配）；\n        xnu-panic-screen.c 必须是**116 KB** 那份（上游 9 KB 是旧的）\n      · 米10 资产已逐项核实：refs/ShengUfs/NativeUfs.cpp 2376 行 + 9 个 Root* 头、\n        refs/umi/、refs/UniXNU-umi/、refs/UniXNU-sheng/、refs/Adreno650/ 全在",
     "★★★ 清理计划（2026-11-17 21:15 盘点完成；等进用户层 + 463 落地后执行）\n  原则：**删 patches/** 会触发 CI**（patches/** 在 workflow 的 path 过滤里），\n  所以清理要单独一轮、且在 463 落地之后做，不要与功能改动混在一起。\n\n  【可删 46 个文件】\n  1) patches/xnu/ 整个目录（23 个文件）—— **旧结构残留（17.7 时代）**。\n     旧结构是每个 profile 各有一个 patches/xnu/series\n     （profiles/arch/arm64/profile.toml: patch_series = [\"arch:...\", \"soc:...\",\n     \"os:...\", \"device:...\"]），而现在 board.toml 的\n     [kernel] patch_series = [\"device:patches/xnu-8796/series\"] 把那个列表\n     **整列表替换**掉了（profiles.merge() 替换不追加）。\n     · patches/xnu/series            —— 全是注释的空文件\n     · patches/xnu/gpu/series         —— 旧 gpu series\n     · patches/xnu/gpu/gpu-probe-start.patch —— 旧版副本，与 xnu-8796 里那份内容不同\n     · patches/xnu/device/ 18 个      —— umi 调试副本；series 注释自己写着\n                                        \"They stay in the repository as evidence,\n                                         not as build input\"\n     · patches/xnu/device-armcpu/ 2 个\n     核验：board.toml / feeds.toml / workflow / series 全部零引用。\n  2) patches/xnu-8796/ 里 **22 个不在 series 里的孤儿补丁**（目录 190 个 .patch，\n     series 168 条）：全是历史诊断探针 —— nio-adjustbusy-* / nio-arbitration-* /\n     nio-stack-geometry / nio-startup-trace / nio-startup-tokens /\n     nio-*-landmarks / nio-dt-head-report / nio-zone-register-trace 等。\n     核验：**没有任何 series 内的补丁引用它们**（逐个扫过正文）。\n  3) patches/xnu-prelink/series —— 引用 component:XnuPrelink/patches/\n     **xnu-10063.141.1-***（17.7 的名字），board.toml 与 xnu-8796/series 都不引用它。\n\n  【不能删】\n  · patches/darwinboot/console-guard.patch —— docs/STATUS.md 明写\"一个必须保留的补丁\"\n    （DarwinBoot EFI 引导阶段 Print() 在没有 ConOut 时断言崩溃的修复）\n  · patches/xnu-8796/gpu-probe-start.patch —— series 第 39 行在用\n  · series 里的 168 条\n\n  【E 盘】\n  · tmp/ 4.4G —— 本轮几处核验用的临时树（base2/base3/base4/lftree/verify/verify2、\n    *.patch、make-*.py、*.cpp）。核验做完即可删；删之前确认没有在跑的脚本引用它们。\n  · .tmp/ 256M —— XNU 源码检出（本地生成补丁还要用）⇒ 保留\n  · out/ —— 构建产物 ⇒ 由 CI 与本地打包重建",
     "★★★ 机主纪律（20:45 补充）：**不要一次推多个 CI 轮次，会乱。**在飞轮次期间只做分析、不推新的；等上一轮落地（上机/照片）后再决定下一轮。（20:45 我在 462 还在飞时又推了 463，违反此条。无法取消：api.github.com 本机不可达、无 token、无 gh CLI。缓解：两轮同 concurrency group ⇒ 串行，runner 不浪费；且 463 含 462 的全部内容，只等 463 即可。）",
     "★★ 机主纪律（18:01）：① 不重复读同一张图片 ② 不重复回答同一问题 ③ 推送前本地核验通过再推 ④ CI 固定 macos-15/26（arm64），排队时由机主定是否换 Intel（19:00 实测 arm64 两池全满、Intel 30 秒拿到 runner）。",
