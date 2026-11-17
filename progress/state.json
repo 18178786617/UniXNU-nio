@@ -1,6 +1,6 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 20:40（run-461 里程碑：匹配链通了；462 已推）",
+  "updated": "2026-11-17 20:47（463 已推；两轮在飞但串行）",
   "headline": "★★★★ 里程碑：run-461 照片证明**匹配链通了**。'root nub 就地匹配'（461 的改动）生效后，面板出现 'nio: SM locked ArmDTPlatform' → 'nio: ufs driver start enter' → 'nio: ufs startRoot enter' ⇒ **NioUfs 的 personality attach 成功、驱动真的启动了、根卷流程开始了**。（另外 MKOK 有、ALIVE 无 ⇒ 配置线程仍不跑，但已不再是阻塞项。）★★ 461 面板暴露的最后一个盲区：UFS 根路径**失败时只走 IOLog，而 IOLog 到不了屏幕**（代码注释反复说'驱动的 printf/IOLog 到不了屏'，但 'nio: ufs driver start enter' 证明**驱动 printf 能上屏**）。⇒ 已推 462（3c8fe3d）：给 UFS 根路径每一步加 printf 进度与失败原因，并打出 **HCS.DP（设备是否被控制器看见）与 HCS 实测值** —— 一眼分开'供电/时钟问题'与'链路问题'。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：457 待判决配置线程为何不存在） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部三个硬闸门：① 配置线程起来（当前卡点） ② NioUfs personality 匹配并 attach 到 /arm-io/ufs ③ 链路 + LUN/GPT 枚举（HCS=0x8 → DP=0 是历史卡点） ④ APFS 根卷只读挂载。",
   "phases": [
@@ -47,11 +47,18 @@
   ],
   "rounds": [
     {
+      "run": 463,
+      "time": "20:45",
+      "marker": "SM inline (每个 nub) / nio: ufs publish in place",
+      "qemu": "macos-15-intel（与 462 同 concurrency group ⇒ 串行，462 跑完才轮到它）",
+      "result": "已推 ec444e0：★ 所有 nub 就地匹配（不再只有 root nub）+ 根卷发布线程就地执行 + 发布进度上屏。★ 含 462 的全部诊断打印（同一文件的后续修改）⇒ 只等 463 即可"
+    },
+    {
       "run": 462,
       "time": "20:39",
       "marker": "nio: ufs bu ... / nio: ufs step N",
       "qemu": "macos-15-intel",
-      "result": "已推 3c8fe3d：UFS 根路径每一步 + 失败原因 + HCS.DP/HCS 上屏"
+      "result": "已推 3c8fe3d：UFS 根路径每一步 + 失败原因 + HCS.DP/HCS 上屏。★ 它的内容已被 463 包含，且 463 还带修复 ⇒ 单独等它意义不大"
     },
     {
       "run": 461,
@@ -132,12 +139,15 @@
     }
   ],
   "next_actions": [
-    "★ 第一优先：run-462 出内核后上机，拍面板 —— 找 'nio: ufs bu' 与 'nio: ufs step' 开头的行。",
-    "★ 判读表：'bu stop-queue' 无 'bu smmu' ⇒ hostStopQueue 失败（why 带原因）；'bu queue-up dp=N' 的 N=0 ⇒ 控制器看不见设备（供电/时钟/复位）；N=1 ⇒ 传输层在，问题在链路；'bu nop-out begin' 无 'bu power-query' ⇒ NOP OUT 卡住；'step 1 ok' ⇒ bring-up 成功；'step 2 layout' ⇒ 在读 userdata 的根卷布局；'step 3' ⇒ manifest 校验。",
-    "★★ 通道纪律：驱动 printf 能上屏（'nio: ufs driver start enter' 是证），IOLog 不能。⇒ 驱动里凡是用户需要看到的失败，都要用 printf。",
+    "★ 只等 463：它含 462 的全部诊断打印 + 全部 nub 就地匹配 + 发布就地 ⇒ 一张面板给全貌。",
+    "★ 463 面板与 462 的天然区别（不会混淆）：463 会有**大量** 'nio: SM inline <nub>' 行（每个 nub 都就地匹配），且**不再有** 'nio: CFG enq' 行（不再走 startJob 排队）。462 只有 1 次 SM inline（只有 root nub）+ 大量 CFG enq。",
+    "★ 463 面板判读：'SM inline' 后紧跟 'SM inline done' ⇒ 该 nub 就地匹配完成；'SM inline' 后**没有** 'SM inline done' ⇒ 匹配中卡住（看该 nub 名）；出现 'nio: ufs publish in place' ⇒ 走到根卷发布；'nio: ufs published <name>' ⇒ 根卷窗口发布成功；'nio: ufs wait media <name>' ⇒ 在等媒体出现（最多 30 秒）；'nio: ufs bu ...' 系列 ⇒ UFS bring-up 的位置（462 的诊断）。",
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★ 机主纪律（20:45 补充）：**不要一次推多个 CI 轮次，会乱。**在飞轮次期间只做分析、不推新的；等上一轮落地（上机/照片）后再决定下一轮。（20:45 我在 462 还在飞时又推了 463，违反此条。无法取消：api.github.com 本机不可达、无 token、无 gh CLI。缓解：两轮同 concurrency group ⇒ 串行，runner 不浪费；且 463 含 462 的全部内容，只等 463 即可。）",
+    "★★ 机主纪律（18:01）：① 不重复读同一张图片 ② 不重复回答同一问题 ③ 推送前本地核验通过再推 ④ CI 固定 macos-15/26（arm64），排队时由机主定是否换 Intel（19:00 实测 arm64 两池全满、Intel 30 秒拿到 runner）。",
+    "★★ 机主纪律（20:00）：不要在诊断上死磕，目标是把系统修到进用户层；卡住时先找绕开卡点的路。",
     "★★★★ 2026-11-17 20:26 run-461 是里程碑：**匹配链通了**。root nub 就地匹配（461 的改动）⇒ ArmDTPlatform 匹配上 ⇒ NioUfs personality attach ⇒ 'nio: ufs driver start enter' ⇒ 'nio: ufs startRoot enter'。⇒ 从 453 追到 461，'匹配到底跑没跑'这个问题终于有答案了：跑了，而且跑出了 UFS 驱动。",
     "★★★ 2026-11-17 20:40 通道纪律（重要）：**驱动的 printf 能上屏，IOLog 不能**。证据：面板上有 'nio: ufs driver start enter'（驱动 printf），而根路径的失败原因只走 IOLog ⇒ 看不到。代码注释里'驱动的 printf 到不了屏'是老结论，现在不成立。⇒ 驱动里凡是需要用户看到的失败，一律用 printf。",
     "★★★ 2026-11-17 20:05 转折：不再纠缠'配置线程为什么不跑'，改为**绕开它**。startMatching 有两条路 —— 异步 startJob()（交给配置线程，卡死）vs 同步 doServiceMatch()（**在当前线程跑，不需要任何线程**）。根 nub 走的正是异步那条，而一切都挂在根 nub 的匹配后面。⇒ 根 nub 改为就地匹配，匹配立刻发生。",
