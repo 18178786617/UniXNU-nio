@@ -1,6 +1,6 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 16:20",
+  "updated": "2026-11-17 16:50",
   "headline": "★★★ 453 照片读出决定性事实：设备树第一次被真正读到（根 nub 名 D22AP，/arm-io/ufs 在树里），personality 也发出去了；但整屏没有一条 M 行、没有一条 'nio: C' 行 —— 这两条串都在内核二进制里，⇒ probeCandidates 一次都没进 ⇒ 匹配根本没跑。根因（代码层已查实）：'nio: DSM enter' 探针只打在 startMatching 的**同步**分支，而根 nub 走的是 _IOServiceJob::startJob **异步**分支（配置线程 + 信号量），所以整条异步路径在面板上完全不可见。454（已推 8ee1508）：在 pingConfig / 配置线程取 job / doServiceMatch 入口 / 候选清单四处加 printf，把 enq→wait→pick→DSMi→cand→DSMx 全链露出来，下一张照片即可判决断在哪个环节。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：454 待验证匹配是否真的在跑） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
@@ -47,18 +47,25 @@
   ],
   "rounds": [
     {
-      "run": 454,
-      "time": "16:20",
+      "run": 455,
+      "time": "16:50",
       "marker": "nio: CFG enq",
       "qemu": "本地 QEMU 走不到匹配这一步（prelink 空洞），无法判决",
-      "result": "已推 8ee1508：nio-match-path-probe.patch（匹配全链探针）"
+      "result": "已推 bca6b7e：补上补丁头（454 因缺 --- / +++ 被 git apply 拒），主管在等 455"
+    },
+    {
+      "run": 454,
+      "time": "16:35",
+      "marker": "—",
+      "qemu": "no kernel.macho to boot in QEMU",
+      "result": "★ 失败在打补丁阶段：git apply 报 'patch fragment without header'（缺 --- / +++ 行）"
     },
     {
       "run": 453,
       "time": "13:38",
       "marker": "nio: HB ",
       "qemu": "含 slide 修正 + 动态 IONameMatch；照片读出：设备树第一次被真正读到（D22AP），但零 M 行",
-      "result": "★ 设备树读到了；★ 但匹配异步路径全程无输出 ⇒ 根因锁定"
+      "result": "★ 设备树读到了；★ 匹配异步路径全程无输出 ⇒ 根因锁定"
     },
     {
       "run": 452,
@@ -107,7 +114,10 @@
     "★ UniXNU 内置表里 ArmDTPlatform 的 IONameMatch 硬编码 'device-tree'，而 CompareKey 对 OSData 的 compatible **逐串比较** ⇒ 根 nub 的 compatible 第二串正是 'device-tree' ⇒ 内置那条本来就能命中。handoff 7188 行'硬编码永远匹配不上'的说法需要用 454 的 cand 行复核。",
     "★ 排查方法教训（第二次踩）：apply-series.py 的基线是 build/xnu-src（pristine），不是 tmp/series-apply！在 tmp 树上改文件再 diff 会导致补丁 apply 失败（我因此多花一轮）。改 XNU 补丁永远从 pristine 生成。",
     "★ 排查方法教训（第三次踩）：OSObject 没有 getCStringNoCopy（它在 OSString 上），getObject 返回 OSObject* 必须 OSDynamicCast(OSString, ...) 才能取字符串。写补丁前先 grep 头文件确认 API 归属，别等 CI 报编译错。",
-    "★ CI 触发：改 patches/** 或 drivers/** 等路径后 git push origin main 即触发（kernel.yml 的 paths 过滤），无需手动 dispatch。主管脚本 tools/ci-supervisor.sh 会自动打包+刷机。"
+    "★ CI 触发：改 patches/** 或 drivers/** 等路径后 git push origin main 即触发（kernel.yml 的 paths 过滤），无需手动 dispatch。主管脚本 tools/ci-supervisor.sh 会自动打包+刷机。",
+    "★★★ 最贵的教训：tools/apply-series.py 用 patch(1) 应用补丁，**CI 用 git apply**，后者更严。缺 '--- a/' '+++ b/' 两行的补丁，patch(1) 过、git apply 报 'patch fragment without header' ⇒ run-454 白等一轮。⇒ 写完 XNU 补丁必须跑：git apply -R --check（对已应用树）验证，不要只信 apply-series.py。",
+    "★★ 另一个坑：apply-series.py 的基线是 build/xnu-src（pristine），不是 tmp/series-apply！在 tmp 树上改文件再 diff 生成的补丁必然 apply 失败（上下文已变）。改 XNU 补丁永远从 pristine 生成 diff。",
+    "★ OSObject 上没有 getCStringNoCopy（它在 OSString 上）；getObject 返回 OSObject*，取字符串要 OSDynamicCast(OSString, ...)。写补丁前先 grep 头文件确认 API 归属。"
   ],
   "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节"
 }
