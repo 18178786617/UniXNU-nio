@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 02:40 ★★★★★ **机主睡觉 ⇒ 进入挂机自主推进**。tools/auto-loop.sh 在后台跑（12 轮/8 小时，从 476 起）：自动取内核→打包→刷机→读控制台文本→通知 agent；agent 判读后推下一轮。\n  · 474/475 已上机（sha 5057cc61… / 992b7396…），但**看门狗复位没拍到照片**（已知现象，非新问题）\n  · 476 带 ramoops ⇒ 起就有文本，**不需要照片**\n  · ★ QEMU 里内核没崩但没画（fb.png 恒为 10,656=全白）⇒ 图无用，文本才是眼睛\n  · ★ 真机与 QEMU 的 ramoops 同址 0xAF040000 ⇒ 将来可自动化（fastboot 无读内存命令 ⇒ 暂缺）",
     "★★★★★ 2026-11-18 02:15 ★★★★★ **眼睛的真正形态找到了**：内核把每个控制台字符镜像进 ramoops 文本环（DBGC 头 + 纯文本），QEMU 用 pmemsave 读出 ⇒ **文本比像素可靠**（可 grep 行号与序号）。\n  ★ QEMU 的 fb.png 恒为 10,656 字节 = **全黑** ⇒ 图没用；QEMU 里内核没崩（guest-errors 空、90 秒正常停）但没画。\n  ★ 已推 476（99093f5）：ramoops.bin 随内核发布 + 新增 scripts/read-console.py（已两种形态自测）。\n  ★ 474 已上机（02:01:52，sha 5057cc61…）",
     "★★★★ 2026-11-18 02:00 ★★★★★ 我有自己的眼睛了：CI 每轮都有 QEMU job 并抓帧缓冲成 PNG，只是之前没随内核发布（'Only the kernel is on the branch'）。已修 workflow + round-image.sh",
     "★★★★★ 2026-11-18 02:00 ★★★★★ **我有自己的眼睛了**：CI 每轮都有 QEMU job 且已抓帧缓冲成 PNG，只是之前没随内核发布到分支（'Only the kernel is on the branch'）。已修：workflow 把 fb.png/console.txt/qemu-guest-errors.log 一起发布，round-image.sh 顺手取到 out/screen/fb-<run>.png\n⇒ **475 起每轮我自己读板**，不用等照片 ⇒ 迭代从'22 分钟+人工拍照'变成'CI 结束即读'\n⇒ QEMU 与真机同一 cmdline（含 native-ufs-probe=12）⇒ **UFS 路径在 QEMU 里也跑**，可当开发环境",
@@ -521,5 +522,16 @@
       "我自动做": "CI 结束 → 读 ramoops 文本 + PNG → 判读走到哪 → 决定下一轮带什么探针 → 推 → 打包 → fb-go.sh 自动刷机",
       "★ 用户只需": "① 手机插着 USB 放旁边（刷机全自动）② 偶尔拍一张真机照片（只有**真实 UFS 读出的数据**与**真实硬件时序**这两类事 QEMU/文本给不了）"
     }
+  },
+  "★ 挂机模式_机主睡觉时的自主推进": {
+    "机制": "tools/auto-loop.sh（后台，12 轮 / 8 小时上限，从 475 起 ⇒ 下一个是 476）\n每轮：ls-remote 找最新的 ci-kernel/run-N → round-image.sh N（取内核+png+ramoops，打印控制台尾部）→ fb-go.sh 刷机 → 用 scripts/read-console.py 打印控制台文本 ⇒ **每轮结束通知 agent**\n⇒ agent 读文本 → 判断走到哪 → 决定下一轮带什么探针 → 推 main（path filter 会触发 CI）→ 循环继续",
+    "★ 分工": {
+      "脚本做": "等 CI / 取产物 / 打包 / 刷机 / 读控制台文本（全是机械活）",
+      "agent 做": "判读文本 → 改代码/加探针 → 推下一轮（需要有判断力的部分）",
+      "机主": "醒来时看结果；★ 只有两类事仍需照片：**真实 UFS 读出的数据**、**真实硬件时序**"
+    },
+    "★ 已知现象": "每轮约 1 分钟机器自己复位（看门狗）—— board.toml 的 debug=0x1 注释早已写明，不是新问题；机主 474/475 因复位没拍到照片",
+    "★ QEMU 的现状": "QEMU 里内核**没崩但没画**（guest-errors 空、90 秒超时正常停、fb.png 恒为 10,656 字节=全白）⇒ 图这条路暂时无用；ramoops 文本（476 起）才是能用的眼睛。QEMU 环境与真机差别大（virt GIC / PSCI-HVC / 4 GiB RAM@0x40000000 / 缺 storage+ufs 节点）⇒ 修它是工具工作，暂缓",
+    "★ 真机输出自动化": "内核的控制台文本与 UEFI 的 ramoops 在**同一个地址 0xAF040000**（真机与 QEMU 一致）⇒ 将来能自动化；但 fastboot 只有 getvar/oem fb_mode，**没有读内存的命令** ⇒ 暂时做不到"
   }
 }
