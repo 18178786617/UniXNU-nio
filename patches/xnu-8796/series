@@ -288,3 +288,5 @@ nio-probe-entry-marks.patch
 nio-skip-unmatched-classes.patch
 nio-busy-beacon.patch
 nio-static-kext-personalities.patch
+nio-root-nub-name.patch
+nio-device-tree-physical.patch

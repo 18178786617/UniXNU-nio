@@ -1,0 +1,36 @@
+Say what the root nub is called
+
+The root nub takes its name from the device tree: InitIOKit() hands the
+tree to IOPlatformExpertDevice::init(), which makes a registry entry out of
+it and uses that entry as the nub's name.  So the name says whether the
+tree was found at all.
+
+If it is not "device-tree", then nothing that matches on that name is ever
+offered the nub -- the platform expert that reads the tree never starts,
+the nodes under /arm-io are never published, and the storage controller is
+never matched.  That is the whole chain, and the name is where it can be
+seen from.
+
+The line is printed next to the one that publishes the personalities,
+because that is where the matching starts and because the output there
+reaches the screen.
+
+---
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -245,6 +245,13 @@
+ 
+ 			printf("\nnio: publishing %d static personalities",
+ 			       (int) personalities->getCount());
++			/* nio: the root nub takes its name from the device tree, so its
++			 * name says whether the tree was found at all.  If it is not
++			 * "device-tree", nothing that matches on that name is ever
++			 * offered the nub, and the drivers below stay unmatched. */
++			printf("
++nio: root nub is named %s",
++			       gRootNub->getName() ? gRootNub->getName() : "(none)");
+ 			gIOCatalogue->addDrivers(personalities, false);
+ 		}
+ 	}

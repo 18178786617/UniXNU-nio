@@ -1,0 +1,81 @@
+The device tree is at a physical address, but the loader hands over a slid one
+
+The loader fills boot_args.deviceTreeP with the kernel's virtual base plus
+the tree's offset from the kernel's own load address, so the number in it
+is a virtual address in the kernel's space.
+
+Nothing can read that number here.  This is the first pass over the
+platform, before arm_vm_init() has built a single mapping of the kernel's
+virtual space, and the early page table the payload set up maps physical
+addresses one to one, with nothing above 0x200000000 mapped at all.  The
+kernel's virtual base is not in that table, so the address is not merely
+unreadable, it is not there.
+
+That is why the tree never arrived.  SecureDTInit() was handed an address
+that holds nothing, and InitIOKit() -- which makes the root nub and gives
+it its name from the tree -- was handed the same address, so the root nub
+came up with no name and nothing that matches on "device-tree" was ever
+offered it.  The platform expert that reads the tree never started, the
+nodes under /arm-io were never published, and the controller was never
+matched.  No amount of fixing the tree itself could have helped: the
+kernel was not looking at it.
+
+What SecureDTInit() and InitIOKit() need is the tree itself, and the tree
+is at a physical address, which the early page table can read.  The two
+bases in the boot arguments say how far the virtual address is from it.
+
+Take the slide off and the tree is found.  arm_vm_init() puts the slide
+back on later, in PE_slide_devicetree(), once the mapping exists; the two
+together leave the tree where it was and let it be read in between.
+
+---
+
+diff --git a/pexpert/arm/pe_init.c b/pexpert/arm/pe_init.c
+--- a/pexpert/arm/pe_init.c
++++ b/pexpert/arm/pe_init.c
+@@ -409,6 +409,45 @@
+ 		PE_state.bootArgs = boot_args_ptr;
+ 		PE_state.deviceTreeHead = boot_args_ptr->deviceTreeP;
+ 		PE_state.deviceTreeSize = boot_args_ptr->deviceTreeLength;
++		/*
++		 * nio: the device tree is at a physical address, but the loader
++		 * hands over a slid one.
++		 *
++		 * The loader fills the tree's address as the kernel's virtual base
++		 * plus the tree's offset from the kernel's own load address, so
++		 * the number in boot_args.deviceTreeP is a virtual address in the
++		 * kernel's space.
++		 *
++		 * Nothing can read that number here.  This is the first pass over
++		 * the platform, before arm_vm_init() has built a single mapping
++		 * of the kernel's virtual space, and the early page table the
++		 * payload set up maps physical addresses one to one, with nothing
++		 * above 0x200000000 mapped at all.  The kernel's virtual base is
++		 * not in that table, so the address is not merely unreadable, it
++		 * is not there.
++		 *
++		 * That is why the tree never arrived.  SecureDTInit() was handed
++		 * an address that holds nothing, and InitIOKit() -- which makes
++		 * the root nub and gives it its name from the tree -- was handed
++		 * the same address, so the root nub came up with no name and
++		 * nothing that matches on "device-tree" was ever offered it.  The
++		 * platform expert that reads the tree never started, the nodes
++		 * under /arm-io were never published, and the controller was
++		 * never matched.  No amount of fixing the tree itself could have
++		 * helped: the kernel was not looking at it.
++		 *
++		 * What SecureDTInit() and InitIOKit() need is the tree itself,
++		 * and the tree is at a physical address, which the early page
++		 * table can read.  The two bases in the boot arguments say how
++		 * far the virtual address is from it.
++		 *
++		 * Take the slide off and the tree is found.  arm_vm_init() puts
++		 * the slide back on later, in PE_slide_devicetree(), once the
++		 * mapping exists; the two together leave the tree where it was
++		 * and let it be read in between.
++		 */
++		PE_state.deviceTreeHead = (void *)((uintptr_t)PE_state.deviceTreeHead
++		    - (boot_args_ptr->virtBase - boot_args_ptr->physBase));
+ 		PE_state.video.v_baseAddr = boot_args_ptr->Video.v_baseAddr;
+ 		PE_state.video.v_rowBytes = boot_args_ptr->Video.v_rowBytes;
+ 		PE_state.video.v_width = boot_args_ptr->Video.v_width;
