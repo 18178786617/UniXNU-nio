@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 00:00",
-  "headline": "根因：静态 kext 的 personality 从没发出过（prelink info 的 36 条全是 Apple kext）。修复=内核在 IOKit 匹配前用 gIOCatalogue->addDrivers() 发布三条 personality。419 编译失败（withNumber 用错）⇒ 已修并用本地编译器验证类型用法（替身头文件，零错误）；422 在排队。",
+  "updated": "2026-11-17 13:40",
+  "headline": "★★★ 设备树地址被加了两次 slide：DarwinBoot 填 TreeAddress+slide（已是虚拟地址），XNU 的 PE_slide_devicetree 又加一次 ⇒ 指向一页从没写过东西的内存 ⇒ 设备树从未被读到。453：在 PE_slide_devicetree 里先减后加（树留在 loader 说的地址，此时虚拟空间已建），PE_init_platform 保持 447 行为（不早读真树）；personality 的 IONameMatch 改为gRootNub->getName()（根 nub 名 = compatible 第一串 = D22AP）；ADT 侧修 state 长度与 intc 的 device_type。453 在 macos-15 上跑，出包即自动刷机。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
@@ -47,32 +47,25 @@
   ],
   "rounds": [
     {
-      "run": 422,
-      "time": "00:00",
+      "run": 453,
+      "time": "13:38",
       "marker": "nio: HB ",
-      "qemu": "编译修好的版本",
-      "result": "排队中"
+      "qemu": "含 slide 修正 + 动态 IONameMatch",
+      "result": "构建中（已拿到 runner）"
     },
     {
-      "run": 419,
-      "time": "23:53",
-      "marker": "—",
-      "qemu": "—",
-      "result": "编译失败：withNumber 少一个参数（已修）"
+      "run": 452,
+      "time": "12:20",
+      "marker": "nio: HB ",
+      "qemu": "PE_init_platform 里物理化 ⇒ 崩",
+      "result": "崩因=最早那趟就去真读树"
     },
     {
-      "run": 418,
-      "time": "22:10",
+      "run": 447,
+      "time": "09:45",
       "marker": "nio: HB ",
-      "qemu": "★ 崩了：一屏输出都没有",
-      "result": "真凶=dt 诊断补丁 dereference 未映射地址"
-    },
-    {
-      "run": 410,
-      "time": "20:56",
-      "marker": "nio: HB ",
-      "qemu": "★ 判决实验：410+新ADT ⇒ 正常跑到 IOKit match ret=1",
-      "result": "但仍无 nio: ufs probe ⇒ personality 从未发出"
+      "qemu": "★ 活着到 IOKit match ret=1",
+      "result": "但 DT 是垃圾 ⇒ 根 nub 无名 ⇒ 链断"
     }
   ],
   "next_actions": [
@@ -83,6 +76,10 @@
     "与 'nio: dt head=0x... len=14052' ⇒ 设备树到位"
   ],
   "notes": [
+    "★ 设备树从来没被读到的真正原因：DarwinBoot 给的 deviceTreeP 已经含 slide，XNU 的 PE_slide_devicetree 又加一次（双重 slide）⇒ 读到空页。修法：在 PE_slide_devicetree 里先减 slide 再加 slide。",
+    "★ 根 nub 名 = compatible 第一串 = D22AP（profile.toml 故意如此，音频服务器要用 board name）⇒ personality 的 IONameMatch 必须动态取 gRootNub->getName()，不能硬编码 device-tree。",
+    "★ 多行 Python 锚点在 CRLF 文件里不匹配 ⇒ 改文件用 newline=''，锚点用单行。",
+    "★ apply-series.py 的基线是 tmp/series-apply（不是 --src 树）；要'不含某补丁'的基线就把它从 series 里去掉再 apply 一次。",
     "★ 往 XNU 里塞新 C++ 代码前，先用替身头文件 out/patchwork/type-check.cpp 本地编译一遍（zig clang --target=aarch64-macos-none -c file.cpp -o out.o），再占 runner。419 就是因为没做这一步白等 25 分钟。",
     "★ zig clang 的坑：-fsyntax-only 报 FileNotFound，必须用 -c；target 名是 aarch64-macos-none。",
     "★ 根因（2026-11-16 23:00 定案）：静态 kext 无 OSKext ⇒ personality 从未发出 ⇒ NioUfs/ArmDTPlatform 从未启动 ⇒ 设备树从未被读过。修复=内核在匹配前 addDrivers 发布。",
