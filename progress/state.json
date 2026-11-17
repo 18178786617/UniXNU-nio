@@ -159,6 +159,8 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 02:00 ★★★★★ **我有自己的眼睛了**：CI 每轮都有 QEMU job 且已抓帧缓冲成 PNG，只是之前没随内核发布到分支（'Only the kernel is on the branch'）。已修：workflow 把 fb.png/console.txt/qemu-guest-errors.log 一起发布，round-image.sh 顺手取到 out/screen/fb-<run>.png\n⇒ **475 起每轮我自己读板**，不用等照片 ⇒ 迭代从'22 分钟+人工拍照'变成'CI 结束即读'\n⇒ QEMU 与真机同一 cmdline（含 native-ufs-probe=12）⇒ **UFS 路径在 QEMU 里也跑**，可当开发环境",
+    "★★★ 2026-11-18 01:52 路线 A 确认（机主：肯定是 A）。★ 新发现：**CI 的 QEMU job 一直存在**（第 678 行，'The phone gives us 30 seconds and a console that dies; QEMU gives us a full console'）",
     "★★★ 2026-11-18 02:05 ★★★ P3+ 估计**上调**（机主质疑「有驱动还要这么久？」触发的核查）：\n  · ★ **hakios 的 Qualcomm 驱动在 Linux 内核里，没同步进 XNU**（xnu/files/ 无 ath11k/mac80211；hakios.patch 仅 3504 行内核基础设施）⇒ **nio 用不上**\n  · ★ **Apple 的 IO80211Family 不在 16.5 IPSW 里**（Extensions 只有 13 个 kext；只有 DriverKit 版）⇒ 也不可用\n  · ⇒ WiFi/基带 = 把 Linux 的 Qualcomm 栈移植进 XNU ⇒ **几周级**（我先前说 2-4 天是错的）\n  · ★ 但脚手架在：wifi/lx/ 5324 行 Linux→XNU 垫片 + qmi.h\n  · ★★ **P3+ 依赖 P3**（无线/基带的用户态在 iOS 里）⇒ 价值排序 P1 → P3 → P3+",
     "★★★★ 2026-11-18 02:00 ★★★ ios165/README 的关键事实：**apfs.fs 在本地**（APFS 挂载可行 ⇒ P3 成立）；官方 root 装载 = UFS 分区（印证主路）；xnu-8796.121.2 源码 + ios-v60 的 framebuffer/timer/ADT 补丁在本地",
     "★★★★★ 2026-11-18 01:58 ★★★ 两条重要更正（都往好的方向）：\n  ① **接线有据可查**：nio-rom-flash/dtbo.img 里有完整设备树（qcom,cnss/wlan ×30、qcom,adsp ×30、qcom,spmi ×360）⇒ 我之前说'缺设备树节点与硬件接线'是错的 ⇒ WiFi 估计下调到 2-4 天\n  ② **ath11k 不与 CNSS2 冲突**：ath11k 的 Qualcomm 后端就是 CNSS2/q6v5（ath11k/qmi.c）⇒ hakios 的路线对 nio 适用（我先前说'不适用'又错了）\n  ③ modem 基带固件**不能**用小米10 的（855/X55 vs 865/X65），但 nio 自己的已在 NON-HLOS.bin 里 ✓",
@@ -492,6 +494,19 @@
       "★ 工作量对比": "mockfs 路线：内核补丁（支持第三个文件+上限 4GB）+ 2.6GB 进内核镜像 + APFS kext 注入 + 启动极慢（2.6GB 要解压进内存）⇒ **多轮 CI + 大量本地工作**",
       "★ 结论": "**主路（UFS 根卷）明显更快**。已到 DP=1，剩 4-6 步，全是我们自己写的代码、每步都有直写探针；备路要从零造 4 样东西。",
       "★ 475 是否改窗口": "**不改** —— 窗口是内核的物理内存，UFS 读根卷不需要更多内存，边际价值很小；475 应该带主路下一步需要的探针（等 474 的照片来定）。"
+    }
+  },
+  "★★ 迭代速度_我有自己的眼睛了": {
+    "★ 发现": "CI 的 workflow 里**每一轮都有 QEMU job**（第 678 行 'Boot the kernel in QEMU'），而且它已经做两件关键事：跑 90 秒、抓帧缓冲写成 PNG（out/qemu/fb.png）",
+    "★ 之前为什么拿不到": "PNG 被复制进 out/nio/*/nio/logs/ 了，但**发布到 ci-kernel/run-NNN 分支时只带 kernel.macho**（'Only the kernel is on the branch'）⇒ PNG 留在构建机上 ⇒ 只能靠人拍照",
+    "★ 已修": "① workflow：把 out/qemu/fb.png + console.txt + qemu-guest-errors.log 一起复制进 $stage/ci-kernel/ ⇒ 随内核发布到分支\n② tools/round-image.sh：取内核时顺手取 fb.png ⇒ 落在 out/screen/fb-<run>.png",
+    "★★ 意义": "**从 475 起，每一轮我都能自己读板**：不用等照片、不用刷机就能判读 ⇒ 迭代循环从'22 分钟 + 人工拍照'变成'CI 结束即读'",
+    "★★ QEMU 可当开发环境": "QEMU 的 cmdline 与真机同一份（board.toml 的 payload.kernel_args），含 native-ufs-root=1 / native-ufs-probe=12 / native-ufs-diagnostics=1 ⇒ ★ **UFS 路径在 QEMU 里也跑**（无真实硬件 ⇒ 读返回 0，但驱动逻辑的进度可见）",
+    "473_的_QEMU_实况": "kernel.log 末尾 = 链接成功 ✓；qemu-guest-errors.log = 0 字节（无 guest 异常）✓；qemu.log = 81 字节（'terminating on signal 15' = 90 秒超时正常终止，内核没崩）✓；serial.log = 0 字节 ⇒ ★ 印证'内核输出只走帧缓冲，串口什么都没有'",
+    "★ 路线A下的最快路": {
+      "主线": "真机 UFS 根卷（P1）—— 唯一能拿到真 iOS 系统盘的路",
+      "★ 并行": "用 QEMU 每轮的 PNG 自行判读内核走到哪 ⇒ 不等照片 ⇒ 每轮省下人工往返",
+      "★ 仍需用户照片的只有": "真机特有的现象（真实 UFS 读出的数据、真实硬件时序）"
     }
   }
 }
