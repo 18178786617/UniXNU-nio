@@ -159,6 +159,9 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★ 2026-11-18 01:45 ★★ 用户态侧调查的三条更正 + 备路真相（详见备路_内存盘root_的真相）：\n  · dyld cache **完整 43 片 2.3 GB**（之前说 5 片是错的）\n  · mockfs **不走 IOKit 匹配链**（VFS 层最后一项）⇒ UFS 卡住时它照样能挂\n  · cache 镜像**剥了 __LINKEDIT** ⇒ re-export 表缺失 ⇒ mockfs 多文件方案死\n  · ⇒ 备路最终形态 = **完整 cache 装进内存盘** ⇒ 瓶颈 = 2 GB 连续物理内存\n  · ★ 验证办法（零风险）：475 把 owned_memory_size 改成 2 GB ⇒ 成则备路就绪，败则屏幕打印 BIG RUN",
+    "★★★★ 2026-11-18 01:30 ★★ board.toml 的 root_match_volume_uuid 与我们镜像一致（97a3eb1a-…）✓ 且取的是 volume UUID 不是 container UUID ✓",
+    "★★★★ 2026-11-18 01:30 run-474 已推（43bc09e）：UFS 的每条直写进度行加**递增序号**（'%u| ' 前缀）⇒ 滚屏也不丢进度",
     "★★★★ 2026-11-18 01:30 run-473 判读（照片行号 0934-0983）：\n  · ★ **屏幕滚过了 UFS 的行**（那些在 05xx）⇒ 看不到 UFS 走到哪\n  · ★ 但 473 **比 469 走得远**：0983 还在匹配 nub（多次 SM enter/locked/unlocked），而 469 卡在 0513 的 UFS bring-up ⇒ **迭代化 + 硬件计时器延时的改动生效了，匹配链在继续推进**\n  · ★ **V 序列是 UEFI 侧的**（内核里没有 \"V%d\" 格式串）⇒ V 没了 = UEFI 停止输出/交接完成，不是内核死\n  · ★ **HE/∞ 也是 UEFI 侧**（内核里搜不到 ∞ 的 UTF-8；\"HE\" 只是机器码里的巧合字节）\n  · ★ **内核的心跳（\"nio: hb %u %u\"）从未出现** ⇒ 它是 kernel_thread_start 起的，不跑（已知）\n  · ★ **30 秒复位是已知现象**，不是 473 引入：board.toml 的 debug=0x1 注释明写'Every round of this port ends with the machine resetting itself about a minute in'\n  · ★ 473 第一次真正生效的新参数：-wdt_no_pmu、wdt_test=no_user_checkin、nio-gpu=8、native-ufs-diagnostics=1（因为 22:40 修好了 board.toml→payload 卷的 args 合并）\n  · ⇒ 474 的改动已备好：UFS 的每条直写进度行加**递增序号**（\"%u| \" 前缀），滚屏也不丢进度",
     "★★★★ 2026-11-18 01:25 NX769J（红魔 9）调查：\n  · ★ **更正**：它的 README 说 'Hardware bring-up has not run'、'Boot on hardware | not attempted'⇒ **它也只在'镜像全做出来'这一步，我们不落后，是并列**\n  · ★ 它与我们**同 os profile（ios-16.5-20F66）**、**mockfs 五个补丁完全相同**\n  · ★ 它的存储路线：ShengUfs + **VirtioMmioBlock**（内存块设备）+ packed_data_ramdisk=true，owned_memory_size=**0x80000000（2 GB）** ⇒ 它走的是'内存盘当 root'，不是 UFS 根卷\n  · ★★ 由此**备路可能没被硬件挡住**：我们要 2 GB 连续段（板子 DRAM 6 GB），而 NX769J 已把 Data seed 做成了 **macOS runner 的 CI 工作流**（hdiutil 可用），且记了坑：'made a 32 MiB container and grew it ... now creates the container at its target size and refuses up front when the tree would not fit'\n  · ★ 另一个可直接用的答案：**[payload.adt].root_match_volume_uuid 的语义与陷阱** —— 要用 OS 窗口的 APFS **volume** UUID（97A3EB1A-...），**不是**容器 UUID（c155fa03-...，它属于整盘 IOMedia，不挂载）\n  · ★ 它也有 **dual-system-partition** 工具（从 userdata 尾部切一块 unixnu 分区，保留 Android 数据）",
     "★★★★ 2026-11-18 01:30 用户态侧调查（ios165/root）结论：\n  · launchd 只依赖两个 dylib：/usr/lib/libSystem.B.dylib 与 /usr/lib/libobjc.A.dylib（都在 dyld cache 里）⇒ 有完整系统盘就够。\n  · ★ rootfs/rootfs.img 里的两个文件是 **真 launchd + 真 usr/lib/dyld**（不是测试文件），与官方 build-target-dyld-fixture.py 选的完全一致。\n  · ★ mockfs 内核限制：count 必须==2、镜像 ≤32 MiB（mockfs_vfsops.c:146）⇒ 装不下完整用户态；且 mockfs 仍在同一匹配链上，UFS 卡住时它也起不来。\n  · ★ initrd 完整系统盘被硬件挡住：owned_memory_size=0x10000000(256 MiB)，board.toml 注释'no 4 GiB run exists'（原厂 XBL 固件 DRAM 碎片化）⇒ 除非换 UniXNU 定制固件。\n  · ★ dyld_shared_cache 不完整：20F66 是 43 个切片（tools/dsc-closure2.py），我们只有 5 个文件；而 launchd 首启要生成它（需可写系统卷）。tools/dsc-closure.py + dsc-closure2.py + check-mockfs-paths.py 已经在手。",
@@ -367,5 +370,38 @@
     "牵连": "CI 直接依赖仓库里的 donor/：workflow 417-430 行，UNIXNU_KERNELCACHE 让 scripts/unixnu/kernel.py:prelink() 从这个路径取 donor，'so no IPSW is fetched'。⇒ 移除 donor 必须同时改 CI（改为从 Apple CDN 取，或用 release asset —— workflow 的 kernelcache_url 输入本来就写着'Empty uses the release asset of this repository'）。",
     "好消息": "远端其它分支（ci-kernel/latest、ci-diagnostics、ci-logs/*）**都没有**这些文件 ⇒ 只需处理 main。",
     "建议": "1) 从 main 的历史里移除这四个（git filter-repo），2) 加 .gitignore，3) CI 改成按 board.toml 的哈希从 Apple CDN 取 kernelcache，4) 本地保留（移植要用）。★ 重写历史会影响已有 clone；机主拍板后再做。"
+  },
+  "备路_内存盘root_的真相": {
+    "★ 三条更正": [
+      "① dyld cache **是完整的 43 个切片（2.3 GB）** —— 我之前说'只有 5 个文件'是错的。（tools/dsc-closure2.py 实测：cache: 40 slices, 2710 images in table）",
+      "② mockfs **不走 IOKit 匹配链** —— 它是 VFS 层的标准文件系统（osfmk/bsd/vfs/vfs_conf.c:197 'mockfs should always be the last standard entry'），由 VFS 的 mountroot 机制调用 ⇒ **UFS 卡住时 mockfs 照样能挂**。我之前说'mockfs 仍在同一匹配链上'是错的。",
+      "③ cache 里的镜像**被剥了 __LINKEDIT**（libSystem.B 的 __LINKEDIT fileoff=0x5c000、filesize=332922880 是假值，指向 cache 剩余区域）⇒ **re-export 表不在 cache 里** ⇒ 从 cache 提取的库无法转发符号 ⇒ **mockfs 多文件方案不可行**（IPSW 里也没有 .tbd 可补：find ios165 -name '*.tbd' ⇒ 0 个）"
+    ],
+    "launchd_依赖闭包": {
+      "工具": "tools/dsc-closure2.py（比 dsc-closure.py 正确：20F66 的 cache 镜像没有 LC_ID_DYLIB，要靠 image table 定位）",
+      "结果": "36 个镜像；segment bytes 91,222,227 B (87.00 MB)；__TEXT 只有 4,681,161 B (4.46 MB)",
+      "大头": "/usr/lib/libobjc.A.dylib 82.4 MB —— 其中 __OBJC_RO 段 83,595,040 B (79.7 MB) 是 ObjC 类元数据",
+      "其余": "libSystem.B.dylib 只有 8,888 B；其余 34 个库共约 4.7 MB",
+      "★ 关键": "iOS 设备上 /usr/lib/libSystem.B.dylib **不存在于文件系统**（ios165/root/usr/lib/ 只有 17 项，没有它）⇒ 要让 launchd 跑起来必须给**完整的 dyld cache** ⇒ 需要 ~2.5 GB 连续内存窗口"
+    },
+    "mockfs_N4KROOT_限制（若仍要用）": {
+      "格式": "头 struct.pack('<8sII4Q', b'N4KROOT\\0', version=1, count=2, 4096, len(launchd), test_off, len(dyld))",
+      "内核硬限制": "mockfs_vfsops.c:146 → version!=1 || count!=2 || bytes>32 MiB || launch_offset!=4096 ...",
+      "节点模型": "struct mockfs_fsnode 只有 child_a/child_b/child_c 三个子节点",
+      "路径硬编码": "mockfs_vnops.c:126 → 'sbin'/'usr'/'lib' 解析回 ROOT；'launchd'→slot A；'dyld'/'probe.bin'→slot B；'dev'→MOCKFS_DEV",
+      "我们已有": "mockfs-intermediate-lookup.patch（多级路径查找的一行改动）"
+    },
+    "★ 备路最终形态": "**完整 dyld cache 装进内存盘当 root**（NX769J 同构：VirtioMmioBlock + packed_data_ramdisk=true + owned_memory_size=0x80000000=2 GB）⇒ **瓶颈就是 2 GB 连续物理内存**，不是 UFS、不是 APFS、不是 re-export",
+    "★ 验证2GB的三条路": {
+      "① 改DarwinBoot打印": "AllocateWindow 失败时会画 'NO WINDOW <size> BIG RUN <bytes> @ <addr>' 和最多 7 行 'FREE <addr> + <size>'（>=1MB 的段）⇒ 但 DarwinBoot 是固件的一部分（board.toml:63 'DarwinBoot/GopFramebuffer are firmware/embedded'）⇒ 要重编并重刷 UEFI（设备风险）",
+      "② ★CI探测轮（最优）": "把 board.toml 的 owned_memory_size 改成 0x80000000（2 GB，与 NX769J 一致）⇒ 若有 2 GB 连续段则**成功且备路窗口就绪**；若没有则**失败并把 BIG RUN 打到屏幕上** ⇒ **零设备风险、零本地编译、一轮 CI**。风险：窗口变大改变内核内存布局，需观察",
+      "③ 内核侧打印": "**走不通** —— BootArgs(DARWIN_BOOT_ARGS) 只有 PhysicalBase/MemorySize/MemorySizeActual，而 DarwinBoot 把后两者都填成 WindowSize（256 MiB）⇒ 内核拿不到 UEFI 的内存图"
+    },
+    "★ UUID核对结果_正确": {
+      "board.toml": "root_match_volume_uuid = '97A3EB1A-5218-4936-BC85-9574EC2C8CC9'",
+      "我们自己镜像": "用 refs/UniXNU-nx769j/scripts/extract-root-volume-uuid.py 跑 out/userdata/userdata-root.img ⇒ OS 窗口 volume = 97a3eb1a-5218-4936-bc85-9574ec2c8cc9 ⇒ **完全一致 ✓**",
+      "取法正确": "脚本读 VOL_UUID_OFFSET=0xF0（volume superblock 的 volume UUID），**不是** CONTAINER_UUID_OFFSET=0x48（整盘 IOMedia 的容器 UUID）✓ 与 NX769J 的告诫一致",
+      "顺带知道": "SystemOS 窗口的 volume UUID = 556915a0-5005-4de5-b3e4-6b489dbb4c1a"
+    }
   }
 }
