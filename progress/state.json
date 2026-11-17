@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★ 2026-11-18 01:15 ★★ 到用户态的关键事实：**用户态机制早已通**（R100 的 initprobe 加载成功、画到帧缓冲、GPU 探针经 fd 1 输出）⇒ mockfs 根卷/ELF/系统调用/画屏全验证过。缺的只是真的 iOS 16.5 用户态内容（ios165/root + dyld_cache 都有）。⇒ 两条路：主路 UFS（6-8 步，3-8 小时）与备路 initrd 只读系统盘（2-3 步，1.5-3 小时，官方形态）。",
     "★★★★ 2026-11-18 01:40 官方对照（unixnu.com/zh/）：官方启动链第 5 步与 nio 完全一致（平台专家匹配 ADT 根节点 → 存储驱动发布 userdata 分区 → 发布 OS/SystemOS → 按 UUID 匹配根卷 → 启动 launchd）。★ 发现真实问题：board.toml 的 kernel_args 从未进 payload 卷（官方 build payload 会写进去）⇒ 已加 tools/merge-kernel-args.py 合并并实测通过。",
     "★★★★ 2026-11-18 01:20 关键发现：refs/umi = 机主给的 xm6661885/hakios-xnu-kernel-umi-fixes，**HakiOS (iOS 16.5) on Xiaomi Mi 10** ⇒ 与 nio 同为 iOS 16.5、同为 SM8250。WiFi 走 ath11k（Linux 移植 + 开源固件），不是 Apple 闭源 WCNSS。★ 但它的用户态是 Darwin 的，不是 iOS 的 ⇒ '进 iOS 用户态'仍只有 nio 自己在做。",
     "★★★ 2026-11-18 00:57 更正：机主问'米10里面不是带有驱动了？'—— 是的，我此前说'WiFi 最难，nok10 只有 retinum 基础驱动'是拿错参照物了。umi 带的是完整高通套件：wifi 6852 行（含 WCNSS 固件加载 wlfw.c）、modem 8781 行（mpss.c 250 KB）、audio 9037 行、camera 5087 行、power 1745 行、net 721、haptic 1012，**只有 bluetooth 是 143 行的骨架**。umi 与 nio 同为 SM8250 ⇒ 移植难度远低于估计。",
@@ -246,7 +247,26 @@
         "6. 发布根卷窗口 + APFS 卷身份 + 媒体等待（publishThread）★ 集成度最高"
       ],
       "estimate": "乐观 8-14 轮；按 22-35 分钟/轮（461→468 实测 153 分钟/7 轮）≈ 4-7 小时；悲观 2-3 天",
-      "hardest": "第 5 步（读布局+manifest）：第一次真正读数据；不通则问题在 fabric/请求列表/SMMU 三者之一，而它们都在内核里、IOLog 到不了屏，只能靠直写探针逐行试。manifest 有 7 种失败码对应 7 类原因。"
+      "hardest": "第 5 步（读布局+manifest）：第一次真正读数据；不通则问题在 fabric/请求列表/SMMU 三者之一，而它们都在内核里、IOLog 到不了屏，只能靠直写探针逐行试。manifest 有 7 种失败码对应 7 类原因。",
+      "到用户态的两条路": {
+        "★ 关键事实_用户态机制早已通": "R100 前后：initprobe（out/rootfs-init.bin, 22148 B）**加载成功**，它的 fd4 文本画到了帧缓冲 y 845..1663，GPU 探针输出经 fd 1 写出。⇒ mockfs(N4KROOT) 根卷挂载、ELF 加载、系统调用、画屏、GPU 调用 —— **全部验证过**。缺的只是'真的 iOS 用户态内容'，不是机制。",
+        "主路_UFS": {
+          "剩余": "bring-up 剩 4 步（nop-out → power query → wake(START STOP UNIT) → LUN ready）+ step2 读根卷布局 + step3 manifest 校验 + 发布根卷窗口 + APFS 身份 + 媒体等待 + APFS 挂载",
+          "步数": "6-8 步",
+          "时间": "乐观 6-15 轮 ≈ 3-8 小时；悲观 1-2 天",
+          "风险": "UFS fabric / APFS / 验证块都是黑盒，IOLog 到不了屏"
+        },
+        "备路_initrd只读系统盘_官方形态": {
+          "原理": "官方 payload 支持 scratch-data.img 作 initrd；nio 已有同机制：unixnu.toml 的 initrd=Payloads/rootfs.img（N4KROOT）+ rd=md0，DarwinBoot 拷进内存、填 ADT 的 RAMDisk 占位、memdev 暴露成 md0、IOFindBSDRoot 选中它",
+          "素材_都有": "ios165/root/ = 完整 iOS 16.5 用户态（System/Library/Applications/bin…）；ios165/dyld_cache；ios165/ipsw/*.dmg（5 个，官方 build userdata 的源）；rootfs/rootfs.img（N4KROOT 格式样板）+ initprobe.c + el0probe.c",
+          "剩余": "做一个真的 N4KROOT 系统盘（装 16.5 用户态）+ 换真 launchd",
+          "步数": "2-3 步",
+          "时间": "乐观 3-5 轮 ≈ 1.5-3 小时（不含做系统盘的时间）",
+          "优势": "绕开 UFS 读写、APFS 挂载、验证块三件事"
+        },
+        "★ 建议": "两条并行：主路继续推 CI（473 在跑，不占额外轮次）；备路的系统盘制作是**纯本地工作，不占 CI 轮次** ⇒ 值得同时做。⇒ 到用户态的现实估计：乐观半天，悲观 1-2 天。",
+        "★ 注意": "到'用户层'与'用户层可用'是两件事：前者是内核把控制交给 launchd；后者还要 launchd 起完、SpringBoard 起完、UI 出画面。"
+      }
     },
     "P2_存储层_DSU只读系统盘": {
       "status": "未开始",
