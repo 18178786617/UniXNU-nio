@@ -1,0 +1,6 @@
+[12:55:44] script start (bootstrap=1 jobs=4)
+  object MISSING
+  source sha d48af909f338b58d
+[12:58:38] before make (bootstrap=1 jobs=1)
+  object MISSING
+  source sha d48af909f338b58d
