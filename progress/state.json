@@ -159,6 +159,8 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 02:15 ★★★★★ **眼睛的真正形态找到了**：内核把每个控制台字符镜像进 ramoops 文本环（DBGC 头 + 纯文本），QEMU 用 pmemsave 读出 ⇒ **文本比像素可靠**（可 grep 行号与序号）。\n  ★ QEMU 的 fb.png 恒为 10,656 字节 = **全黑** ⇒ 图没用；QEMU 里内核没崩（guest-errors 空、90 秒正常停）但没画。\n  ★ 已推 476（99093f5）：ramoops.bin 随内核发布 + 新增 scripts/read-console.py（已两种形态自测）。\n  ★ 474 已上机（02:01:52，sha 5057cc61…）",
+    "★★★★ 2026-11-18 02:00 ★★★★★ 我有自己的眼睛了：CI 每轮都有 QEMU job 并抓帧缓冲成 PNG，只是之前没随内核发布（'Only the kernel is on the branch'）。已修 workflow + round-image.sh",
     "★★★★★ 2026-11-18 02:00 ★★★★★ **我有自己的眼睛了**：CI 每轮都有 QEMU job 且已抓帧缓冲成 PNG，只是之前没随内核发布到分支（'Only the kernel is on the branch'）。已修：workflow 把 fb.png/console.txt/qemu-guest-errors.log 一起发布，round-image.sh 顺手取到 out/screen/fb-<run>.png\n⇒ **475 起每轮我自己读板**，不用等照片 ⇒ 迭代从'22 分钟+人工拍照'变成'CI 结束即读'\n⇒ QEMU 与真机同一 cmdline（含 native-ufs-probe=12）⇒ **UFS 路径在 QEMU 里也跑**，可当开发环境",
     "★★★ 2026-11-18 01:52 路线 A 确认（机主：肯定是 A）。★ 新发现：**CI 的 QEMU job 一直存在**（第 678 行，'The phone gives us 30 seconds and a console that dies; QEMU gives us a full console'）",
     "★★★ 2026-11-18 02:05 ★★★ P3+ 估计**上调**（机主质疑「有驱动还要这么久？」触发的核查）：\n  · ★ **hakios 的 Qualcomm 驱动在 Linux 内核里，没同步进 XNU**（xnu/files/ 无 ath11k/mac80211；hakios.patch 仅 3504 行内核基础设施）⇒ **nio 用不上**\n  · ★ **Apple 的 IO80211Family 不在 16.5 IPSW 里**（Extensions 只有 13 个 kext；只有 DriverKit 版）⇒ 也不可用\n  · ⇒ WiFi/基带 = 把 Linux 的 Qualcomm 栈移植进 XNU ⇒ **几周级**（我先前说 2-4 天是错的）\n  · ★ 但脚手架在：wifi/lx/ 5324 行 Linux→XNU 垫片 + qmi.h\n  · ★★ **P3+ 依赖 P3**（无线/基带的用户态在 iOS 里）⇒ 价值排序 P1 → P3 → P3+",
@@ -507,6 +509,17 @@
       "主线": "真机 UFS 根卷（P1）—— 唯一能拿到真 iOS 系统盘的路",
       "★ 并行": "用 QEMU 每轮的 PNG 自行判读内核走到哪 ⇒ 不等照片 ⇒ 每轮省下人工往返",
       "★ 仍需用户照片的只有": "真机特有的现象（真实 UFS 读出的数据、真实硬件时序）"
+    },
+    "★★★ 眼睛的真正形态_ramoops文本环": {
+      "机制": "内核把每一个控制台字符都镜像进 ramoops 的 pstore 控制台记录（{ u32 sig='DBGC', u32 start, u32 size } + 纯文本环），patch 是 nio-console-to-ramoops.patch；QEMU 侧用 pmemsave 从 0xAF040000 读出 0x3F000 字节",
+      "★ 为何它比图好": "**文本可以被精确 grep 行号与序号**，而像素只能看 ⇒ 且 fb.bin 恒为 10,886,400 字节（1080×2520 RGBA），fb.png 恒为 10,656 字节 ⇒ **画面全黑**",
+      "★ QEMU 的画面为什么全黑": "473 与 474 的 fb.png 都是 10,656 字节（空白屏的压缩大小）⇒ ★ **QEMU 里内核没画出任何东西** —— 但 guest-errors 为空、qemu.log 只有 81 字节（90 秒超时正常终止）⇒ **内核没崩，只是没画**（QEMU 的 ADT 是 virt GIC + PSCI/HVC + 4 GiB RAM@0x40000000，与真机差别大）",
+      "★ 工具": "device/UniXNU-nio/scripts/read-console.py —— 读记录、按长度取环；环为空或范围越界时退回读头之后的全部文本；可 --tail / --grep。已用两种记录形态自测（环在偏移 12 / 环为空）",
+      "★ 已推": "476（99093f5）：workflow 把 ramoops.bin 随内核发布到 ci-kernel/run-NNN；round-image.sh 已会取 fb.png 到 out/screen/fb-<run>.png（需再加 ramoops 的取法）"
+    },
+    "★ 挂机分工": {
+      "我自动做": "CI 结束 → 读 ramoops 文本 + PNG → 判读走到哪 → 决定下一轮带什么探针 → 推 → 打包 → fb-go.sh 自动刷机",
+      "★ 用户只需": "① 手机插着 USB 放旁边（刷机全自动）② 偶尔拍一张真机照片（只有**真实 UFS 读出的数据**与**真实硬件时序**这两类事 QEMU/文本给不了）"
     }
   }
 }
