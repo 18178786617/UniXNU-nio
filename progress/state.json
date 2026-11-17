@@ -159,6 +159,10 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 02:00 ★★★ **内存窗口的答案：3 GB 可行，备路不再是死路**\n  · nio-hardware.json 的 memory_banks = 一整段 0x80000000+6GB（覆盖 2-8 GB）\n  · ★ 注释里的血泪史：早前从 XBL Conventional runs 得到的两段是 0xC0000000+512MiB 与 **0x100000000+4GiB（4-8 GB 一整段 4 GB）**；那次失败是因为漏了内核加载地址 0x9A8xxxxx\n  · ★★ board.toml 的 'no 4 GiB run exists' 是**从 alioth 抄来的**，与 nio 实况相反\n  · ⇒ 475 方案：owned_memory_size → 0xC0000000（3 GB）⇒ 备路两条都装得下",
+    "★★★★ 2026-11-18 01:55 ★★ 用户态侧的三条更正：dyld cache **完整 43 片 2.3 GB**（之前说 5 片是错的）；mockfs **不走 IOKit 匹配链**（VFS 层最后一项）；cache 镜像**剥了 __LINKEDIT** ⇒ re-export 表缺失 ⇒ mockfs 多文件方案死（IPSW 里也没有 .tbd）",
+    "★★★★ 2026-11-18 01:50 ★★ board.toml 的 root_match_volume_uuid 与我们镜像一致（97a3eb1a-…）✓ 且取的是 volume UUID 不是 container UUID ✓",
+    "★★★★ 2026-11-18 01:30 run-474 已推（43bc09e）：UFS 每条直写进度行加递增序号 ⇒ 滚屏也不丢进度",
     "★★★★ 2026-11-18 01:45 ★★ 用户态侧调查的三条更正 + 备路真相（详见备路_内存盘root_的真相）：\n  · dyld cache **完整 43 片 2.3 GB**（之前说 5 片是错的）\n  · mockfs **不走 IOKit 匹配链**（VFS 层最后一项）⇒ UFS 卡住时它照样能挂\n  · cache 镜像**剥了 __LINKEDIT** ⇒ re-export 表缺失 ⇒ mockfs 多文件方案死\n  · ⇒ 备路最终形态 = **完整 cache 装进内存盘** ⇒ 瓶颈 = 2 GB 连续物理内存\n  · ★ 验证办法（零风险）：475 把 owned_memory_size 改成 2 GB ⇒ 成则备路就绪，败则屏幕打印 BIG RUN",
     "★★★★ 2026-11-18 01:30 ★★ board.toml 的 root_match_volume_uuid 与我们镜像一致（97a3eb1a-…）✓ 且取的是 volume UUID 不是 container UUID ✓",
     "★★★★ 2026-11-18 01:30 run-474 已推（43bc09e）：UFS 的每条直写进度行加**递增序号**（'%u| ' 前缀）⇒ 滚屏也不丢进度",
@@ -402,6 +406,19 @@
       "我们自己镜像": "用 refs/UniXNU-nx769j/scripts/extract-root-volume-uuid.py 跑 out/userdata/userdata-root.img ⇒ OS 窗口 volume = 97a3eb1a-5218-4936-bc85-9574ec2c8cc9 ⇒ **完全一致 ✓**",
       "取法正确": "脚本读 VOL_UUID_OFFSET=0xF0（volume superblock 的 volume UUID），**不是** CONTAINER_UUID_OFFSET=0x48（整盘 IOMedia 的容器 UUID）✓ 与 NX769J 的告诫一致",
       "顺带知道": "SystemOS 窗口的 volume UUID = 556915a0-5005-4de5-b3e4-6b489dbb4c1a"
+    },
+    "★ 内存窗口_答案": {
+      "★★ 结论": "**3 GB 窗口可行** ⇒ 备路（完整 dyld cache 2.3 GB 或 2.6 GB 的 OS 窗口）装得下 ⇒ 不再是死路",
+      "DRAM_声明": "package/nio-hardware.json 的 memory_banks = 1 段：base 0x80000000(2GB) size 0x180000000(6GB) ⇒ 声明覆盖 2-8 GB 的一整段",
+      "★ XBL_实况": "nio-hardware.json 的 _memory_banks_note 记录：早前从 XBL Conventional runs 得到过两段 —— 0xC0000000+512MiB 与 0x100000000+4GiB（= 4-8 GB，一整段 4 GB）；那次声明被换掉是因为它漏掉了内核自己的加载地址 0x9A8xxxxx，导致 XNU 在早期 VM init（第一行控制台之后）冻结。",
+      "★ 所以board.toml那句话是错的": "\"no 4 GiB run exists (alioth qualifies 4 GiB only on the hand-tuned UniXNU firmware)\" —— 那是 alioth（小米10）的情况被抄到 nio 头上；nio 的 XBL dump 恰恰给出过 4 GB 的一段。",
+      "★ 475的方案": "owned_memory_size 从 0x10000000(256MiB) 改成 0xC0000000(3 GB) —— AllocateWindow 从 4 GB 那段里切（4-7 GB 落在 4-8 GB 段内），比切满 4 GB 更稳健。校验：nio_adt.py 要求 0x10000000 <= 值 <= min(0x200000000, dram_size=6GB) 且 % 0x200000 ⇒ 0xC0000000 合规。★ 风险：窗口变大改变内核内存布局（内核独占 3 GB 物理内存），需观察新卡点。",
+      "★ 备路两条的体积": {
+        "路线A_完整cache": "dyld_shared_cache 2.3 GB + launchd(525KB) + dyld(923KB) ⇒ 需 >=2.4 GB 窗口",
+        "路线B_OS窗口APFS": "ios165/ipsw/096-04666-078.dmg = 2.6 GB（OS 窗口）+ 内核 ⇒ 需 >=2.7 GB 窗口",
+        "两条都装得下3GB": "✔"
+      },
+      "★ 体积参照": "ios165/root（完整用户态树）= 8.1 GB；SystemOS dmg = 4.5 GB ⇒ 这两个装不下 ⇒ 只能走'裁剪后的最小用户态'或'OS 窗口'"
     }
   }
 }
