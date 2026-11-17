@@ -23,8 +23,9 @@ name: package
 #   bring-up tools), a full `release` run may stop at the firmware step; the
 #   kernel and payload artifacts of earlier steps are still uploaded.
 # - Runner defaults to macos-26, the image upstream validates the pipeline on.
-#   Switch to macos-15-intel only if Xcode rejects warning flags (see
-#   docs/BUILD-GITHUB.md for the difference).
+#   The x86_64 image is not on the list any more: the owner asked that it
+#   not be used, and both arm64 images carry the same Xcode for this work.
+#   Switch to macos-15 if macos-26 is busy (see docs/BUILD-GITHUB.md).
 
 on:
   workflow_dispatch:
@@ -35,9 +36,9 @@ on:
         options: ["17"]
         default: "17"
       runner:
-        description: "Runner image (macos-26 = arm64 official; macos-15-intel = x86_64 fallback)"
+        description: "Runner image (macos-26 = arm64 official; macos-15 = arm64, the other pool)"
         type: choice
-        options: ["macos-26", "macos-15-intel"]
+        options: ["macos-26", "macos-15"]
         default: "macos-26"
       uefi_repository:
         description: "GitHub repository carrying the nio uefi tree (org/name)"
