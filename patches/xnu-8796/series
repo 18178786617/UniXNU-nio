@@ -163,3 +163,4 @@ nio-skip-unmatched-classes.patch
 nio-busy-beacon.patch
 nio-static-kext-personalities.patch
 nio-device-tree-slide-fix.patch
+nio-match-path-probe.patch
