@@ -1356,6 +1356,20 @@ jobs:
           for record in $(find out -path '*/kernel/*.json' -type f 2>/dev/null | head -5); do
             cp "$record" "$stage/ci-kernel/$(basename "$record")"
           done
+          # The QEMU framebuffer goes on the branch beside the kernel.  It
+          # is the round's screen, and on this board it is the only record
+          # of what the board drew: the console ring holds nothing that
+          # survives and the serial port carries no output at all, because
+          # the panel is a framebuffer and the kernel writes to it
+          # directly.  The build's own log therefore carries the round's
+          # picture, and the round can be read without a photograph of the
+          # phone.
+          for shot in out/qemu/fb.png out/qemu/console.txt out/qemu/qemu-guest-errors.log; do
+            if [ -f "$shot" ]; then
+              cp "$shot" "$stage/ci-kernel/$(basename "$shot")"
+              echo "the round's screen: $(basename "$shot") ($(wc -c < "$shot") bytes)"
+            fi
+          done
           # The size and the digest go with it, so that what was fetched can
           # be checked against what was built without the build machine.
           python3 - "$stage/ci-kernel/kernel.macho" > "$stage/ci-kernel/SHA256SUMS" <<'PY'
