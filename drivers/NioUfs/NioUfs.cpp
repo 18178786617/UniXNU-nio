@@ -103,6 +103,7 @@ volatile uint32_t native_ufs_hcs = 0;
  * and the rest of the driver keeps using printf.
  */
 extern "C" void vcputc_options (char c, bool poll);
+extern "C" unsigned long long mach_absolute_time (void);
 
 static void nioUfsMark (const char *s)
 {
@@ -120,6 +121,31 @@ static void nioUfsSay (const char *fmt, ...)
 	vsnprintf (buf, sizeof (buf), fmt, ap);
 	va_end (ap);
 	nioUfsMark (buf);
+}
+/* nio: the waits in this driver do not use the kernel's delay.
+ *
+ * IODelay() ends in machine_delay_until(), which spins on
+ * mach_absolute_time(), and the board's continuous timebase is advanced
+ * by the timer interrupt; the IOKit matching path runs with the
+ * interrupt off, so the timebase stands still and the spin never ends.
+ * The wait that hung run 469 was one of these: the last line the panel
+ * carried was the status read, and the only thing between it and the
+ * next line was a IODelay(1000).
+ *
+ * These waits only want a register to settle, so they are a spin on
+ * the register itself.  Reading the controller's status register takes
+ * about as long as the wait did, it needs no clock, and it does not
+ * sleep.
+ */
+static void nioUfsSpin (unsigned iterations)
+{
+	volatile uint32_t sink = 0;
+	unsigned i;
+
+	for (i = 0; i < iterations; ++i) {
+		sink += read32 (gHost.hc, 0x30);
+	}
+	(void) sink;
 }
 volatile uint32_t native_ufs_hce = 0;
 volatile uint32_t native_ufs_utrl_ready = 0;
@@ -268,7 +294,7 @@ bool NioUfs::waitSet (uintptr_t base, unsigned offset, uint32_t mask, unsigned l
     if ((read32 (base, offset) & mask) == mask) {
       return true;
     }
-    IODelay (1);
+    nioUfsSpin (20);
   }
   return false;
 }
@@ -523,7 +549,7 @@ void NioUfs::adoptAndRead (unsigned level)
   write32 (hc, 0x60, 0);            // stop the firmware's request list
   __asm__ volatile ("dsb sy" ::: "memory");
   unsigned stopLoops = 10000;
-  while ((read32 (hc, 0x60) & 1) && stopLoops--) IODelay (10);
+  while ((read32 (hc, 0x60) & 1) && stopLoops--) nioUfsSpin (200);
   if (read32 (hc, 0x60) & 1) panic ("NATIVE_UFS adopt: request list did not stop");
   smmuBypassStream (0x60, smmuMap, smmuReport, phys, 16384);
   write32 (hc, 0x50, static_cast<uint32_t> (phys));
@@ -581,7 +607,7 @@ void NioUfs::adoptAndRead (unsigned level)
         done = true;
         break;
       }
-      IODelay (1);
+      nioUfsSpin (20);
     }
     cacheCleanInvalidate (virt, 16384);
     if (!done) {
@@ -632,7 +658,7 @@ void NioUfs::adoptAndRead (unsigned level)
         done = true;
         break;
       }
-      IODelay (1);
+      nioUfsSpin (20);
     }
     cacheCleanInvalidate (virt, 16384);
     if (!done) {
@@ -655,7 +681,7 @@ void NioUfs::adoptAndRead (unsigned level)
     UfsResult w = command (0xd0, ssu, 6, false, 0);
     wakeStatus = (w.ocs << 16) | (w.response << 8) | w.scsi;
     for (unsigned settle = 0; settle < 50; settle++) {
-      IODelay (1000);
+      nioUfsSpin (20000);
     }
     query (1, 0x03, 0x02, &powerAfter, &queryResp);
     (void) ignoredValue;
@@ -1054,7 +1080,7 @@ static uint32_t hostUicCommand (uint8_t opcode, const char *name)
   hostWrite (0x94, 0); hostWrite (0x98, 0); hostWrite (0x9c, 0);
   hostWrite (0x90, opcode);
   unsigned spin = 0;
-  while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) IODelay (10);
+  while (!(read32 (gHost.hc, 0x20) & 0x400) && ++spin < 100000) nioUfsSpin (200);
   uint32_t result = read32 (gHost.hc, 0x98);
   if (spin >= 100000) {
     panic ("NATIVE_UFS uic: %s never completed\n"
@@ -1289,6 +1315,16 @@ static bool hostBringUp (const char **why)
    * printed sample says nothing to the person reading the screen; the
    * record is what the panic prints when the bring-up fails further down.
    */
+  /* nio: does the timebase move in this context at all?  The spin is the
+   * driver's own, so the reading does not need a clock to take.  If the
+   * delta is zero, the board's continuous timebase is frozen here, and
+   * that is why the kernel's own delay could not end. */
+  {
+    unsigned long long t0 = mach_absolute_time ();
+    nioUfsSpin (20000);
+    unsigned long long t1 = mach_absolute_time ();
+    nioUfsSay ("nio: ufs bu clock t0=%llu t1=%llu delta=%llu\n", t0, t1, t1 - t0);
+  }
   for (int sample = 0; sample < 20; ++sample) {
     /* nio: run 468 reached "bu queue-up dp=1 hcs=0000010f" -- the first
      * time the controller reported the device present -- and the panel
@@ -1306,10 +1342,10 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.polls = (uint32_t) sample;
     if (cs & 0x1) {
       gRootDiagnostic.isSeen = 1;
-      IODelay (1000);
+      nioUfsSpin (20000);
       break;
     }
-    IODelay (1000);
+    nioUfsSpin (20000);
   }
   /* nio R294: the UniPro link is not touched unless the transport itself
    * fails.
@@ -1348,7 +1384,7 @@ static bool hostBringUp (const char **why)
     // and the request list has to be rebuilt before it can be used.
     {
       unsigned det = 0;
-      while (!(read32 (gHost.hc, 0x30) & 0x1) && ++det < 200000) IODelay (10);
+      while (!(read32 (gHost.hc, 0x30) & 0x1) && ++det < 200000) nioUfsSpin (200);
       if (!(read32 (gHost.hc, 0x30) & 0x1)) {
         panic ("NATIVE_UFS uic: no device after the UIC recovery\n"
                "rst=%02x en=%02x ls=%02x hcs=%08x is=%08x\n"
@@ -1369,7 +1405,7 @@ static bool hostBringUp (const char **why)
     hostWrite (0x60, 0);                       // stop the request list
     {
       unsigned stop = 0;
-      while ((read32 (gHost.hc, 0x60) & 1) && ++stop < 100000) IODelay (10);
+      while ((read32 (gHost.hc, 0x60) & 1) && ++stop < 100000) nioUfsSpin (200);
     }
     gHost.poisoned = false;
     if (!hostStartQueue (why)) {
@@ -1412,7 +1448,7 @@ static bool hostBringUp (const char **why)
       *why = "wake (START STOP UNIT)";
       return false;
     }
-    IOSleep (50);
+    nioUfsSpin (1000000);
   }
   printf ("nio: wake done, polling LUN ready\n");
   gRootDiagnostic.stage = "LUN ready";
@@ -1424,7 +1460,7 @@ static bool hostBringUp (const char **why)
       return true;
     }
     if (gHost.poisoned) break;
-    IOSleep (10);
+    nioUfsSpin (200000);
   }
   gHost.ready = false;
   *why = "LUN 0 not ready";
@@ -2291,7 +2327,7 @@ static void publishThread (void *, wait_result_t)
       for (unsigned tick = 0; tick <= 300; ++tick) {
         ready = mediaWithUuidExists (uuid, device);
         if (ready || tick == 300) break;
-        IOSleep (100);
+        nioUfsSpin (2000000);
       }
       nioUfsSay ("nio: ufs wait media %s\n", device->windowLabel ());
       IOLog ("NioUfs: %s volume %s %s\n", device->windowLabel (), uuid, ready ? "ready" : "not ready");
@@ -2329,7 +2365,7 @@ extern int nprocs;
 static void statsThread (void *argument, wait_result_t)
 {
   unsigned delay = static_cast<unsigned> (reinterpret_cast<uintptr_t> (argument));
-  IOSleep (delay * 1000);
+  nioUfsSpin (delay * 20000000);
   panic ("NATIVE_UFS memory snapshot after %u s\n"
          "pages total=%u free=%u active=%u inactive=%u wired=%u spec=%u purgeable=%u\n"
          "available=%u max_mem=%llx procs=%d blocks=%llu\n",
@@ -2406,9 +2442,9 @@ static void mediaReportThread (void *, wait_result_t)
     if (count >= 4) {
       break;
     }
-    IOSleep (100);
+    nioUfsSpin (2000000);
   }
-  IOSleep (500);
+  nioUfsSpin (10000000);
   /* Both answers go on the first line: whatever else the panel loses, whether
    * the kernel published these two volumes has to survive. */
   int used = snprintf (gMediaReport, sizeof (gMediaReport),
