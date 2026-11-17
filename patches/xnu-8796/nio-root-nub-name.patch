@@ -1,44 +1,91 @@
 Say what the root nub is called and what the tree holds
 
-The root nub takes its name from the device tree: InitIOKit() hands the tree
-to IOPlatformExpertDevice::init(), which makes a registry entry out of it and
-uses that entry as the nub's name.  So the name says whether the tree was
-found at all.  If it is not "device-tree", then nothing that matches on that
-name is ever offered the nub -- the platform expert that reads the tree
-never starts, the nodes under /arm-io are never published, and the storage
-controller is never matched.  That is the whole chain, and the name is
-where it can be seen from.
+The root nub is the tree's root entry: InitIOKit() hands the tree to
+IOPlatformExpertDevice::init(), which makes a registry entry out of it and
+gives that entry the nub's name.  So the name says whether the tree was
+found at all.  If it is not "device-tree", then nothing that matches on
+that name is ever offered the nub -- the platform expert that reads the
+tree never starts, the nodes under /arm-io are never published, and the
+storage controller is never matched.  That is the whole chain, and the name
+is where it can be seen from.
 
-The three lookups say the same about the tree itself: whether the branch
-the storage driver needs is in it, and whether the interrupt controller is.
+The nub's children are the tree's children, so the two lookups below say
+whether the branch the storage driver needs is in the tree and whether the
+interrupt controller is.
 
-The lines are printed next to the one that publishes the personalities,
-because that is where the matching starts and because the output there
-reaches the screen.  Earlier in the boot there is nowhere to print: the
-console is not up yet, and what the kernel writes to the ramoops ring does
-not reach the panel.
+The registry is used rather than SecureDTLookupEntry(), because the device
+tree reader's types live in a header that only the platform expert sees,
+and this file is not that file.
+
+The lines land next to the personality line, because that is where the
+matching starts and because the output reaches the screen there.  Earlier
+in the boot there is nowhere to print: the console is not up yet, and what
+the kernel writes to the ramoops ring does not reach the panel.
 
 ---
 
 diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 --- a/iokit/Kernel/IOStartIOKit.cpp
 +++ b/iokit/Kernel/IOStartIOKit.cpp
-@@ -245,6 +245,23 @@
+@@ -245,6 +245,66 @@
  
  			printf("\nnio: publishing %d static personalities",
  			       (int) personalities->getCount());
 +			/* nio: what the tree actually holds, now that it is being
-+			 * read for the first time.  The root nub takes its name from
-+			 * the tree, so its name says whether the tree was found; the
-+			 * three lookups say whether the branch the storage driver
-+			 * needs is in it.  All of it lands next to the personality
-+			 * line, which is where the matching starts and where the
-+			 * output reaches the screen. */
++			 * read for the first time.
++			 *
++			 * The root nub is the tree's root entry: InitIOKit() hands
++			 * the tree to IOPlatformExpertDevice::init(), which makes a
++			 * registry entry out of it and gives that entry the nub's
++			 * name.  So the name says whether the tree was found at all
++			 * -- if it is not "device-tree", then nothing that matches on
++			 * that name is ever offered the nub, the platform expert that
++			 * reads the tree never starts, the nodes under /arm-io are
++			 * never published, and the storage controller is never
++			 * matched.  That is the whole chain, and the name is where it
++			 * can be seen from.
++			 *
++			 * The nub's children are the tree's children, so the two
++			 * lookups below say whether the branch the storage driver
++			 * needs is in the tree and whether the interrupt controller
++			 * is.
++			 *
++			 * The registry is used rather than SecureDTLookupEntry(),
++			 * because the device tree reader's types live in a header
++			 * that only the platform expert sees, and this file is not
++			 * that file.
++			 *
++			 * The lines land next to the personality line, because that is
++			 * where the matching starts and because the output reaches the
++			 * screen there.  Earlier in the boot there is nowhere to
++			 * print: the console is not up yet, and what the kernel
++			 * writes to the ramoops ring does not reach the panel.
++			 */
 +			{
-+				DTEntry found;
-+				int hasArmIo = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io", &found));
-+				int hasIntc  = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io/intc", &found));
-+				int hasUfs   = (kSuccess == SecureDTLookupEntry(NULL, "/arm-io/ufs", &found));
++				int hasArmIo = 0;
++				int hasIntc  = 0;
++				int hasUfs   = 0;
++				OSIterator *children = gRootNub->getChildIterator(gIODTPlane);
++				OSObject *object;
++				while (children != NULL && (object = children->getNextObject()) != NULL) {
++					IORegistryEntry *node = OSDynamicCast(IORegistryEntry, object);
++					const char *name = node ? node->getName() : NULL;
++					if (name == NULL || strcmp(name, "arm-io") != 0) {
++						continue;
++					}
++					hasArmIo = 1;
++					OSIterator *under = node->getChildIterator(gIODTPlane);
++					OSObject *inner;
++					while (under != NULL && (inner = under->getNextObject()) != NULL) {
++						IORegistryEntry *leaf = OSDynamicCast(IORegistryEntry, inner);
++						const char *leafName = leaf ? leaf->getName() : NULL;
++						if (leafName == NULL) {
++							continue;
++						}
++						if (strcmp(leafName, "intc") == 0) { hasIntc = 1; }
++						if (strcmp(leafName, "ufs")  == 0) { hasUfs  = 1; }
++					}
++				}
 +				printf("\nnio: root nub is named %s",
 +				       gRootNub->getName() ? gRootNub->getName() : "(none)");
 +				printf("\nnio: tree has /arm-io=%d /arm-io/intc=%d /arm-io/ufs=%d",
