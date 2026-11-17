@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 19:05（run-459 Intel 上机后刷新）",
-  "headline": "★★★ run-459（macos-15-intel）已构建成功并上机（19:03，fastboot boot Mu-nio-0.img，sha256 a78fc2fb…）。内核带着判决探针 nio-config-thread-probe.patch，面板上会直接给出配置线程为何不存在：'CFG mk fail new'/'CFG mk fail init'/'CFG mk fail start kr=N'（三个静默失败点之一）、'CFG mk ok t=…'（线程建成了）、'CFG alive'（线程真的进了循环体）、'CFG enq %s out=%d wt=%d ct=%d'（wt=gNumWaitingThreads、ct=gNumConfigThreads）。★ 判读链完整：mk fail * ⇒ 直接得到失败原因；mk ok 无 alive ⇒ 线程建了没被调度；alive 无 pick ⇒ 线程跑了但卡在取 job 前；wt 偏大 ⇒ 记账错导致永不建线程。★ 背景（run-456 照片已判决）：'CFG enq D22AP out=4' 之后零输出，CFG wait/pick/DSMi/cand 全无，而 beacon 仍在计数（V322…V326）⇒ 内核活着，配置线程一次都没进循环体；out=4 ⇒ 已积压 3 个 job 无一被取走。",
+  "updated": "2026-11-17 19:16（run-459 判决 + run-460 调度探针已推）",
+  "headline": "★★★ run-459（macos-15-intel）照片给出决定性判决：**配置线程创建成功但从未执行函数体**。面板读到 'nio: CFG enq I22AP out=4 wt=3 ct=3' 与 'nio: CFG mk ok t=0xfffffffff2c7728000' ⇒ kernel_thread_start 返回成功、线程句柄是真的 ⇒ 三个静默失败点（分配/init/启动）全部排除；而 'nio: CFG alive'（函数体第一条语句，在 thread_policy_set 与 semaphore_wait 之前）**从未出现** ⇒ 线程建好了却没跑。wt=3 ct=3 ⇒ 记账正常，create 条件（gOutstandingJobs > gNumWaitingThreads）被正确满足，四个 job 积压正因为第四个线程刚建；前三个配置线程同样没跑。⇒ 断点已精确到'线程交给调度器之后'。已推 460（48233f3）：补丁 nio-config-thread-sched.patch 用双通道标记（printf 走控制台环 + nio_u_mark 直写帧缓冲，绕开环满阻塞）标记 MKOK/MKFAIL（创建侧）与 ALIVE/WAIT/PICK（线程侧）⇒ 一张面板区分'没上 runq'与'上了 runq 没被给 CPU'。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：457 待判决配置线程为何不存在） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部三个硬闸门：① 配置线程起来（当前卡点） ② NioUfs personality 匹配并 attach 到 /arm-io/ufs ③ 链路 + LUN/GPT 枚举（HCS=0x8 → DP=0 是历史卡点） ④ APFS 根卷只读挂载。",
   "phases": [
     {
@@ -17,8 +17,8 @@
       "name": "UFS 起来 + 挂上 APFS 根卷",
       "status": "current",
       "criteria": "根卷挂载成功的日志",
-      "evidence": "★★★ run-456 照片（决定性）：面板尾部完整 —— 'nio: CFG enq D22AP out=4' 之后**再无输出**。CFG wait / CFG pick / DSMi / cand / DSMx **一条都没有** ⇒ 配置线程从未进入循环体（'CFG wait' 的 printf 打在 semaphore_wait 之前，线程一进循环体就必打印）。out=4 ⇒ gOutstandingJobs=4，此前已积压 3 个 job 且无一被取走 ⇒ 匹配任务从未被消费。beacon 仍在计数（V322…V326）⇒ 内核活着，排除'内核死了'。结论：**卡点已从'匹配跑没跑'前移到'配置线程存不存在'**。★ 代码层已查实的三个静默失败点：configThread() 是 do/while(false) 循环，new 失败 / init 失败 / kernel_thread_start 失败三处都是 continue，**全部无声**；另 pingConfig 的 create 条件是 gOutstandingJobs > gNumWaitingThreads，若记账错则永远不建线程。",
-      "next": "457（已推，CI 在跑）：补丁 nio-config-thread-probe.patch —— ① configThread 三处失败分别打印 'CFG mk fail new' / 'CFG mk fail init' / 'CFG mk fail start kr=N'，成功打印 'CFG mk ok t=...'；② 线程体内加 'CFG alive'（区分'从未创建' vs '创建了没跑'）；③ 入队行扩成 'CFG enq %s out=%d wt=%d ct=%d'（wt=gNumWaitingThreads、ct=gNumConfigThreads，排除记账错导致永不创建）。判读表：mk fail * ⇒ 直接给出失败原因；mk ok 无 alive ⇒ 线程建了没调度；alive 无 pick ⇒ 线程跑了但卡在取 job 前；enq 的 wt 远大于真实线程数 ⇒ 记账错。★ 本地已双向核验（git apply 正向+反向 --check 通过，159/166 series 重放 0 失败）并过了 zig clang 类型检查（out/patchwork/type-check.cpp）后才推。"
+      "evidence": "★★★ run-459 照片（决定性，两级定位）：① run-456：'CFG enq D22AP out=4' 之后零输出（CFG wait/pick/DSMi/cand 全无），beacon 仍在计数 ⇒ 内核活着。② run-459：'CFG enq I22AP out=4 wt=3 ct=3' + 'CFG mk ok t=0xfffffffff2c7728000' ⇒ **线程创建成功但函数体从未执行**。三个静默失败点全部排除；wt/ct 证明记账正常、create 条件被满足；前三个配置线程同样没跑 ⇒ 不是偶发。⇒ 断点从'匹配跑没跑'前移到'配置线程交给调度器之后'。",
+      "next": "460（已推 48233f3，CI 在跑）：补丁 nio-config-thread-sched.patch —— 创建侧加直写标记 MKOK/MKFAIL，线程侧加 ALIVE（函数体首句）/WAIT（semaphore_wait 前）/PICK（取出 job 后）。★ 关键：标记同时用 printf 与 nio_u_mark（直写帧缓冲，不经控制台环）—— 因为 459 的 printf 停在 CFG mk ok 之后就不再出现，很像控制台环已满导致 printf 永久阻塞在 console_ring_try_empty 里。判读：MKOK 有 ALIVE 无 ⇒ 线程上了 runq 但没被给 CPU；ALIVE 有 WAIT 无 ⇒ 卡在进入函数体与信号量之间；WAIT 有 PICK 无 ⇒ 卡在信号量上。"
     },
     {
       "id": "P2",
@@ -47,25 +47,32 @@
   ],
   "rounds": [
     {
+      "run": 460,
+      "time": "19:16",
+      "marker": "nio_u_mark: MKOK / ALIVE / WAIT / PICK",
+      "qemu": "macos-15-intel（按机主指示沿用，459 同镜像 30 秒拿到 runner）",
+      "result": "已推 48233f3；本地双向 git apply 核验 + 160 补丁从 pristine 重放 0 失败 + zig clang 类型检查全过"
+    },
+    {
       "run": 459,
       "time": "19:03",
-      "marker": "nio: CFG mk / nio: CFG alive",
-      "qemu": "★ macos-15-intel（x86_64），推后 30 秒就拿到 runner（arm64 池全满）；构建约 25 分钟",
-      "result": "★ 内核已出并上机：kernel.macho 56938496B sha256 ee11cc25…，镜像 sha256 a78fc2fb…；面板待拍照判决"
+      "marker": "nio: CFG mk ok / nio: CFG alive",
+      "qemu": "★ macos-15-intel（x86_64），推后 30 秒拿到 runner（arm64 池全满），构建 25 分钟",
+      "result": "★ 内核已出并上机。★ 判决：线程创建成功（CFG mk ok t=...）但 CFG alive 从未出现 ⇒ 函数体从未执行；wt=3 ct=3 ⇒ 记账正常；前 3 个配置线程同样没跑"
     },
     {
       "run": 458,
       "time": "18:25",
       "marker": "—",
       "qemu": "macos-26",
-      "result": "★ 仍在 GitHub 队列里没拿到 runner（ci-started 分支始终未出现）⇒ 已被 459 取代，忽略"
+      "result": "★ 仍在 GitHub 队列里没拿到 runner ⇒ 被 460 取代，忽略"
     },
     {
       "run": 457,
       "time": "18:16",
       "marker": "nio: CFG mk / nio: CFG alive",
       "qemu": "macos-15",
-      "result": "★ 排队 17 分钟没拿到 runner（arm64 池满）⇒ 已被 459 取代，忽略"
+      "result": "★ 排队 17 分钟没拿到 runner ⇒ 被 460 取代，忽略"
     },
     {
       "run": 456,
@@ -111,13 +118,21 @@
     }
   ],
   "next_actions": [
-    "★ 第一优先：拍 run-459 的开机面板，找 'CFG mk' 与 'CFG alive' 两行。",
-    "判读表：'CFG mk fail new' ⇒ _IOConfigThread 分配失败；'CFG mk fail init' ⇒ init 失败；'CFG mk fail start kr=N' ⇒ kernel_thread_start 失败（kr 直接给原因）；'CFG mk ok t=' 无 'CFG alive' ⇒ 线程建了但没被调度；'CFG alive' 无 'CFG pick' ⇒ 线程跑了但卡在取 job 前。",
-    "★ 'CFG enq ... wt=N ct=N'：wt=gNumWaitingThreads、ct=gNumConfigThreads。若 wt 大于真实线程数 ⇒ create 条件 gOutstandingJobs > wt 永不成立 ⇒ 每个 job 都白排队（这是唯一一种'没有任何失败调用'就能卡死的路径）。",
-    "★ 457/458 仍在 GitHub 队列里，会各自产出一个内核但内容与 459 相同 ⇒ 落地后直接忽略，不必再上机。",
+    "★ 第一优先：run-460 出内核后上机，拍面板 —— 找直写的 MKOK / ALIVE / WAIT / PICK 四个标记。",
+    "★ 判读表（直写标记，绕开控制台环）：MKOK 有 ALIVE 无 ⇒ 线程建好但没被调度（查 runq/cluster 亲和）；ALIVE 有 WAIT 无 ⇒ 卡在函数体开头（thread_policy_set 或栈）；WAIT 有 PICK 无 ⇒ 卡在信号量上。",
+    "★ 459 已确认：三个静默失败点全部排除（CFG mk ok 出现），记账正常（wt=3 ct=3）。所以不要再查 new/init/kernel_thread_start，也不要再查 create 条件。",
+    "★ 控制台环可能是第二个问题：459 的 printf 停在 CFG mk ok 之后（456 的 'IOKit match ret=1' 之后也没了）。若 460 面板上 printf 行也断在某个点而直写标记还在 ⇒ 就是环满，printf 永久阻塞在 console_ring_try_empty。这种情况要改 printf 通道而不是加更多探针。",
+    "★ umi（小米10，同 SM8250）的资产其实已经在用：NioUfs 与 umi 的 ShengUfs 有 87.7% 有效行逐字相同，Root* 系列头文件全在，GopFramebuffer/ShengNovatekTouch/Adreno650 也都已移植。⇒ P1 一旦通，umi 的 UFS 栈立刻能用；当前卡的是 IOKit 匹配链，不是缺代码。",
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★ 2026-11-17 19:05 run-459 的判决把断点钉死了：配置线程**创建成功**（CFG mk ok t=0xfffffffff2c7728000）但**函数体从未执行**（CFG alive 是 main() 第一条语句，从未出现）。三个静默失败点全部排除；wt=3 ct=3 说明记账正常、create 条件被满足。⇒ 以后不要重查 new/init/kernel_thread_start 与 create 条件。",
+    "★★★ 2026-11-17 19:15 umi（小米10）的资产其实**已经在用**，不是'以后才能用'：NioUfs/NioUfs.cpp 与 umi 的 ShengUfs/NativeUfs.cpp 有 87.7% 的有效行逐字相同，RootCommands/RootLayout/RootPublication/RootDiagnostics 四个头文件全在（行数几乎一致），GopFramebuffer/ShengNovatekTouch/Adreno650/AdrenoFirmware 也已移植（触摸与显示已完成）。umi 现在用不上的只有'整机跑通过的经验'（设备树/board 身份不同：umi 是小米10，nio 是 Edge S）。⇒ P1 卡住不是缺代码，是 IOKit 匹配链没通；配置线程修好 = umi 的 UFS 栈立刻能跑。",
+    "★★ 2026-11-17 19:15 控制台环可能是独立的第二个问题：run-456 的 'IOKit match ret=1' 之后、run-459 的 'CFG mk ok' 之后，printf 都没再出现。console_write() 在环满时会循环 console_ring_try_empty(false) 等空间，而没有专门的 drain 线程（排空靠打印者自己）⇒ printf 可以永久阻塞。⇒ 探针必须走 nio_u_mark（cons_ops[1].putc 直写帧缓冲，无锁无环），这与 matching watchdog 的既有做法一致（它就在自己的线程上这么写）。",
+    "★★ 2026-11-17 19:00 CI 镜像池实测：macos-15 与 macos-26 两个 arm64 池**当天全满**（457 排 17 分钟、458 排 8 分钟都没有 runner，ci-started 分支始终不出现）；macos-15-intel（x86_64）推后 **30 秒**就拿到 runner。⇒ macOS arm64 池紧张时直接上 Intel（机主已批准沿用）。",
+    "★★ 2026-11-17 19:00 Intel 切换前的两个历史坑已确认被构建脚本自动处理：workflow 的 'Match the warning flags to this clang' 步骤会问 clang 认识哪些 -Wno- 选项；scripts/build-adreno650.py 自己探测（known_warning_flags()，因为 device 仓的脚本 CI 那一步够不着）。",
+    "★ 2026-11-17 19:00 换镜像会**多起一轮**（concurrency group 名里带镜像名，不同镜像不互相取消）。这次 457/458/459 内容相同，不影响判断。",
+    "★ 2026-11-17 19:05 内核里 'nio: CFG mk fail new' 整串搜不到，但 'nio: CFG mk fail init' 在：**链接器做了字符串分裂优化** —— 拆成共享前缀 'nio: CFG mk fail ' + 独立尾巴 'new'。⇒ 核验探针时不能只看整串，要同时看前缀和尾巴。",
     "★★ 2026-11-17 19:00 CI 镜像池实测：macos-15 与 macos-26 两个 arm64 池**当天全满**（457 排 17 分钟、458 排 8 分钟都没有 runner，ci-started 分支始终不出现）；macos-15-intel（x86_64）推后 **30 秒**就拿到 runner。⇒ macOS arm64 池紧张时直接上 Intel。",
     "★★ 2026-11-17 19:00 Intel 切换前的两个历史坑已确认被构建脚本自动处理：① workflow 的 'Match the warning flags to this clang' 步骤会问 clang 认识哪些 -Wno- 选项；② scripts/build-adreno650.py 自己探测（known_warning_flags()，因为 device 仓的脚本 CI 那一步够不着）。不认识的 -Wno- 选项紧挨 -Werror 是硬错误，而 -Wno-unnecessary-virtual-specifier 在 macOS 15 的 clang 上不存在。",
     "★ 2026-11-17 19:00 换镜像会**多起一轮**（concurrency group 名里带镜像名，所以不同镜像的 push 不互相取消）。这次 457/458/459 内容相同，不影响判断，但下次换镜像前先想清楚。",
@@ -151,7 +166,6 @@
     "★★ 另一个坑：apply-series.py 的基线是 build/xnu-src（pristine），不是 tmp/series-apply！在 tmp 树上改文件再 diff 生成的补丁必然 apply 失败（上下文已变）。改 XNU 补丁永远从 pristine 生成 diff。",
     "★ OSObject 上没有 getCStringNoCopy（它在 OSString 上）；getObject 返回 OSObject*，取字符串要 OSDynamicCast(OSString, ...)。",
     "★★★ 11-17 18:20 配置线程判决：configThread() 的三条失败路径（new / init / kernel_thread_start）全是 continue，且外层是 do/while(false) ⇒ 三种失败**全部无声**，面板上什么都看不到。这解释了 456 的'CFG enq 有、CFG wait 无'。",
-    "★★★ 11-17 18:20 生成补丁的可靠基线：不是 build/xnu-src，也不是 .tmp/xnu-8796.101.5 的工作区（那棵树的 HEAD 是 pristine，工作区状态会随时被 checkout 破坏）。可靠做法：从 pristine 拷出 series 涉及的**全部**文件（112 个，用 `git show HEAD:<file>`），在临时 git 仓里用 **git apply**（CI 的方式）逐个重放 series，再在重放后的树上改、用 git diff 生成补丁。★ 只拷 IOService.cpp 一个文件会让 133 个补丁因'其它文件缺失'被 git apply 整体拒绝 —— 这是 11-17 18:00 那半小时反复绕圈的真正原因。",
     "★★ series 文件是 CRLF ⇒ shell 里读它必须剥掉行尾的 \\r（p=${p%$'\\r'}），否则路径拼错、全部补丁静默跳过。",
     "★ Python 脚本改 CRLF 源文件时：读用 newline=''，写时按行处理、只补 \\r（join 会补 \\n），多补一次行尾会写出 \\r\\r\\n，diff 里会变成一堆空行。"
   ],
