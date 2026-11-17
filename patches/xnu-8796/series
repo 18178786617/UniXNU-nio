@@ -167,3 +167,4 @@ nio-match-path-probe.patch
 nio-config-thread-probe.patch
 nio-root-inline-and-thread-probe.patch
 nio-match-every-nub-in-place.patch
+nio-match-in-a-loop.patch
