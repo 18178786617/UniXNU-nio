@@ -1096,7 +1096,7 @@ static bool hostBringUp (const char **why)
   printf ("nio: ufs bu stop-queue\n");
   if (!hostStopQueue (why)) {
     printf ("nio: ufs bu FAIL stop-queue why=%s hcs=%08x hce=%08x\n",
-            why, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x34));
+            *why, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x34));
     return false;
   }
   printf ("nio: ufs bu smmu\n");
@@ -1236,7 +1236,7 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) {
-    printf ("nio: ufs bu FAIL start-queue why=%s hcs=%08x\n", why, read32 (gHost.hc, 0x30));
+    printf ("nio: ufs bu FAIL start-queue why=%s hcs=%08x\n", *why, read32 (gHost.hc, 0x30));
     return false;
   }
   printf ("nio: ufs bu queue-up dp=%d hcs=%08x\n",
@@ -2711,7 +2711,6 @@ bool NioUfs::startRoot (IOService *provider)
       gRootDiagnostic.stage = "root publisher thread";
       gRootDiagnostic.publicationPhase = static_cast<unsigned> (UfsRootPhase::Schedule);
       gRootDiagnostic.publicationWindow = 0xffffffff;
-      thread_t thread = nullptr;
       owner->retain ();
       /* nio: a thread that kernel_thread_start creates does not run on this
        * board: run 459 showed the configuration thread created with a real

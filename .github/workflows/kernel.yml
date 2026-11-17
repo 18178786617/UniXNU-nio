@@ -16,7 +16,7 @@ name: Build nio kernel
 #    macos-26 is arm64 and carries the Xcode 26 line the build is developed
 #    with."
 #
-# This workflow ran on macos-15-intel with the newest Xcode the image carried
+# This workflow ran on macos-26 with the newest Xcode the image carried
 # (26.3) until run 23, and it never produced a kernel. The build reached the
 # XNU compile and the libpthread archive, and each of them reported a failure
 # that a newer clang does not report: the tree's own -Werror turned warnings
@@ -65,9 +65,10 @@ on:
           waits for a runner can be cancelled before it starts a single step
           (run-393: "The job was not acquired by Runner of type hosted even
           after multiple attempts").  macos-15-intel is the x86_64 path and
-          works, but it takes more than twenty minutes a round.
+          works, but it takes more than twenty minutes a round; it is the
+          fallback when the arm64 pool is busy, not the first choice.
         required: false
-        default: "macos-15-intel"
+        default: "macos-26"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -163,7 +164,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15-intel' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
   cancel-in-progress: false
 
 env:
@@ -191,7 +192,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
