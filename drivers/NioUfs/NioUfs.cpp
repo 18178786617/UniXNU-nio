@@ -154,15 +154,27 @@ static void nioUfsMark (const char *s)
 	}
 }
 
+/* nio: every progress line carries a number.
+ *
+ * Run 473's panel was scrolled past the UFS lines: the screen showed the
+ * matching rounds at 0934 to 0983 and nothing about the storage driver,
+ * and the lines that said where it was had gone off the top.  A number that
+ * only increases survives the scrolling, because the last one on the screen
+ * says how far the path got even when the words do not.
+ */
+static uint32_t nioUfsSaySeq = 0;
+
 static void nioUfsSay (const char *fmt, ...)
 {
 	char buf[224];
+	char line[256];
 	va_list ap;
 
 	va_start (ap, fmt);
 	vsnprintf (buf, sizeof (buf), fmt, ap);
 	va_end (ap);
-	nioUfsMark (buf);
+	snprintf (line, sizeof (line), "%u| %s", ++nioUfsSaySeq, buf);
+	nioUfsMark (line);
 }
 
 volatile uint32_t native_ufs_hce = 0;
