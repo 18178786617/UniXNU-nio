@@ -31,6 +31,7 @@
 #endif
 #include <mach/mach_vm.h>
 #include <sys/param.h>
+#include <stdarg.h>
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
 #include "verified_root.h"
 #include "VerifiedBlockPolicy.h"
@@ -83,6 +84,43 @@ const char *volatile native_ufs_root_failure = nullptr;
 volatile uint32_t native_ufs_cap = 0;
 volatile uint32_t native_ufs_version = 0;
 volatile uint32_t native_ufs_hcs = 0;
+
+/* nio: the progress of the root path is written to the framebuffer
+ * directly, not through the console.
+ *
+ * run 468 got the controller to see the device for the first time -- the
+ * panel says "nio: ufs bu queue-up dp=1 hcs=0000010f" -- and the thread
+ * stopped there without a panic, while the beacon kept counting because
+ * the beacon writes to the framebuffer directly.
+ *
+ * One of the two ways a thread stops there is the console ring:
+ * console_write() waits for a space in it for ever when the ring will not
+ * drain, and nothing else drains it.  A printf in that state does not
+ * return, so a line printed after that point would never be seen.
+ *
+ * vcputc_options() is what cons_ops[1].putc calls, and it is exported by
+ * the kernel, so the driver can use it.  The progress lines go through it
+ * and the rest of the driver keeps using printf.
+ */
+extern "C" void vcputc_options (char c, bool poll);
+
+static void nioUfsMark (const char *s)
+{
+	while (*s != '\0') {
+		vcputc_options (*s++, true);
+	}
+}
+
+static void nioUfsSay (const char *fmt, ...)
+{
+	char buf[224];
+	va_list ap;
+
+	va_start (ap, fmt);
+	vsnprintf (buf, sizeof (buf), fmt, ap);
+	va_end (ap);
+	nioUfsMark (buf);
+}
 volatile uint32_t native_ufs_hce = 0;
 volatile uint32_t native_ufs_utrl_ready = 0;
 volatile uint32_t native_ufs_uic_status = 0;
@@ -1093,13 +1131,13 @@ static bool hostBringUp (const char **why)
   cacheClean (gHost.virt, kDmaBytes);
   uint32_t report[3] = { 0, 0, 0 };
   gRootDiagnostic.stage = "SMMU and request list";
-  printf ("nio: ufs bu stop-queue\n");
+  nioUfsSay ("nio: ufs bu stop-queue\n");
   if (!hostStopQueue (why)) {
-    printf ("nio: ufs bu FAIL stop-queue why=%s hcs=%08x hce=%08x\n",
+    nioUfsSay ("nio: ufs bu FAIL stop-queue why=%s hcs=%08x hce=%08x\n",
             *why, read32 (gHost.hc, 0x30), read32 (gHost.hc, 0x34));
     return false;
   }
-  printf ("nio: ufs bu smmu\n");
+  nioUfsSay ("nio: ufs bu smmu\n");
   smmuBypassStream (0x60, gHost.smmuMap, report, gHost.phys, kDmaBytes);
   gHost.smmu = gHost.smmuMap->getVirtualAddress ();
   // The board's WiFi endpoint (sheng-wifi=2 or more) needs a pass-through stream of its own, set up here with the same code and at the same moment as the
@@ -1236,10 +1274,10 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.cba2r = read32 (gHost.smmu, 0x1800 + 4 * (report[0] >> 16));
   }
   if (!hostStartQueue (why)) {
-    printf ("nio: ufs bu FAIL start-queue why=%s hcs=%08x\n", *why, read32 (gHost.hc, 0x30));
+    nioUfsSay ("nio: ufs bu FAIL start-queue why=%s hcs=%08x\n", *why, read32 (gHost.hc, 0x30));
     return false;
   }
-  printf ("nio: ufs bu queue-up dp=%d hcs=%08x\n",
+  nioUfsSay ("nio: ufs bu queue-up dp=%d hcs=%08x\n",
           (int) (read32 (gHost.hc, 0x30) & 1), read32 (gHost.hc, 0x30));
   /* nio R296: HCS.DP is the one bit that says whether the controller sees the
    * device at all.  Sample it for 20 ms right after the queue is up, so the next
@@ -1252,7 +1290,18 @@ static bool hostBringUp (const char **why)
    * record is what the panic prints when the bring-up fails further down.
    */
   for (int sample = 0; sample < 20; ++sample) {
+    /* nio: run 468 reached "bu queue-up dp=1 hcs=0000010f" -- the first
+     * time the controller reported the device present -- and the panel
+     * stopped there.  Two things can stop a thread right after that line:
+     * the read of the controller's status register, which can hang when
+     * the controller has been given work, and the console ring, which
+     * console_write() waits on for ever when it will not drain.  The
+     * print goes before the read and after it, so the next panel says
+     * which of the two it was: the line before the read and no line
+     * after it is the read, and both lines are the ring. */
+    nioUfsSay ("nio: ufs bu poll %d read\n", sample);
     uint32_t cs = read32 (gHost.hc, 0x30);
+    nioUfsSay ("nio: ufs bu poll %d got dp=%d hcs=%08x\n", sample, (int) (cs & 1), cs);
     gRootDiagnostic.hcs = cs;
     gRootDiagnostic.polls = (uint32_t) sample;
     if (cs & 0x1) {
@@ -1280,7 +1329,7 @@ static bool hostBringUp (const char **why)
    * this hardware is the proven one: prove the transport first, and only go
    * near the DME if the transport does not answer. */
   gRootDiagnostic.stage = "NOP OUT";
-  printf ("nio: ufs bu nop-out begin dp=%d hcs=%08x\n",
+  nioUfsSay ("nio: ufs bu nop-out begin dp=%d hcs=%08x\n",
           (int) (read32 (gHost.hc, 0x30) & 1), read32 (gHost.hc, 0x30));
   // NOP OUT proves the transport before touching the SCSI layer.
   if (hostNop () != kIOReturnSuccess) {
@@ -1342,11 +1391,11 @@ static bool hostBringUp (const char **why)
   }
   uint32_t power = 0;
   gRootDiagnostic.stage = "power mode query";
-  printf ("nio: ufs bu power-query dp=%d hcs=%08x\n",
+  nioUfsSay ("nio: ufs bu power-query dp=%d hcs=%08x\n",
           (int) (read32 (gHost.hc, 0x30) & 1), read32 (gHost.hc, 0x30));
   if (hostQueryRead (0x03, 0x02, &power) != kIOReturnSuccess) {
     gHost.ready = false;
-    printf ("nio: ufs bu FAIL power-query dp=%d hcs=%08x\n",
+    nioUfsSay ("nio: ufs bu FAIL power-query dp=%d hcs=%08x\n",
             (int) (read32 (gHost.hc, 0x30) & 1), read32 (gHost.hc, 0x30));
     *why = "power mode query";
     return false;
@@ -2223,11 +2272,11 @@ static void publishThread (void *, wait_result_t)
       gRootDiagnostic.publicationPhase = static_cast<unsigned> (UfsRootPhase::Start);
       gRootDiagnostic.publicationWindow = index;
       if (!device->start (gPendingProvider)) {
-        printf ("nio: ufs publish FAIL start window=%u\n", index);
+        nioUfsSay ("nio: ufs publish FAIL start window=%u\n", index);
         return false;
       }
       native_ufs_blocks_published = native_ufs_blocks_published + 1;
-      printf ("nio: ufs published %s\n", device->windowLabel ());
+      nioUfsSay ("nio: ufs published %s\n", device->windowLabel ());
       IOLog ("NioUfs: published %s\n", device->windowLabel ());
       return true;
     }
@@ -2244,7 +2293,7 @@ static void publishThread (void *, wait_result_t)
         if (ready || tick == 300) break;
         IOSleep (100);
       }
-      printf ("nio: ufs wait media %s\n", device->windowLabel ());
+      nioUfsSay ("nio: ufs wait media %s\n", device->windowLabel ());
       IOLog ("NioUfs: %s volume %s %s\n", device->windowLabel (), uuid, ready ? "ready" : "not ready");
       if (!ready) captureMissingMedia (uuid);
       return ready;
@@ -2257,7 +2306,7 @@ static void publishThread (void *, wait_result_t)
     const char *reason = result.phase == UfsRootPhase::Start ? "root window service start failed" :
       (!strcmp (gPendingDevice[result.index]->windowLabel (), "SystemOS") ?
        "SystemOS signed volume not found" : "signed root window volume not found");
-    printf ("nio: ufs publish FAIL phase=%u window=%u published=%u reason=%s\n",
+    nioUfsSay ("nio: ufs publish FAIL phase=%u window=%u published=%u reason=%s\n",
             static_cast<unsigned> (result.phase), result.index, result.published, reason);
     IOLog ("NioUfs: root publisher stopped at window %u; published=%u\n", result.index, result.published);
     // Start failures have already released their unpublished object; do not
@@ -2608,36 +2657,36 @@ bool NioUfs::startRoot (IOService *provider)
    * bring-up either failed or stopped, and the reason was on a channel
    * nobody was reading.  Each step now says it is running, and each
    * failure says why, in the channel that reaches the panel. */
-  printf ("nio: ufs step 1 bringup\n");
+  nioUfsSay ("nio: ufs step 1 bringup\n");
   if (!hostBringUp (&why)) {
     rootDiagnosticFailure (why);
-    printf ("nio: ufs FAIL step 1 bringup why=%s\n", why);
+    nioUfsSay ("nio: ufs FAIL step 1 bringup why=%s\n", why);
     IOLog ("NioUfs: root bring-up failed: %s\n", why);
     return false;
   }
-  printf ("nio: ufs step 1 ok\n");
+  nioUfsSay ("nio: ufs step 1 ok\n");
   native_ufs_root_step = 2;
-  printf ("nio: ufs step 2 layout\n");
+  nioUfsSay ("nio: ufs step 2 layout\n");
   RootLayout *layout = static_cast<RootLayout *> (IOMalloc (sizeof (RootLayout)));
   if (!layout || !findRootLayout (layout, &why)) {
     rootDiagnosticFailure (layout ? why : "root layout allocation failed");
-    printf ("nio: ufs FAIL step 2 layout why=%s\n", layout ? why : "allocation failed");
+    nioUfsSay ("nio: ufs FAIL step 2 layout why=%s\n", layout ? why : "allocation failed");
     IOLog ("NioUfs: root layout failed: %s\n", why);
     if (layout) IOFree (layout, sizeof (RootLayout));
     return false;
   }
-  printf ("nio: ufs step 2 ok windows=%u objects=%u\n", layout->windows, layout->objects);
+  nioUfsSay ("nio: ufs step 2 ok windows=%u objects=%u\n", layout->windows, layout->objects);
   native_ufs_root_step = 3;
   if (layout->manifestStatus != 0) {
     rootDiagnosticFailure ("root manifest rejected");
-    printf ("nio: ufs FAIL step 3 manifest status=%u magic=%08x %08x\n",
+    nioUfsSay ("nio: ufs FAIL step 3 manifest status=%u magic=%08x %08x\n",
             layout->manifestStatus, layout->magic0, layout->magic1);
     IOLog ("NioUfs: no valid root manifest in userdata (status %u, magic %08x %08x)\n",
            layout->manifestStatus, layout->magic0, layout->magic1);
     IOFree (layout, sizeof (RootLayout));
     return false;
   }
-  printf ("nio: ufs step 3 ok\n");
+  nioUfsSay ("nio: ufs step 3 ok\n");
   gStoreGeometry = { true, layout->userdataFirst, layout->userdataLast, layout->imageBytes, layout->gptEntriesLba,
                      layout->gptHeaderCrc, layout->gptEntriesCrc, layout->gptEntryCount };
   gRootObjects = layout->objects;
@@ -2719,7 +2768,7 @@ bool NioUfs::startRoot (IOService *provider)
        * therefore done here, on the calling thread.  The retain above and
        * the release at the end of publishThread still balance, because
        * publishThread is entered the same way. */
-      printf ("nio: ufs publish in place\n");
+      nioUfsSay ("nio: ufs publish in place\n");
       publishThread (nullptr, 0);
       return true;
     }
@@ -2731,7 +2780,7 @@ bool NioUfs::startRoot (IOService *provider)
     gPending = 0;
     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
-    printf ("nio: ufs FAIL prepare phase=%u window=%u\n",
+    nioUfsSay ("nio: ufs FAIL prepare phase=%u window=%u\n",
             static_cast<unsigned> (result.phase), result.index);
     IOLog ("NioUfs: root preparation failed phase=%u window=%u; nothing published\n",
            static_cast<unsigned> (result.phase), result.index);
