@@ -1,15 +1,18 @@
 name: Build nio kernel
 
-# Builds kernel.macho from Apple's XNU source on a macOS 26 (arm64) runner
-# and publishes it as an artifact. This repository is the device repository;
-# the UniXNU build system is checked out beside it.
+# Builds kernel.macho from Apple's XNU source on a macOS runner and publishes
+# it as an artifact. This repository is the device repository; the UniXNU
+# build system is checked out beside it.
 #
 # The host architecture does not decide the product architecture: clang
 # cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
 # arm64.
 #
-# The runner is macos-26, and the Xcode is pinned to 26.6, because that is the
-# pair UniXNU develops against. Upstream says so in its own workflow:
+# The runner is macos-15-intel (x86_64), and the Xcode is the newest the
+# image carries.  The product is the same either way.
+#
+# Upstream develops against macos-26 (arm64) with the Xcode 26 line, and it
+# says so in its own workflow:
 #
 #   "Pinned: macos-latest moves between images (macos-15 had an Xcode whose
 #    clang rejects the warning options the build passes with -Werror).
@@ -17,7 +20,7 @@ name: Build nio kernel
 #    with."
 #
 # This workflow ran on macos-26 with the newest Xcode the image carried
-# (26.3) until run 23, and it never produced a kernel. The build reached the
+# (26.3) until run 23, and it never produced a kernel.  The build reached the
 # XNU compile and the libpthread archive, and each of them reported a failure
 # that a newer clang does not report: the tree's own -Werror turned warnings
 # into errors, and the libpthread compile ended with "22 warnings and 1 error
@@ -27,15 +30,18 @@ name: Build nio kernel
 # passes, so the tree compiled with fewer warnings than it was written for,
 # and the warning that became the error was still there.
 #
-# macos-26 and Xcode 26.6 are the pair the upstream build is tested on, and
-# that is what the kernel is built with. macos-15 is the same architecture and
-# the same build; it is the second choice, because the macOS arm64 pool runs
-# out of capacity sometimes, and a job that waits for a runner can be
-# cancelled before it takes a single step. That happened in run-393 on
-# macos-15, and the annotation says so: "The job was not acquired by Runner
-# of type hosted even after multiple attempts". The two images sit in
-# different capacity pools, which is why switching between them is worth
-# doing rather than waiting on one.
+# Which image to use is decided by the capacity of the pools, not by the
+# product.  The two images sit in different capacity pools: a job on macos-26
+# waits for an arm64 runner, and a job on macos-15-intel waits for an x86_64
+# one.  On 2026-11-17 the arm64 pool was full for hours (run-457 waited
+# seventeen minutes and run-458 eight, and neither was given a runner) while
+# the Intel pool was empty and gave one away in thirty seconds.  A job that
+# waits for a runner can be cancelled before it takes a single step, which is
+# what happened to run-393 on macos-15: "The job was not acquired by Runner
+# of type hosted even after multiple attempts".  The macos-26 arm64 pair is
+# what upstream is tested on, and it builds a round in about nine minutes when
+# it is scheduled; the Intel path is slower, at more than twenty minutes a
+# round, and it is what the arm64 pool's being full makes worth switching to.
 #
 # It is the nio counterpart of UniXNU's own "macOS build" workflow with one
 # deliberate difference: that workflow publishes text logs only. Here the kernel
@@ -57,18 +63,17 @@ on:
         description: >-
           Runner image. Any label works here, so a runner of our own on a Mac
           can be used by naming its label (nio-macos); that is the way out
-          when the hosted macOS machines are all busy. macos-26 is arm64 and
-          is the pair UniXNU develops against; when it is scheduled it builds
-          in about nine minutes.
-          macos-15 is the same architecture and is the second choice: the
-          macOS arm64 pool runs out of capacity at times, and a job that
-          waits for a runner can be cancelled before it starts a single step
+          when the hosted macOS machines are all busy. macos-15-intel is the
+          x86_64 image and it is scheduled without a wait while the arm64
+          pool is full; a round takes more than twenty minutes on it.
+          macos-26 is the arm64 image, the pair UniXNU develops against, and
+          it builds in about nine minutes when it is scheduled; the macOS
+          arm64 pool runs out of capacity at times, and a job that waits for
+          a runner can be cancelled before it starts a single step
           (run-393: "The job was not acquired by Runner of type hosted even
-          after multiple attempts").  macos-15-intel is the x86_64 path and
-          works, but it takes more than twenty minutes a round; it is the
-          fallback when the arm64 pool is busy, not the first choice.
+          after multiple attempts").
         required: false
-        default: "macos-26"
+        default: "macos-15-intel"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -164,7 +169,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15-intel' }}
   cancel-in-progress: false
 
 env:
@@ -178,7 +183,7 @@ defaults:
 
 jobs:
   kernel:
-    # macos-26 is the arm64 image with the Xcode 26 line the build is developed
+    # macos-15-intel is the arm64 image with the Xcode 26 line the build is developed
     # against; upstream pins it and pins the Xcode version, and the reason it
     # gives is that macos-15's clang rejects the warning options the build
     # passes with -Werror. The Intel image stays available as a fallback for a
@@ -192,7 +197,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
@@ -313,7 +318,7 @@ jobs:
           # this clang does not know is a hard error:
           #   error: unknown warning option '-Wno-unnecessary-virtual-specifier'
           #   [-Werror,-Wunknown-warning-option]
-          # Upstream pins macos-26 because of this; on any image whose Xcode is older the
+          # Upstream pins macos-15-intel because of this; on any image whose Xcode is older the
           # list has to be trimmed. Ask clang which options it knows rather than guessing.
           #
           # scripts/unixnu/ is deliberately left alone. The framework hands its flags to
