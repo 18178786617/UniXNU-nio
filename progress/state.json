@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 01:58 ★★★ 两条重要更正（都往好的方向）：\n  ① **接线有据可查**：nio-rom-flash/dtbo.img 里有完整设备树（qcom,cnss/wlan ×30、qcom,adsp ×30、qcom,spmi ×360）⇒ 我之前说'缺设备树节点与硬件接线'是错的 ⇒ WiFi 估计下调到 2-4 天\n  ② **ath11k 不与 CNSS2 冲突**：ath11k 的 Qualcomm 后端就是 CNSS2/q6v5（ath11k/qmi.c）⇒ hakios 的路线对 nio 适用（我先前说'不适用'又错了）\n  ③ modem 基带固件**不能**用小米10 的（855/X55 vs 865/X65），但 nio 自己的已在 NON-HLOS.bin 里 ✓",
     "★★★★★ 2026-11-18 01:50 ★★★ **P3+ 的固件全在本地**（/e/nio-rom-flash/）：NON-HLOS.bin(186MB) 含 wcnss/WCNSS/wlan/mpss/modem 标识 + 164 个内嵌 .mbn/.bin；dspso.bin(64MB 音频 DSP)；fsg.mbn(GPS)；射频校准 nvm\n⇒ P3+ 是**移植与接线**的活，不是找料 ⇒ 估计从 3-4 周下调到 **2-3 周**（并行）\n⇒ GPU **已移植**（AdrenoPM4+AdrenoFirmware+A650 固件数组），不是难点 ⇒ 0.5-1 天\n⇒ 完整时间线：**2-4 天看到 iOS 界面，3-4 周后拨号/WiFi/BT/音频全通**",
     "★★★ 2026-11-18 02:10 ★★ 更正：备路的真正硬伤不是内存窗口而是 **ramdisk 体积**（payload 卷 64MB）",
     "★★★ 2026-11-18 02:10 ★★ 更正上一条：**备路的真正硬伤不是内存窗口（3 GB 确实可行），而是 ramdisk 的体积** ——\n  ramdisk 来自 payload 卷（上限 64 MiB）⇒ 装不下 2.3 GB cache / 2.6 GB OS 窗口 ⇒ mockfs 路线彻底死；\n  备路唯一形态 = NX769J 那条（ramdisk 打进内核镜像 + APFS kext 注入）⇒ 多轮 CI + 大量本地工作。\n  ⇒ **主路明显更快**，475 不改窗口（对主路价值边际），等 474 照片带最有价值的下一步。",
@@ -361,7 +362,7 @@
       },
       "★ 修正_各类别的估计": {
         "GPU": "**已移植**（components 里有 AdrenoPM4 + AdrenoFirmware；package/GpuFirmwareA650.c 是 A650 固件数组 266KB）⇒ 且 R100 时 initprobe 已驱动过 GMU bring-up ⇒ **不是难点**，只需在真用户态下出画面 ⇒ **0.5-1 天**",
-        "WiFi": "hakios 的 **WCNSS/q6v5** 栈 6852 行（wifi.c 193KB + wlfw.c 23KB 的 WCNSS 固件加载器）可移植（★ 注意：hakios 的 ath11k 那条路不适用 —— nio 是 QCA6390/QCA6490 走 CNSS2+q6v5+MHI）⇒ 固件在本地 ⇒ 缺设备树接线与调试 ⇒ **3-5 天**",
+        "WiFi": "ath11k + QMI + mac80211 移植（5324 行）+ wlfw 固件加载器，全部在 refs/umi；固件开源（linux-firmware 的 cnss_q6v5_wcnss_*.bin）或用 nio 自己的 NON-HLOS.bin；**接线在 dtbo.img 里（qcom,cnss/wlan ×30）** ⇒ **2-4 天**",
         "蓝牙": "**与 WiFi 共用 WCNSS** ⇒ WiFi 通了 BT 路径就通 ⇒ 剩协议栈与接线 ⇒ **2-4 天**（WiFi 之后）",
         "modem_拨号": "Qualcomm MPS 栈 8781 行（hakios 的 mpss.c 250KB）⇒ 固件在 NON-HLOS.bin ⇒ 缺接线 + USB Gadget/MHI 通道 + SIM ⇒ **3-6 天**",
         "音频": "ADSP 栈 9037 行 + dspso.bin 在 ⇒ 缺接线与 IOKit 音频驱动 ⇒ **2-3 天**",
@@ -372,13 +373,25 @@
       "★ 时间线": {
         "P1_UFS根卷": "今天上午（4-8 轮，2-4 小时）",
         "P3_launchd+界面": "P1 之后半天到 1 天 ⇒ **约 2-4 天后看到 iOS 界面**",
-        "P3plus_全外设": "再 2-3 周 ⇒ **约 3-4 周后拨号/WiFi/BT/音频全通**"
+        "P3plus_全外设": "再 **2-3 周**（WiFi 因接线有据可查而再下调）⇒ 约 3-4 周后拨号/WiFi/BT/音频全通"
       },
       "★ 三个不确定性": [
         "**P1 第 5 步（第一次真正读数据）可能撞 UFS fabric 墙** —— 唯一能让整条时间线作废的未知",
         "Apple 闭源 kext（APFS、IOMobileFramebuffer）与 nio 的兼容性 —— 好消息：NX769J 同为 16.5 profile，其做法可参照",
         "运营商兼容性：基带 ROM 是 nio 自己的 RETCN 版 ⇒ 国内定制 ⇒ 对国内运营商是优势"
-      ]
+      ],
+      "★★ 小米10(hakios)能提供什么": {
+        "驱动_全在本地": "refs/umi/ = xm6661885/hakios-xnu-kernel-umi-fixes（HakiOS on iOS 16.5 for Mi 10）—— ath11k + QMI 通道(ath11k/qmi.c) + wifi/lx/(28 文件 5324 行，Linux mac80211/cfg80211 移植) + wlfw.c(WCNSS 固件加载 23KB) + mpss.c(250KB 基带栈) + ADSP 栈(3306 行) + 机型层 202 文件",
+        "★ 整条路已验证": "机主截图：小米10 的 wifi/蓝牙/gpu/数据联网/短信/声音**都修好了** ⇒ 同一套 QCA6390 + CNSS2/q6v5 + WCNSS 固件 ⇒ **在 nio 上是移植而不是新项目**",
+        "固件_两条来源": "① ath11k 的开源固件（linux-firmware 的 firmware-4/ath11k/cnss_q6v5_wcnss_*.bin，好找）② nio 自己的 /e/nio-rom-flash/NON-HLOS.bin 里的 wcnss 固件（已在本地）",
+        "★ modem固件不能共用": "小米10 是骁龙855（基带 X55），nio 是骁龙865（基带 X65）⇒ **基带固件不通用** ⇒ 必须用 nio 自己的（NON-HLOS.bin 里已在本地 ✓）"
+      },
+      "★★ 更正_接线有据可查": {
+        "我之前说的": "\"缺设备树节点与硬件接线（电源/GPIO/时钟）—— 没有任何地方写着\"",
+        "实际": "**nio-rom-flash/dtbo.img（24 MB）里就有完整设备树**（Android DTB，FDT 魔数 @0x200）：qcom,cnss ×30、cnss ×30、wlan ×30（★ CNSS2 无线节点）、qcom,adsp ×30、adsp ×272、snd ×59（音频）、qcom,camera ×54（相机）、qcom,spmi ×360（★ PMIC：电源与 GPIO）",
+        "⇒ 结论": "**不用凭空摸接线，照着 dtbo 抄即可** ⇒ WiFi 的估计从 3-5 天下调到 **2-4 天**",
+        "★ 更正_ath11k并不与CNSS2冲突": "ath11k 的 Qualcomm 后端（ath11k/qmi.c）**就是** CNSS2 + q6v5 的上游驱动 ⇒ **hakios 的 ath11k 路线对 nio 适用**（我先前说'不适用'是错的）"
+      }
     },
     "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
   },
