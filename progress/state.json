@@ -159,6 +159,8 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★ 2026-11-18 02:05 ★★★ P3+ 估计**上调**（机主质疑「有驱动还要这么久？」触发的核查）：\n  · ★ **hakios 的 Qualcomm 驱动在 Linux 内核里，没同步进 XNU**（xnu/files/ 无 ath11k/mac80211；hakios.patch 仅 3504 行内核基础设施）⇒ **nio 用不上**\n  · ★ **Apple 的 IO80211Family 不在 16.5 IPSW 里**（Extensions 只有 13 个 kext；只有 DriverKit 版）⇒ 也不可用\n  · ⇒ WiFi/基带 = 把 Linux 的 Qualcomm 栈移植进 XNU ⇒ **几周级**（我先前说 2-4 天是错的）\n  · ★ 但脚手架在：wifi/lx/ 5324 行 Linux→XNU 垫片 + qmi.h\n  · ★★ **P3+ 依赖 P3**（无线/基带的用户态在 iOS 里）⇒ 价值排序 P1 → P3 → P3+",
+    "★★★★ 2026-11-18 02:00 ★★★ ios165/README 的关键事实：**apfs.fs 在本地**（APFS 挂载可行 ⇒ P3 成立）；官方 root 装载 = UFS 分区（印证主路）；xnu-8796.121.2 源码 + ios-v60 的 framebuffer/timer/ADT 补丁在本地",
     "★★★★★ 2026-11-18 01:58 ★★★ 两条重要更正（都往好的方向）：\n  ① **接线有据可查**：nio-rom-flash/dtbo.img 里有完整设备树（qcom,cnss/wlan ×30、qcom,adsp ×30、qcom,spmi ×360）⇒ 我之前说'缺设备树节点与硬件接线'是错的 ⇒ WiFi 估计下调到 2-4 天\n  ② **ath11k 不与 CNSS2 冲突**：ath11k 的 Qualcomm 后端就是 CNSS2/q6v5（ath11k/qmi.c）⇒ hakios 的路线对 nio 适用（我先前说'不适用'又错了）\n  ③ modem 基带固件**不能**用小米10 的（855/X55 vs 865/X65），但 nio 自己的已在 NON-HLOS.bin 里 ✓",
     "★★★★★ 2026-11-18 01:50 ★★★ **P3+ 的固件全在本地**（/e/nio-rom-flash/）：NON-HLOS.bin(186MB) 含 wcnss/WCNSS/wlan/mpss/modem 标识 + 164 个内嵌 .mbn/.bin；dspso.bin(64MB 音频 DSP)；fsg.mbn(GPS)；射频校准 nvm\n⇒ P3+ 是**移植与接线**的活，不是找料 ⇒ 估计从 3-4 周下调到 **2-3 周**（并行）\n⇒ GPU **已移植**（AdrenoPM4+AdrenoFirmware+A650 固件数组），不是难点 ⇒ 0.5-1 天\n⇒ 完整时间线：**2-4 天看到 iOS 界面，3-4 周后拨号/WiFi/BT/音频全通**",
     "★★★ 2026-11-18 02:10 ★★ 更正：备路的真正硬伤不是内存窗口而是 **ramdisk 体积**（payload 卷 64MB）",
@@ -361,13 +363,12 @@
         "★★ 结论": "WiFi(WCNSS) + 基带(MPSS) + 音频(DSP) + GPS 的固件全部在本地 ⇒ P3+ 的时间主要是移植与接线，不是找料"
       },
       "★ 修正_各类别的估计": {
-        "GPU": "**已移植**（components 里有 AdrenoPM4 + AdrenoFirmware；package/GpuFirmwareA650.c 是 A650 固件数组 266KB）⇒ 且 R100 时 initprobe 已驱动过 GMU bring-up ⇒ **不是难点**，只需在真用户态下出画面 ⇒ **0.5-1 天**",
-        "WiFi": "ath11k + QMI + mac80211 移植（5324 行）+ wlfw 固件加载器，全部在 refs/umi；固件开源（linux-firmware 的 cnss_q6v5_wcnss_*.bin）或用 nio 自己的 NON-HLOS.bin；**接线在 dtbo.img 里（qcom,cnss/wlan ×30）** ⇒ **2-4 天**",
-        "蓝牙": "**与 WiFi 共用 WCNSS** ⇒ WiFi 通了 BT 路径就通 ⇒ 剩协议栈与接线 ⇒ **2-4 天**（WiFi 之后）",
-        "modem_拨号": "Qualcomm MPS 栈 8781 行（hakios 的 mpss.c 250KB）⇒ 固件在 NON-HLOS.bin ⇒ 缺接线 + USB Gadget/MHI 通道 + SIM ⇒ **3-6 天**",
-        "音频": "ADSP 栈 9037 行 + dspso.bin 在 ⇒ 缺接线与 IOKit 音频驱动 ⇒ **2-3 天**",
-        "相机": "umi camera 4309 行 ⇒ 缺接线 ⇒ **1-2 天**",
-        "★ 合计": "串行 **3-4 周**；三条栈（WiFi+BT / modem / 音频）并行 ⇒ **2-3 周**"
+        "WiFi": "移植 cnss2/q6v5 的 XNU 驱动（地基：hakios 的 5324 行垫片 + qmi.h；参照 Linux 的 cnss2/ath11k）⇒ **2-4 周**（我先前说 2-4 天是错的：那基于\"ath11k 驱动现成\"的错误假设）",
+        "基带_拨号": "Qualcomm MPS 栈（Linux 的 mpss.c 250KB）移植进 XNU + QMI 通道 + SIM ⇒ **2-4 周**",
+        "蓝牙": "与 WiFi 共用 WCNSS ⇒ WiFi 通了路径就通 ⇒ **+1-2 周**",
+        "音频": "ADSP 栈移植 + dspso.bin 在本地 ⇒ **1-2 周**",
+        "GPU": "**已移植**（AdrenoPM4 + AdrenoFirmware + A650 固件数组）⇒ **0.5-1 天**（不是难点）",
+        "★ 合计": "串行 **6-10 周**；三条栈（WiFi+BT / 基带 / 音频）并行 ⇒ **4-6 周**"
       },
       "★ NX769J 对 P3+ 无参照": "它的 components 里**没有 Adreno、没有 WiFi/modem**（只有 ArmDTPlatform/ArmCpu/SoftwareAES/XnuPrelink/DarwinBoot/ShengUfs/VirtioMmioBlock/VerifiedRoot/GopFramebuffer）⇒ 它连 GPU 都没有 ⇒ **nio 在 GPU 上比它更远**，P3+ 不能指望它。",
       "★ 时间线": {
@@ -391,6 +392,25 @@
         "实际": "**nio-rom-flash/dtbo.img（24 MB）里就有完整设备树**（Android DTB，FDT 魔数 @0x200）：qcom,cnss ×30、cnss ×30、wlan ×30（★ CNSS2 无线节点）、qcom,adsp ×30、adsp ×272、snd ×59（音频）、qcom,camera ×54（相机）、qcom,spmi ×360（★ PMIC：电源与 GPIO）",
         "⇒ 结论": "**不用凭空摸接线，照着 dtbo 抄即可** ⇒ WiFi 的估计从 3-5 天下调到 **2-4 天**",
         "★ 更正_ath11k并不与CNSS2冲突": "ath11k 的 Qualcomm 后端（ath11k/qmi.c）**就是** CNSS2 + q6v5 的上游驱动 ⇒ **hakios 的 ath11k 路线对 nio 适用**（我先前说'不适用'是错的）"
+      },
+      "★★★ 关键更正_驱动的层次": {
+        "★ 核心问题": "\"有驱动\"有两层：① Linux 内核态的 Qualcomm 驱动 ② Apple 的闭源 kext。**nio 用的是 XNU 内核 ⇒ 两层都要重新解决。**",
+        "① hakios的驱动_用不上": "ath11k/mac80211/q6v5/MPSS 全在 **Linux 内核**里：xnu/files/ 下**没有** ath11k/mac80211/cfg80211/wifi/wlan；xnu/hakios.patch 只有 **3504 行**且全是内核基础设施（mockfs/pmap/thread/work_interval…）⇒ **没有无线驱动同步进 XNU** ⇒ nio 用不上。",
+        "★ 但它留了脚手架": "wifi/lx/ 的 **28 个文件 5324 行**是**把 Linux API 伪装成 XNU 的垫片**（include/linux/{irq,of,remoteproc,rhashtable}.h、include/linux/soc/qcom/qmi.h、lx_os.h、lx_prelude.h）⇒ 正是为\"把 ath11k 编进 XNU\"准备的 ⇒ **地基在，主体适配 hakios 没做完**",
+        "② Apple的kext_不在本地": "iOS 16.5 的 IPSW 里 **System/Library/Extensions 只有 13 个 kext，没有 IO80211Family**（iPhone X 的 096-04088-077.dmg 实测，318174 条目）⇒ 只有 DriverKit 版（IO80211DriverKit.framework / com.apple.DriverKit-AppleBCMWLAN.dext）⇒ **Apple 的无线 kext 是按需下载组件，不在 IPSW 里** ⇒ 也不可用",
+        "★ 结论": "**WiFi/基带 = 把 Linux 的 Qualcomm 无线栈移植进 XNU 的 bsd/netif** ⇒ **几周级工程**"
+      },
+      "★ 战略结论_依赖关系": {
+        "★ P3+ 一步都动不了_直到P3通": "无线/基带的**用户态**（wirelessd / CommCenter / mccd）在 iOS 里 ⇒ **没有用户态就没有 WiFi/拨号** ⇒ P3+ 不是独立项目，是 P3 的延伸",
+        "价值排序": "P1（今天）→ P3（+1 天，**能看到 iOS 界面**）→ P3+（1.5-2.5 个月）",
+        "★ 一个真正的分叉": "**路线 B（hakios 的模式）**：Linux 内核 + iOS 用户态（靠 Linux 的二进制兼容层跑 iOS app）⇒ WiFi/基带/音频/GPU **全是 Linux 驱动、零移植** ⇒ 但**内核就不是 XNU 了** ⇒ 那是另一个项目"
+      },
+      "★★ ios165_README_的重要事实": {
+        "APFS_kext_在本地": "root/System/Library/Filesystems/**apfs.fs**（含 apfs.util/apfs_boot_util/apfs_checkdigest）⇒ **APFS 挂载可行 ⇒ P3 成立**",
+        "官方装载方式": "README 引用 refs/UniXNU-umi 的官方说法：**root 装载 = UFS 分区**（OS/SystemOS/Data），launchd 从 OS 分区启动 ⇒ **印证主路**",
+        "xnu-8796.121.2_源码在本地": "refs/xnu-xnu-8796.121.2 + refs/ios-v60 的补丁（framebuffer/timer/ADT 修改）⇒ **framebuffer/timer/ADT 有现成参照**（★ timer 补丁与我们查过的时钟问题直接相关）",
+        "★ 合规": "README 明写「Apple 闭源内容，严禁上传 GitHub 等公开仓库（DCMA 风险）」⇒ 与公开仓库里的 4 个 Apple 文件问题一致",
+        "dyld_cache_未预生成": "IPSW root 的常态，Apple 在恢复后首次启动时由 launchd 生成⇒ 移植引导链需要在首启阶段处理，或保留 boot 时生成路径"
       }
     },
     "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
