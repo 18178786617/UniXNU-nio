@@ -159,6 +159,8 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 02:50 ★★★★ **QEMU 画面全白的原因找到并已修（477 / 427d608）**：\n  · ★ QEMU 用 board.toml 的 kernel_args，**真机用 unixnu.toml 的 args（合并后）** ⇒ ★ **合并后那份含 rd=md0（根卷），board.toml 那份不含** ⇒ QEMU 里内核无根可挂 ⇒ 画面全白\n  · ★ 477 起 QEMU 用与真机完全同一份 cmdline ⇒ **QEMU 的结论可直接外推到真机**\n  · merge-kernel-args.py 进仓 + --print 模式 ⇒ **命令行只有一处定义**",
+    "★★★★★ 2026-11-18 02:40 ★★★★★ 机主睡觉 ⇒ 挂机自主推进：tools/auto-loop.sh 后台跑（12 轮/8 小时，从 476 起）",
     "★★★★★ 2026-11-18 02:40 ★★★★★ **机主睡觉 ⇒ 进入挂机自主推进**。tools/auto-loop.sh 在后台跑（12 轮/8 小时，从 476 起）：自动取内核→打包→刷机→读控制台文本→通知 agent；agent 判读后推下一轮。\n  · 474/475 已上机（sha 5057cc61… / 992b7396…），但**看门狗复位没拍到照片**（已知现象，非新问题）\n  · 476 带 ramoops ⇒ 起就有文本，**不需要照片**\n  · ★ QEMU 里内核没崩但没画（fb.png 恒为 10,656=全白）⇒ 图无用，文本才是眼睛\n  · ★ 真机与 QEMU 的 ramoops 同址 0xAF040000 ⇒ 将来可自动化（fastboot 无读内存命令 ⇒ 暂缺）",
     "★★★★★ 2026-11-18 02:15 ★★★★★ **眼睛的真正形态找到了**：内核把每个控制台字符镜像进 ramoops 文本环（DBGC 头 + 纯文本），QEMU 用 pmemsave 读出 ⇒ **文本比像素可靠**（可 grep 行号与序号）。\n  ★ QEMU 的 fb.png 恒为 10,656 字节 = **全黑** ⇒ 图没用；QEMU 里内核没崩（guest-errors 空、90 秒正常停）但没画。\n  ★ 已推 476（99093f5）：ramoops.bin 随内核发布 + 新增 scripts/read-console.py（已两种形态自测）。\n  ★ 474 已上机（02:01:52，sha 5057cc61…）",
     "★★★★ 2026-11-18 02:00 ★★★★★ 我有自己的眼睛了：CI 每轮都有 QEMU job 并抓帧缓冲成 PNG，只是之前没随内核发布（'Only the kernel is on the branch'）。已修 workflow + round-image.sh",
@@ -532,6 +534,13 @@
     },
     "★ 已知现象": "每轮约 1 分钟机器自己复位（看门狗）—— board.toml 的 debug=0x1 注释早已写明，不是新问题；机主 474/475 因复位没拍到照片",
     "★ QEMU 的现状": "QEMU 里内核**没崩但没画**（guest-errors 空、90 秒超时正常停、fb.png 恒为 10,656 字节=全白）⇒ 图这条路暂时无用；ramoops 文本（476 起）才是能用的眼睛。QEMU 环境与真机差别大（virt GIC / PSCI-HVC / 4 GiB RAM@0x40000000 / 缺 storage+ufs 节点）⇒ 修它是工具工作，暂缓",
-    "★ 真机输出自动化": "内核的控制台文本与 UEFI 的 ramoops 在**同一个地址 0xAF040000**（真机与 QEMU 一致）⇒ 将来能自动化；但 fastboot 只有 getvar/oem fb_mode，**没有读内存的命令** ⇒ 暂时做不到"
+    "★ 真机输出自动化": "内核的控制台文本与 UEFI 的 ramoops 在**同一个地址 0xAF040000**（真机与 QEMU 一致）⇒ 将来能自动化；但 fastboot 只有 getvar/oem fb_mode，**没有读内存的命令** ⇒ 暂时做不到",
+    "★★★ QEMU_画面全白的原因_已找到并已修": {
+      "根因": "★ **QEMU 的 cmdline 与真机不同** —— QEMU 用 board.toml 的 payload.kernel_args，而真机用 unixnu.toml 的 args（两者合并后的结果）⇒ ★ **合并后的那份含 `rd=md0`（指向固件拷进内存的 ramdisk），board.toml 那份不含** ⇒ ⇒ **QEMU 里内核没有根卷可挂** ⇒ 内核在挂根处就失败 ⇒ 画面全白、串口为空",
+      "证据": "QEMU 474/475 的 fb.png 恒为 10,656 字节（空白屏压缩大小）；qemu-guest-errors.log 空；qemu.log 只有 81 字节（90 秒超时正常停）⇒ **内核没崩，只是没画**",
+      "已修": "477（427d608）：workflow 的 QEMU 步骤改用 `python3 device/scripts/merge-kernel-args.py --print device/package/unixnu.toml device/board.toml` ⇒ **与真机 payload 卷完全同一份 cmdline**（20 参数 365 字节）",
+      "★ 附带收益": "★ **判读 QEMU 的结果就能直接用到真机**（此前两边 cmdline 漂移，QEMU 的结论不可直接外推）",
+      "工具": "scripts/merge-kernel-args.py 进仓 + 新增 --print 模式（打印而不写文件）⇒ **命令行只有一处定义**，打包与 QEMU 都问它"
+    }
   }
 }
