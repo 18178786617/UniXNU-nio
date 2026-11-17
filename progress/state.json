@@ -1,15 +1,15 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 13:40",
-  "headline": "★★★ 设备树地址被加了两次 slide：DarwinBoot 填 TreeAddress+slide（已是虚拟地址），XNU 的 PE_slide_devicetree 又加一次 ⇒ 指向一页从没写过东西的内存 ⇒ 设备树从未被读到。453：在 PE_slide_devicetree 里先减后加（树留在 loader 说的地址，此时虚拟空间已建），PE_init_platform 保持 447 行为（不早读真树）；personality 的 IONameMatch 改为gRootNub->getName()（根 nub 名 = compatible 第一串 = D22AP）；ADT 侧修 state 长度与 intc 的 device_type。453 在 macos-15 上跑，出包即自动刷机。",
-  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中） → P2 存储层 → P3 launchd 起用户态",
+  "updated": "2026-11-17 16:20",
+  "headline": "★★★ 453 照片读出决定性事实：设备树第一次被真正读到（根 nub 名 D22AP，/arm-io/ufs 在树里），personality 也发出去了；但整屏没有一条 M 行、没有一条 'nio: C' 行 —— 这两条串都在内核二进制里，⇒ probeCandidates 一次都没进 ⇒ 匹配根本没跑。根因（代码层已查实）：'nio: DSM enter' 探针只打在 startMatching 的**同步**分支，而根 nub 走的是 _IOServiceJob::startJob **异步**分支（配置线程 + 信号量），所以整条异步路径在面板上完全不可见。454（已推 8ee1508）：在 pingConfig / 配置线程取 job / doServiceMatch 入口 / 候选清单四处加 printf，把 enq→wait→pick→DSMi→cand→DSMx 全链露出来，下一张照片即可判决断在哪个环节。",
+  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：454 待验证匹配是否真的在跑） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
       "id": "P0",
       "name": "IOKit 匹配关",
       "status": "done",
       "criteria": "面板出现 SM unlocked 之后的新行",
-      "evidence": "run-380/381：SM enter → SM locked → b4busy cfg=1 → busy ok → SM unlocked，随后 nio: IOKit match ret=1。IOHIDResource 也真的匹配到了驱动并启动成功。",
+      "evidence": "run-380/381：SM enter → SM locked → b4busy cfg=1 → busy ok → SM unlocked，随后 nio: IOKit match ret=1。★ 修正（11-17 查实）：SM unlocked 只说明 startMatching 返回了，**不等于匹配跑过** —— 根 nub 的匹配被交给配置线程异步执行，面板上的 'DSM enter' 只在同步分支打印，所以异步路径一直是无声的。453 面板零 M 行正是这一点造成的。",
       "next": "—"
     },
     {
@@ -17,8 +17,8 @@
       "name": "UFS 起来 + 挂上 APFS 根卷",
       "status": "current",
       "criteria": "根卷挂载成功的日志",
-      "evidence": "① 走正常启动链（刷 boot_b + set_active b）后停点不变 ⇒ 不是启动路径问题；② 面板上没有 'nio: ufs driver start enter' ⇒ NioUfs::start() 从没被调用；③ IODTPlatformExpert::createNub 对任何 arm-io 子节点都发 IOPlatformDevice nub，而我们的 /arm-io 只有 intc ⇒ 没有 UFS nub ⇒ personality 无从匹配；④ 于是根设备从未发布，根卷挂不上，launchd 起不来 ⇒ 停在 match ret=1 之后。",
-      "next": "已上机：ADT 增加 /arm-io/ufs(0x1d84000+0x3000) 与 /arm-io/ufsphy(0x1d87000+0xe000)（地址取自 Mi 10 真机设备树，同 SoC；驱动的 UFS_HC_BASE 正是 0x1d84000），ranges 窗口扩到覆盖 UFS，并打开 native-ufs-diagnostics=1。判据：出现 'nio: ufs driver start enter' ⇒ nub 通了；随后诊断行里的 hcs 的 DP 位决定下一步。"
+      "evidence": "★ 453 照片（决定性）：设备树第一次被真正读到 —— 'nio: root nub is named D22AP'、'nio: tree has /arm-io=1 /arm-io/intc=1 /arm-io/ufs=1'、'nio: publishing 3 static personalities' 全部出现。但整屏 **零条 M 行、零条 'nio: C' 行**（这两串已确认在 out/kernel.macho 二进制里）⇒ probeCandidates 一次都没进 ⇒ 匹配器根本没跑，不是匹配失败。★ 根因（代码查实）：'nio: DSM enter' 只在 startMatching 的同步分支打印；根 nub 是 needConfig=1 且 sync=false ⇒ 走 _IOServiceJob::startJob 异步分支（配置线程 + gJobsSemaphore），整条异步路径此前**没有任何输出**，所以面板上什么都看不到。",
+      "next": "454（commit 8ee1508，已推）：新增补丁 nio-match-path-probe.patch，在四处加 printf —— pingConfig 入队（'CFG enq'）、配置线程醒/取 job（'CFG wait'/'CFG pick'）、doServiceMatch 入口带候选数（'DSMi %s n=%d'）、**候选清单**（'cand %u cls=.. nm=.. pc=..'，含 IONameMatch）、一轮结束（'DSMx'）。判读：看到 enq 没看到 wait ⇒ 配置线程没醒；看到 pick 没看到 DSMi ⇒ job 没执行；看到 cand 里 nm= 不是我以为的名字 ⇒ personality 名字对不上（'cand' 行直接给出答案）。"
     },
     {
       "id": "P2",
@@ -47,11 +47,18 @@
   ],
   "rounds": [
     {
+      "run": 454,
+      "time": "16:20",
+      "marker": "nio: CFG enq",
+      "qemu": "本地 QEMU 走不到匹配这一步（prelink 空洞），无法判决",
+      "result": "已推 8ee1508：nio-match-path-probe.patch（匹配全链探针）"
+    },
+    {
       "run": 453,
       "time": "13:38",
       "marker": "nio: HB ",
-      "qemu": "含 slide 修正 + 动态 IONameMatch",
-      "result": "构建中（已拿到 runner）"
+      "qemu": "含 slide 修正 + 动态 IONameMatch；照片读出：设备树第一次被真正读到（D22AP），但零 M 行",
+      "result": "★ 设备树读到了；★ 但匹配异步路径全程无输出 ⇒ 根因锁定"
     },
     {
       "run": 452,
@@ -69,11 +76,11 @@
     }
   ],
   "next_actions": [
-    "419 跑完 ⇒ 主管自动打包 ⇒ auto-flash 自动上机",
-    "面板上应出现 'nio: ufs driver is linked in' ⇒ 静态 kext 在镜像里",
-    "与 'nio: publishing 3 static personalities' ⇒ personality 发布成功",
-    "与 'nio: ufs probe #N provider=... compatible=\"qcom,ufshc\"' ⇒ 匹配成功（首次！）",
-    "与 'nio: dt head=0x... len=14052' ⇒ 设备树到位"
+    "454 已推（8ee1508），等 CI 出内核 ⇒ 主管自动打包 ⇒ auto-flash 自动上机",
+    "★ 面板判读顺序（先看这四条，缺哪条断在哪）：'nio: CFG enq D22AP' ⇒ 'nio: CFG wait' ⇒ 'nio: CFG pick' ⇒ 'nio: DSMi'",
+    "★ 'nio: cand N cls=.. nm=.. pc=..' 一次性给出根 nub 桶里所有候选 + 它们各自要的 IONameMatch —— 不用再推理，直接对答案",
+    "若 cand 行里 nm 不是 'device-tree' 也不是 'D22AP' ⇒ personality 的名字对不上（对照 handoff 7188 行）",
+    "若 cand 里有 NioUfs 且 nm= 无 ⇒ 匹配应该立刻成功，问题在实例化段（'nio: C' 行会出现）"
   ],
   "notes": [
     "★ 设备树从来没被读到的真正原因：DarwinBoot 给的 deviceTreeP 已经含 slide，XNU 的 PE_slide_devicetree 又加一次（双重 slide）⇒ 读到空页。修法：在 PE_slide_devicetree 里先减 slide 再加 slide。",
@@ -94,7 +101,13 @@
     "★ api.github.com 本机完全不可达（000），没有 token ⇒ push 是唯一的触发方式。",
     "★ QEMU 本机 E://qemu//qemu-system-aarch64.exe；monitor 走 TCP；GDB 要先跳过 stop reply。",
     "读内核的 boot_args：tools/boot-args.py（const_boot_args 镜像里全零 ⇒ 运行时填）。",
-    "生成 patch 必须在'打过所有补丁的树'上做 A/B diff（apply-series.py 可在 CI 的树 aca3beaa3dfb 上验证）。"
+    "生成 patch 必须在'打过所有补丁的树'上做 A/B diff（apply-series.py 可在 CI 的树 aca3beaa3dfb 上验证）。",
+    "★★ 11-17 最重要的纠错：'nio: DSM enter' 只打在 startMatching 的同步分支；根 nub 走 _IOServiceJob::startJob 异步分支（配置线程+信号量），整条异步路径此前零输出。所以 'SM unlocked' ≠ '匹配跑过'，面板无 M 行不是探针坏，是那段代码真没跑。",
+    "★ ADT 事实（out/kernel.macho.adt，22 节点）：根节点 name=device-tree、compatible=D22AP\\0device-tree\\0qcom,kona\\0；/cpus /arm-io /defaults /options 四节点齐全；/chosen 的 nvram-bank-size(4B)+nvram-proxy-data(8192B) 满足 hasNVRAMProxy ⇒ ArmDTPlatform::configure() 的前提**不缺**。",
+    "★ UniXNU 内置表里 ArmDTPlatform 的 IONameMatch 硬编码 'device-tree'，而 CompareKey 对 OSData 的 compatible **逐串比较** ⇒ 根 nub 的 compatible 第二串正是 'device-tree' ⇒ 内置那条本来就能命中。handoff 7188 行'硬编码永远匹配不上'的说法需要用 454 的 cand 行复核。",
+    "★ 排查方法教训（第二次踩）：apply-series.py 的基线是 build/xnu-src（pristine），不是 tmp/series-apply！在 tmp 树上改文件再 diff 会导致补丁 apply 失败（我因此多花一轮）。改 XNU 补丁永远从 pristine 生成。",
+    "★ 排查方法教训（第三次踩）：OSObject 没有 getCStringNoCopy（它在 OSString 上），getObject 返回 OSObject* 必须 OSDynamicCast(OSString, ...) 才能取字符串。写补丁前先 grep 头文件确认 API 归属，别等 CI 报编译错。",
+    "★ CI 触发：改 patches/** 或 drivers/** 等路径后 git push origin main 即触发（kernel.yml 的 paths 过滤），无需手动 dispatch。主管脚本 tools/ci-supervisor.sh 会自动打包+刷机。"
   ],
   "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节"
 }
