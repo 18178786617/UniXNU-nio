@@ -20,7 +20,7 @@ reaches the screen.
 diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 --- a/iokit/Kernel/IOStartIOKit.cpp
 +++ b/iokit/Kernel/IOStartIOKit.cpp
-@@ -245,6 +245,13 @@
+@@ -245,6 +245,12 @@
  
  			printf("\nnio: publishing %d static personalities",
  			       (int) personalities->getCount());
@@ -28,8 +28,7 @@ diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 +			 * name says whether the tree was found at all.  If it is not
 +			 * "device-tree", nothing that matches on that name is ever
 +			 * offered the nub, and the drivers below stay unmatched. */
-+			printf("
-+nio: root nub is named %s",
++			printf("\nnio: root nub is named %s",
 +			       gRootNub->getName() ? gRootNub->getName() : "(none)");
  			gIOCatalogue->addDrivers(personalities, false);
  		}
