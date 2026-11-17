@@ -1,4 +1,4 @@
-Publish the personalities of the drivers linked in as static archives
+Publish the personalities of the drivers that are linked in statically
 
 A personality is normally published by OSKext, out of the kext's own info
 dictionary.  A static archive has no info dictionary: it is not a bundle, it
@@ -17,19 +17,35 @@ tree was fixed: the driver was never offered to the matcher in the first
 place.  The node in the tree, the compatible string and the probe score
 were all correct, and none of them could matter.
 
-The catalogue is the one OSKext publishes into, and this is the moment to
-use it: the matching sweep starts in the call below and reads what is in
-the catalogue when it starts.  The three personalities are the ones the two
+The catalogue is the one OSKext publishes into, and the moment to use it is
+here: the matching sweep starts in the call below and reads what is in the
+catalogue when it starts.  The three personalities are the ones the two
 Info.plist files describe, including the second one for the storage driver
 that attaches to the root device -- the driver's own start() does no work
 unless its provider is one of those.
+
+The name to match the platform expert on is taken from the root nub
+itself.  The nub takes its name from the device tree's root node, and the
+kernel replaces that name with the first string of the node's compatible
+property.  This board forges the identity of another device, so that first
+string is the board name and not the generic "device-tree" the upstream
+driver was written against; matching a fixed string would never match
+anything.
+
+The lines that say what the tree holds are printed next to the personality
+line, because that is where the matching starts and because the output
+reaches the screen there.  Earlier in the boot there is nowhere to print:
+the console is not up yet, and what the kernel writes to the ramoops ring
+does not reach the panel.  The registry is used rather than
+SecureDTLookupEntry(), because the device tree reader's types live in a
+header that only the platform expert sees, and this file is not that file.
 
 ---
 
 diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 --- a/iokit/Kernel/IOStartIOKit.cpp
 +++ b/iokit/Kernel/IOStartIOKit.cpp
-@@ -187,6 +187,67 @@
+@@ -187,6 +187,132 @@
  	 * the way out: a panel that shows match go and no match ret is still
  	 * matching, one that shows both has moved on to bsd_init. */
  	printf("\nnio: IOKit match go");
@@ -50,25 +66,31 @@ diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 +	 * The catalogue is the one OSKext publishes into, and this is the
 +	 * moment to use it: the matching sweep starts in the call below and
 +	 * reads what is in the catalogue when it starts.
-+	 *
-+	 * The values are held in shared pointers on purpose: withNumber() and
-+	 * withCString() hand back a shared pointer, and taking the raw
-+	 * pointer out of it while the temporary died would leave the
-+	 * dictionary holding a reference nobody owns.
 +	 */
 +	{
-+		OSPtr<OSArray>      personalities = OSArray::withCapacity(3);
-+		OSPtr<OSDictionary> platformExpert = OSDictionary::withCapacity(4);
-+		OSPtr<OSDictionary> storage        = OSDictionary::withCapacity(3);
-+		OSPtr<OSDictionary> storageRoot    = OSDictionary::withCapacity(3);
-+		OSPtr<OSString>     classPlatform  = OSString::withCString("ArmDTPlatform");
-+		OSPtr<OSString>     classStorage   = OSString::withCString("NioUfs");
-+		OSPtr<OSString>     providerExpert = OSString::withCString("IOPlatformExpertDevice");
-+		OSPtr<OSString>     providerDevice = OSString::withCString("IOPlatformDevice");
-+		OSPtr<OSString>     nameMatch      = OSString::withCString("device-tree");
-+		OSPtr<OSNumber>     scorePlatform  = OSNumber::withNumber(5000, 32);
-+		OSPtr<OSNumber>     scoreStorage   = OSNumber::withNumber(1000, 32);
-+		OSPtr<OSNumber>     scoreRoot      = OSNumber::withNumber(500, 32);
++		OSArray      *personalities = OSArray::withCapacity(3);
++		OSDictionary *platformExpert = OSDictionary::withCapacity(4);
++		OSDictionary *storage        = OSDictionary::withCapacity(3);
++		OSDictionary *storageRoot    = OSDictionary::withCapacity(3);
++		OSString     *classPlatform  = OSString::withCString("ArmDTPlatform");
++		OSString     *classStorage   = OSString::withCString("NioUfs");
++		OSString     *providerExpert = OSString::withCString("IOPlatformExpertDevice");
++		OSString     *providerDevice = OSString::withCString("IOPlatformDevice");
++		/*
++		 * The root nub takes its name from the device tree's root
++		 * node, and the kernel replaces that name with the first
++		 * string of the node's compatible property.  This board
++		 * forges the identity of another device, so that first string
++		 * is the board name and not the generic "device-tree" the
++		 * upstream driver was written against.  Taking the name from
++		 * the nub itself matches whatever the tree says, and the line
++		 * below says out loud what it was.
++		 */
++		const char   *rootName      = gRootNub->getName();
++		OSString     *nameMatch      = OSString::withCString(rootName ? rootName : "device-tree");
++		OSNumber     *scorePlatform  = OSNumber::withNumber(5000, 32);
++		OSNumber     *scoreStorage   = OSNumber::withNumber(1000, 32);
++		OSNumber     *scoreRoot      = OSNumber::withNumber(500, 32);
 +
 +		if (personalities && platformExpert && storage && storageRoot &&
 +		    classPlatform && classStorage && providerExpert && providerDevice &&
@@ -92,6 +114,65 @@ diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
 +			printf("\nnio: publishing %d static personalities",
 +			       (int) personalities->getCount());
 +			gIOCatalogue->addDrivers(personalities, false);
++		}
++
++		/*
++		 * What the tree actually holds, now that it is being read
++		 * for the first time.
++		 *
++		 * The root nub takes its name from the tree, so its name
++		 * says whether the tree was found at all -- if it has no
++		 * name, nothing that matches on one is ever offered the nub,
++		 * the platform expert that reads the tree never starts, the
++		 * nodes under /arm-io are never published, and the storage
++		 * controller is never matched.  That is the whole chain,
++		 * and the name is where it can be seen from.
++		 *
++		 * The nub's children are the tree's children, so the two
++		 * lookups below say whether the branch the storage driver
++		 * needs is in the tree and whether the interrupt controller
++		 * is.
++		 *
++		 * The registry is used rather than SecureDTLookupEntry(),
++		 * because the device tree reader's types live in a header
++		 * that only the platform expert sees, and this file is not
++		 * that file.
++		 *
++		 * These lines land next to the personality line because that
++		 * is where the matching starts and because the output
++		 * reaches the screen there.  Earlier in the boot there is
++		 * nowhere to print: the console is not up yet, and what the
++		 * kernel writes to the ramoops ring does not reach the
++		 * panel.
++		 */
++		{
++			int hasArmIo = 0;
++			int hasIntc  = 0;
++			int hasUfs   = 0;
++			OSIterator *children = gRootNub->getChildIterator(gIODTPlane);
++			OSObject *object;
++			while (children != NULL && (object = children->getNextObject()) != NULL) {
++				IORegistryEntry *node = OSDynamicCast(IORegistryEntry, object);
++				const char *name = node ? node->getName() : NULL;
++				if (name == NULL || strcmp(name, "arm-io") != 0) {
++					continue;
++				}
++				hasArmIo = 1;
++				OSIterator *under = node->getChildIterator(gIODTPlane);
++				OSObject *inner;
++				while (under != NULL && (inner = under->getNextObject()) != NULL) {
++					IORegistryEntry *leaf = OSDynamicCast(IORegistryEntry, inner);
++					const char *leafName = leaf ? leaf->getName() : NULL;
++					if (leafName == NULL) {
++						continue;
++					}
++					if (strcmp(leafName, "intc") == 0) { hasIntc = 1; }
++					if (strcmp(leafName, "ufs")  == 0) { hasUfs  = 1; }
++				}
++			}
++			printf("\nnio: root nub is named %s", rootName ? rootName : "(none)");
++			printf("\nnio: tree has /arm-io=%d /arm-io/intc=%d /arm-io/ufs=%d",
++			       hasArmIo, hasIntc, hasUfs);
 +		}
 +	}
  	bool ok = gRootNub->startIOServiceMatching();

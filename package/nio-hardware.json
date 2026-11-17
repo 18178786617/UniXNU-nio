@@ -4,6 +4,7 @@
   "soc": "SM8250",
   "model": "Qualcomm Technologies, Inc. kona v2.1",
   "compatible": [
+    "device-tree",
     "qcom,kona"
   ],
   "product_name": "moto edge s",

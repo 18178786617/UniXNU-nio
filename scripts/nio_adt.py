@@ -329,7 +329,12 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
     if trust_cache:
         handoff["TrustCache"] = bytes(16)
     cpus = [Node(f"cpu{index}", {
-        "state": string("running" if index == 0 else "waiting"),
+        # The kernel compares this with strncmp(value, "running", size), so
+        # the length is the number of bytes it compares.  A NUL terminated
+        # "running" is eight bytes, and the eighth does not match: the
+        # comparison fails and the core is skipped as if it were not
+        # running.  The value is the seven bytes, with no terminator.
+        "state": b"running" if index == 0 else b"waiting",
         "reg": u32(affinity), "device_type": string("cpu"),
         "compatible": b"".join(string(c) for c in observed_cpus[affinity]["compatible"]),
         "timebase-frequency": u32(hardware["timer"]["frequency_hz"]),
@@ -371,6 +376,12 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
             "ranges": struct.pack("<QQQ", 0, bus_base, bus_size),
         }, [Node("intc", {
             "compatible": string(gic["compatible"]),
+            # The kernel looks for the interrupt controller by this
+            # property and not by the name: pe_arm_map_interrupt_controller()
+            # asks for the entry whose device_type is "interrupt-controller",
+            # and without it the controller is never mapped and the machine
+            # has no interrupts at all.
+            "device_type": string("interrupt-controller"),
             "reg": struct.pack("<QQQQ", dist["base"] - bus_base, dist["size"],
                                redist["base"] - bus_base, redist["size"]),
             "redistributor-stride": u64(gic["redistributor_stride"]),

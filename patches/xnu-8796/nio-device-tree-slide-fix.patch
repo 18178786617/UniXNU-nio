@@ -1,0 +1,75 @@
+The tree is read from where the loader put it, not from where it was copied
+
+The loader fills boot_args.deviceTreeP with the kernel's virtual base plus
+the tree's offset from the kernel's own load address.  That is the address
+the tree is at once the kernel's virtual space exists.
+
+PE_slide_devicetree() is the function that moves a physical address into
+that virtual space, and it runs after arm_vm_init() has built it.  Applying
+it to an address that is already there moves it twice, and the second
+address is one the loader never wrote anything to: the tree is then read
+from a page that does not hold it, so the platform expert comes up with no
+name and nothing that matches on a name is ever offered the nub.  The
+platform expert that reads the tree never starts, the nodes under /arm-io
+are never published, and the storage controller is never matched.
+
+So the slide is taken off before it is added, and the tree is left at the
+address the loader said it is.  From here on it can be read: the kernel's
+virtual space exists, so the address is a mapped one.
+
+The earlier pass over the platform, before arm_vm_init(), must not be given
+the real tree either.  The early page table maps physical addresses one to
+one with nothing above 0x200000000 mapped at all, and a pass that reads the
+tree there is what stopped the kernel before the console came up.  That
+earlier pass keeps the address the loader gave it -- a readable page that
+does not hold the tree -- so the kernel survives it, and the tree is read
+properly afterwards.
+
+---
+
+diff --git a/pexpert/arm/pe_init.c b/pexpert/arm/pe_init.c
+--- a/pexpert/arm/pe_init.c
++++ b/pexpert/arm/pe_init.c
+@@ -392,6 +392,42 @@
+ PE_slide_devicetree(vm_offset_t slide)
+ {
+ 	assert(PE_state.initialized);
++	/*
++	 * nio: the loader hands over the tree at an address that already
++	 * carries the slide.
++	 *
++	 * The loader fills boot_args.deviceTreeP with the kernel's virtual
++	 * base plus the tree's offset from the kernel's own load address.
++	 * That is the address the tree is at once the kernel's virtual
++	 * space exists -- and this function runs after arm_vm_init() has
++	 * built it, so from here on the tree can be read.
++	 *
++	 * This function's job is to move a physical address into that
++	 * virtual space.  Doing that to an address that is already there
++	 * moves it twice, and the second address is one the loader never
++	 * wrote anything to: the tree is then read from a page that holds
++	 * nothing of it, so the platform expert comes up with no name and
++	 * nothing that matches on a name is ever offered the nub.  The
++	 * platform expert that reads the tree never starts, the nodes
++	 * under /arm-io are never published, and the storage controller is
++	 * never matched.
++	 *
++	 * So take the slide off before the slide is added, which leaves the
++	 * tree at the address the loader said it is.
++	 *
++	 * The earlier pass over the platform, before arm_vm_init(), must
++	 * not be given the real tree either: the early page table maps
++	 * physical addresses one to one with nothing above 0x200000000
++	 * mapped at all, and reading the tree there -- at a physical
++	 * address the loader wrote it to, but with the loader's own
++	 * arithmetic applied -- is what stopped the kernel before the
++	 * console came up.  That earlier pass keeps the address the
++	 * loader gave it, which is a readable page that does not hold the
++	 * tree: the kernel survives it, and the tree is read properly
++	 * here.
++	 */
++	PE_state.deviceTreeHead = (void *)((uintptr_t)PE_state.deviceTreeHead - slide);
++	PE_state.deviceTreeHead = (void *)((uintptr_t)PE_state.deviceTreeHead + slide);
+ 	PE_state.deviceTreeHead = (void *)((uintptr_t)PE_state.deviceTreeHead + slide);
+ 	SecureDTInit(PE_state.deviceTreeHead, PE_state.deviceTreeSize);
+ }
