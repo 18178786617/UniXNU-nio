@@ -133,6 +133,8 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★ 机主纪律（18:01 明确，任何会话都必须遵守）：① 不要重复读同一张图片（费积分、费时间）；② 不要重复回答同一个问题；③ 每次推送前必须本地核验通过再推；④ CI 固定 macos-15 / macos-26（arm64），排队时由机主决定是否换 Intel（19:00 实测：arm64 两池全满，Intel 30 秒就拿到 runner）。",
+    "★★ 机主纪律补充（20:00）：**不要在诊断上死磕。目标是修到进用户层。**卡住时先找绕开卡点的路（461 就是这么找到出路的），别反复做字节级比对 —— 460 那一轮我在字节比对上白烧了很多积分，机主明确批评过。",
     "★★★ 2026-11-17 20:05 转折：不再纠缠'配置线程为什么不跑'，改为**绕开它**。根 nub 的匹配走 startMatching 的异步分支（需要配置线程），而**一切都挂在根 nub 的匹配后面**。461 把根 nub 改为就地 doServiceMatch（同步分支本来就做的事）⇒ 匹配立刻发生。doServiceMatch 设 kIOServiceConfigRunning 并清 kIOServiceNeedConfigState ⇒ 不会重复匹配。",
     "★★★ 2026-11-17 19:05 run-459 的判决把断点钉死了：配置线程**创建成功**（CFG mk ok t=0xfffffffff2c7728000）但**函数体从未执行**（CFG alive 是 main() 第一条语句）。三个静默失败点全部排除；wt=3 ct=3 说明记账正常、create 条件被满足。⇒ 以后不要重查 new/init/kernel_thread_start 与 create 条件。",
     "★★★ 2026-11-17 19:15 umi（小米10）的资产其实**已经在用**：NioUfs 与 umi 的 ShengUfs 有 87.7% 有效行逐字相同，四个 Root* 头文件全在，GopFramebuffer/ShengNovatekTouch/Adreno650 也已移植。⇒ P1 卡住不是缺代码，是 IOKit 匹配链没通；配置线程修好 = umi 的 UFS 栈立刻能跑。",
