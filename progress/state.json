@@ -1,7 +1,7 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
-  "updated": "2026-11-17 18:20（run-456 照片判决后刷新）",
-  "headline": "★★★ run-456 照片给出决定性判决：面板出现 'nio: CFG enq D22AP out=4' 之后**再无任何输出** —— 没有 CFG wait、没有 CFG pick、没有 DSMi、没有 cand。而 beacon 仍在计数（V322 V323 V324 V325 V326…），内核活着 ⇒ 断点不是'内核死了'，而是**配置线程一次都没进循环体**。out=4 是另一半答案：gOutstandingJobs=4 说明此前已积压 3 个 job 且无一被取走 ⇒ 匹配任务从未被消费过。（注：另一会话记的'机主报告 UFS 已识别'与照片冲突：若配置线程没跑，NioUfs 的 personality 就不可能匹配成功，UFS 只能是'树里有节点'这一层。）⇒ 已推 457：补丁 nio-config-thread-probe.patch 把 configThread 的三个静默失败点（new/init/kernel_thread_start）全部显式打印，并在线程体内加 'CFG alive'，再给入队行补上 gNumWaitingThreads/gNumConfigThreads 两个计数器 ⇒ 一张面板即可区分'从未创建'/'创建了没跑'/'跑了没被调度'/'线程数记账错导致永远不创建'。",
+  "updated": "2026-11-17 19:05（run-459 Intel 上机后刷新）",
+  "headline": "★★★ run-459（macos-15-intel）已构建成功并上机（19:03，fastboot boot Mu-nio-0.img，sha256 a78fc2fb…）。内核带着判决探针 nio-config-thread-probe.patch，面板上会直接给出配置线程为何不存在：'CFG mk fail new'/'CFG mk fail init'/'CFG mk fail start kr=N'（三个静默失败点之一）、'CFG mk ok t=…'（线程建成了）、'CFG alive'（线程真的进了循环体）、'CFG enq %s out=%d wt=%d ct=%d'（wt=gNumWaitingThreads、ct=gNumConfigThreads）。★ 判读链完整：mk fail * ⇒ 直接得到失败原因；mk ok 无 alive ⇒ 线程建了没被调度；alive 无 pick ⇒ 线程跑了但卡在取 job 前；wt 偏大 ⇒ 记账错导致永不建线程。★ 背景（run-456 照片已判决）：'CFG enq D22AP out=4' 之后零输出，CFG wait/pick/DSMi/cand 全无，而 beacon 仍在计数（V322…V326）⇒ 内核活着，配置线程一次都没进循环体；out=4 ⇒ 已积压 3 个 job 无一被取走。",
   "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：457 待判决配置线程为何不存在） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部三个硬闸门：① 配置线程起来（当前卡点） ② NioUfs personality 匹配并 attach 到 /arm-io/ufs ③ 链路 + LUN/GPT 枚举（HCS=0x8 → DP=0 是历史卡点） ④ APFS 根卷只读挂载。",
   "phases": [
     {
@@ -47,11 +47,25 @@
   ],
   "rounds": [
     {
-      "run": 457,
-      "time": "18:20",
+      "run": 459,
+      "time": "19:03",
       "marker": "nio: CFG mk / nio: CFG alive",
-      "qemu": "本地 QEMU 走不到匹配这一步（prelink 空洞），无法判决",
-      "result": "已推 nio-config-thread-probe.patch（配置线程存在性判决探针）；本地双向核验 + zig 类型检查均过"
+      "qemu": "★ macos-15-intel（x86_64），推后 30 秒就拿到 runner（arm64 池全满）；构建约 25 分钟",
+      "result": "★ 内核已出并上机：kernel.macho 56938496B sha256 ee11cc25…，镜像 sha256 a78fc2fb…；面板待拍照判决"
+    },
+    {
+      "run": 458,
+      "time": "18:25",
+      "marker": "—",
+      "qemu": "macos-26",
+      "result": "★ 仍在 GitHub 队列里没拿到 runner（ci-started 分支始终未出现）⇒ 已被 459 取代，忽略"
+    },
+    {
+      "run": 457,
+      "time": "18:16",
+      "marker": "nio: CFG mk / nio: CFG alive",
+      "qemu": "macos-15",
+      "result": "★ 排队 17 分钟没拿到 runner（arm64 池满）⇒ 已被 459 取代，忽略"
     },
     {
       "run": 456,
@@ -97,13 +111,17 @@
     }
   ],
   "next_actions": [
-    "★ 第一优先：run-457 出内核后上机，拍一张面板 —— 找 'CFG mk' 与 'CFG alive' 这两行（'CFG mk ok t=' 说明线程建成了）。",
-    "判读表：'CFG mk fail new' ⇒ _IOConfigThread 分配失败；'CFG mk fail init' ⇒ init 失败；'CFG mk fail start kr=N' ⇒ kernel_thread_start 失败（kr 直接给原因）；'CFG mk ok' 无 'CFG alive' ⇒ 线程建了但没被调度；'CFG alive' 无 'CFG pick' ⇒ 线程跑了但卡在取 job 前。",
+    "★ 第一优先：拍 run-459 的开机面板，找 'CFG mk' 与 'CFG alive' 两行。",
+    "判读表：'CFG mk fail new' ⇒ _IOConfigThread 分配失败；'CFG mk fail init' ⇒ init 失败；'CFG mk fail start kr=N' ⇒ kernel_thread_start 失败（kr 直接给原因）；'CFG mk ok t=' 无 'CFG alive' ⇒ 线程建了但没被调度；'CFG alive' 无 'CFG pick' ⇒ 线程跑了但卡在取 job 前。",
     "★ 'CFG enq ... wt=N ct=N'：wt=gNumWaitingThreads、ct=gNumConfigThreads。若 wt 大于真实线程数 ⇒ create 条件 gOutstandingJobs > wt 永不成立 ⇒ 每个 job 都白排队（这是唯一一种'没有任何失败调用'就能卡死的路径）。",
-    "★ 照片里没有 UFS 任何行 ⇒ NioUfs 的 personality 根本没匹配上，'UFS 已识别'最多只是'设备树里有 /arm-io/ufs 节点'这一层。配置线程修好之前不要动 UFS 驱动。",
+    "★ 457/458 仍在 GitHub 队列里，会各自产出一个内核但内容与 459 相同 ⇒ 落地后直接忽略，不必再上机。",
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★ 2026-11-17 19:00 CI 镜像池实测：macos-15 与 macos-26 两个 arm64 池**当天全满**（457 排 17 分钟、458 排 8 分钟都没有 runner，ci-started 分支始终不出现）；macos-15-intel（x86_64）推后 **30 秒**就拿到 runner。⇒ macOS arm64 池紧张时直接上 Intel。",
+    "★★ 2026-11-17 19:00 Intel 切换前的两个历史坑已确认被构建脚本自动处理：① workflow 的 'Match the warning flags to this clang' 步骤会问 clang 认识哪些 -Wno- 选项；② scripts/build-adreno650.py 自己探测（known_warning_flags()，因为 device 仓的脚本 CI 那一步够不着）。不认识的 -Wno- 选项紧挨 -Werror 是硬错误，而 -Wno-unnecessary-virtual-specifier 在 macOS 15 的 clang 上不存在。",
+    "★ 2026-11-17 19:00 换镜像会**多起一轮**（concurrency group 名里带镜像名，所以不同镜像的 push 不互相取消）。这次 457/458/459 内容相同，不影响判断，但下次换镜像前先想清楚。",
+    "★ 2026-11-17 19:05 内核里 'nio: CFG mk fail new' 这个整串搜不到，但 'nio: CFG mk fail init' 在：**链接器做了字符串分裂（split）优化** —— 把 'nio: CFG mk fail new' 拆成共享前缀 'nio: CFG mk fail ' + 独立尾巴 'new'。运行时 printf 仍输出完整文本，面板上照样看得到。⇒ 核验探针时不能用'整串在不在'当唯一判据，要同时看前缀和尾巴。",
     "★ 设备树从来没被读到的真正原因：DarwinBoot 给的 deviceTreeP 已经含 slide，XNU 的 PE_slide_devicetree 又加一次（双重 slide）⇒ 读到空页。修法：在 PE_slide_devicetree 里先减 slide 再加 slide。",
     "★ 根 nub 名 = compatible 第一串 = D22AP（profile.toml 故意如此，音频服务器要用 board name）⇒ personality 的 IONameMatch 必须动态取 gRootNub->getName()，不能硬编码 device-tree。",
     "★ 多行 Python 锚点在 CRLF 文件里不匹配 ⇒ 改文件用 newline=''，锚点用单行。",
