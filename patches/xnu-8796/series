@@ -165,3 +165,4 @@ nio-static-kext-personalities.patch
 nio-device-tree-slide-fix.patch
 nio-match-path-probe.patch
 nio-config-thread-probe.patch
+nio-config-thread-sched.patch
