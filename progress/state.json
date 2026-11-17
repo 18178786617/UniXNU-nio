@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★ 2026-11-18 01:40 官方对照（unixnu.com/zh/）：官方启动链第 5 步与 nio 完全一致（平台专家匹配 ADT 根节点 → 存储驱动发布 userdata 分区 → 发布 OS/SystemOS → 按 UUID 匹配根卷 → 启动 launchd）。★ 发现真实问题：board.toml 的 kernel_args 从未进 payload 卷（官方 build payload 会写进去）⇒ 已加 tools/merge-kernel-args.py 合并并实测通过。",
     "★★★★ 2026-11-18 01:20 关键发现：refs/umi = 机主给的 xm6661885/hakios-xnu-kernel-umi-fixes，**HakiOS (iOS 16.5) on Xiaomi Mi 10** ⇒ 与 nio 同为 iOS 16.5、同为 SM8250。WiFi 走 ath11k（Linux 移植 + 开源固件），不是 Apple 闭源 WCNSS。★ 但它的用户态是 Darwin 的，不是 iOS 的 ⇒ '进 iOS 用户态'仍只有 nio 自己在做。",
     "★★★ 2026-11-18 00:57 更正：机主问'米10里面不是带有驱动了？'—— 是的，我此前说'WiFi 最难，nok10 只有 retinum 基础驱动'是拿错参照物了。umi 带的是完整高通套件：wifi 6852 行（含 WCNSS 固件加载 wlfw.c）、modem 8781 行（mpss.c 250 KB）、audio 9037 行、camera 5087 行、power 1745 行、net 721、haptic 1012，**只有 bluetooth 是 143 行的骨架**。umi 与 nio 同为 SM8250 ⇒ 移植难度远低于估计。",
     "★★★★ 2026-11-18 00:50 路线图与难点估算（依据：代码里的确切步骤 + 461→468 实测速率 153 分钟/7 轮）",
@@ -298,5 +299,23 @@
       }
     },
     "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
+  },
+  "official_direction": {
+    "来源": "https://unixnu.com/zh/（机主指出应以官方为准，不要只看本仓）",
+    "启动链_5段": [
+      "1. bootloader → BootShim：kernel 字段是 gzip，前半 BootShim 后半 UEFI 固件卷，gzip 之后是设备树",
+      "2. UEFI → UniXNU：UniXNUDxe 把 UniXNU.efi 注册为 Boot####；扫 \\\\EFI\\\\UniXNU\\\\unixnu.toml；菜单前发布 block_slice、加载 driver、装 ACPI 表、合并 kit",
+      "3. UniXNU → DarwinBoot：UNIXNU_LOADER_BOOT_REQUEST 带 Volume/KernelPath/BootArgs/DeviceTree/Ramdisk/Kexts",
+      "4. DarwinBoot → XNU：校验 Mach-O（MH_MAGIC_64/ARM64/MH_EXECUTE/LC_MAIN/LC_SEGMENT_64）、段页对齐不重叠且在 256 MiB 窗口内；读 adt/trustcache；从 GOP 取 framebuffer；构造 DARWIN_BOOT_ARGS（命令行 1024 字节）；跳 EL1",
+      "5. XNU → 用户态：平台专家匹配 ADT 根节点（ArmDTPlatform 要求 /cpus /arm-io /defaults /options /chosen）；★ 存储驱动发布 userdata 分区，分区方案发布 OS 与 SystemOS；★ XNU 按 UUID 匹配根卷，挂载并启动 launchd"
+    ],
+    "★ 与_nio_完全一致": "第 5 步描述的正是 nio 在做的事：ArmDTPlatform 匹配上了(461)、userdata-root.json 里正是 OS+SystemOS 两窗口(0x100000 与 5630853120)、SHNGROOT manifest、块设备 512、flags=1 只读",
+    "官方驱动顺序": "平台与内存 → 存储 → 显示与亮度 → 输入 → GPU → Wi-Fi → 蓝牙 → USB → DSP → 音频 → 电源⇒ nio 正在'存储'这一步",
+    "官方失败判据": "XNU 阶段'缺少平台或存储驱动' → panic 日志给出缺失的 provider（nio 用直写面板 + watchdog panic 等价）",
+    "官方已有命令": "unixnu build userdata / build payload / bootimg —— 本地 UniXNU(04573c51) 都有 (scripts/unixnu/{userdata,payload,bootimg}.py)，nio 自研了等价物：tools/build-userdata.py、tools/make-payload-vol.sh、tools/bootimg.py",
+    "★ 官方_payload卷的完整内容": "EFI/UniXNU/unixnu.toml、Payloads/kernel.macho、kernel.macho.adt、可选 kernel.macho.trustcache、kernel.macho.gpuaddon、★ kernel.macho.vroot、★ scratch-data.img（initrd）",
+    "★ P2的官方形态": "scratch-data.img 作为 initrd 传给内核 ⇒ 只读系统盘当 ramdisk 挂载，**不用刷 4 GB UFS**。nio 已有同机制：package/unixnu.toml 的 initrd = Payloads/rootfs.img（N4KROOT）+ rd=md0",
+    "★ 官方unixnu.toml的格式": "version=1 / [boot] timeout+default / [kits] autoload=false / [[entry]] id=xnu type=xnu path=Payloads/kernel.macho [initrd] args=... + reset/shutdown 两个 action entry",
+    "★ 发现的真实问题_已修": "board.toml 的 [payload] kernel_args **从未进 payload 卷** —— 官方 build payload 会把它写进 unixnu.toml 的 args，nio 的 make-payload-vol.sh 却直接打包设备仓手工维护的 package/unixnu.toml。⇒ 两处漂移：board.toml 的 nio-gpu=8 / native-ufs-diagnostics=1 / -wdt_no_pmu / wdt_test=no_user_checkin 一直没生效。★ 已修：tools/merge-kernel-args.py 把两者合并（菜单文件优先，因 rd=md0 与 ADT 的 RAMDisk 占位强耦合），打包与读回校验都用合并结果。实测：补上 4 个参数，20 个参数 365 字节（官方上限 1000），打包全过（'PASS the menu and the device tree agree on the initrd'）"
   }
 }
