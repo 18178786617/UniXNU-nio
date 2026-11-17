@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★ 2026-11-18 00:57 更正：机主问'米10里面不是带有驱动了？'—— 是的，我此前说'WiFi 最难，nok10 只有 retinum 基础驱动'是拿错参照物了。umi 带的是完整高通套件：wifi 6852 行（含 WCNSS 固件加载 wlfw.c）、modem 8781 行（mpss.c 250 KB）、audio 9037 行、camera 5087 行、power 1745 行、net 721、haptic 1012，**只有 bluetooth 是 143 行的骨架**。umi 与 nio 同为 SM8250 ⇒ 移植难度远低于估计。",
     "★★★★ 2026-11-18 00:50 路线图与难点估算（依据：代码里的确切步骤 + 461→468 实测速率 153 分钟/7 轮）",
     "★★★ 2026-11-17 23:47 run-470 失败：编译错误（我引入的）—— nioUfsSpin 放在文件顶部却读了定义在后面的 read32/gHost。\n      ⇒ 已加 tools/check-driver-order.py（读真实源码：函数与文件级符号对照 + printf 格式串与参数计数），\n        双向验证过（故意挪到末尾 → 报 7 处；放回 → 干净）。",
     "★★★ 2026-11-17 23:40 run-470 前的根因：卡在 IODelay(1000)。\n      IODelay → delay_for_interval → _clock_delay_until_deadline → machine_delay_until →\n      do { WFE; mach_absolute_time(); } while (now < deadline)\n      ★ 这块板子的 mach_absolute_time 是内核用时钟中断累加的软件时基 ⇒ 中断一关就冻结；\n        而 IOKit 匹配路径就是关中断跑的 ⇒ 忙等永远不结束。\n      ★ 修法（473）：延时改用**硬件计数器 CNTPCT_EL0**（驱动已有的 timerTicks，注释明说\n        'it needs no clock subsystem to be up'）⇒ 不依赖时钟中断。\n      ★ 探针同时读两个时钟：nio: ufs bu clock hw=<计数器> kernel=<内核时基> ⇒ hw≠0/kernel=0 即坐实。",
@@ -258,9 +259,23 @@
       "hardest": "不是配置，是内核能否挂上根卷并把控制交给 launchd —— 那正是 P1 的第 6 步"
     },
     "P3plus_拨号_GPU_WiFi_BT_modem_audio": {
-      "status": "未开始",
-      "estimate": "每个都是独立项目；WiFi 最难（协议栈+固件+驱动三样）",
-      "hardest": "WiFi：nok10 只有 retinum 的基础驱动；modem/audio 次之；GPU 相对可控（Adreno650 已移植）"
+      "status": "未开始；★ 2026-11-18 00:55 更正：umi 带的是完整高通驱动套件，不是基础驱动",
+      "umi_带的高通驱动": {
+        "wifi": "6852 行：wifi.c 193 KB（完整 WLAN 栈）+ apple80211 29 KB + wlfw.c 23 KB（WCNSS 固件加载）+ sta/lx/wlan",
+        "modem": "8781 行：mpss.c 250 KB（完整 Qualcomm MPS 栈）+ ipa 34 KB + cell/nas/qmi",
+        "audio": "9037 行：adsp 3306 + mic 1852 + sound 1541 + speaker 1242 + guard/virtio_sound",
+        "camera": "5087 行：camera 4309 + torch 778",
+        "power": "1745 行：cpufreq 22 KB + pmic + thermal + battery + battguard",
+        "net": "721 行",
+        "haptic": "1012 行",
+        "core": "600 行（platform/socinfo）",
+        "bluetooth": "★ 只有 143 行 —— 唯一是骨架的，真缺"
+      },
+      "nio_已有的组件": "[components] include = ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink, ArmSmmu4K, AdrenoPM4, AdrenoFirmware, NioUfs, VerifiedRoot",
+      "key_judgement": "★ umi 与 nio 同为 SM8250 ⇒ 这些高通栈的移植难度远低于此前估计，参照 NioUfs←ShengUfs（umi 87.7% 逐字相同），复用率大概类似。★ 但缺两样：① 设备树节点与硬件接线（电源/GPIO/时钟）② 固件（WCNSS 的 .bin、modem 的 .mbn）—— umi 仓库与 nioPkg 里都没有，得从小米10 的 IPSW 或 Qualcomm 公开包取。",
+      "不影响进用户态": "★ 进用户态只需 CPU+时钟+存储+内存；WiFi/modem/audio/camera 全在进用户态之后",
+      "estimate": "每个类别 半天到 2 天（WiFi 与 modem 因缺固件可能更久）；BT 因为只有骨架最不确定",
+      "hardest": "WiFi/modem 的固件与硬件接线（缺料），以及 BT 只有 143 行要另找来源"
     },
     "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
   }
