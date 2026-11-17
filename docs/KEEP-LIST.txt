@@ -1,0 +1,105 @@
+# 受保护清单 —— 2026-11-17 22:43
+#
+# 这些是**移植现在要用到的东西**。清理时一个都不能动。
+# 若不小心删了，按本清单恢复（括号里是来源）。
+#
+# ── 1. 补丁：现在要用的（★ 最重要）──────────────────────────────
+#
+#   device/UniXNU-nio/patches/xnu-8796/series 里那 169 条，一条都不能少。
+#   （series 是有序清单，缺一条就会整体错位）
+#
+#   device/UniXNU-nio/patches/xnu-8796/*.patch —— series 引用的全部文件。
+#   device/UniXNU-nio/patches/darwinboot/console-guard.patch
+#       DarwinBoot EFI 引导阶段 Print() 断言崩溃的修复。
+#       docs/STATUS.md 明确写着"一个必须保留的补丁"。
+#   device/UniXNU-nio/patches/xnu-8796/gpu-probe-start.patch
+#       series 第 39 行在用。
+#
+#   可删（已核验零引用，但删 patches/** 会触发 CI，要单独一轮）：
+#       patches/xnu/ 整个目录（23 个文件，旧结构残留）
+#       patches/xnu-8796/ 里 22 个不在 series 的孤儿补丁
+#       patches/xnu-prelink/series（引用 17.7 的 xnu-10063-*）
+#
+# ── 2. 打包流程的活跃依赖（★ 删了打包就失败）─────────────────────
+#
+#   out/volsrc/UNIXNU.EFI, NIOHELLO.EFI, PAYLOAD.TXT
+#       payload 卷的三个文件。tools/make-payload-vol.sh 第 84 行
+#       缺任何一个就 exit 1。
+#       来源：device/UniXNU-nio/... 或从 out/payload-ram.fat 用 FAT32
+#       解析提取（2026-11-17 我删过一次，用这个方法恢复过）。
+#   out/ci-repro/unixnu/scripts/patch-xnu-entry-probe.py
+#       **必须是 4 值版的 assemble_c**（返回 code, load, entry, blob）。
+#       上游 refs/UniXNU 的是 3 值版，接口不匹配。
+#       ★ 正确的是 device/UniXNU-nio/scripts/console/ 那份。
+#   out/ci-repro/unixnu/scripts/xnu-panic-screen.c
+#       同上，取自 device/UniXNU-nio/scripts/console/（116 KB；
+#       refs/UniXNU 那份只有 9 KB，是旧的）。
+#
+# ── 3. 根卷 ──────────────────────────────────────────────────────
+#
+#   out/userdata/userdata-root.img   8.36 GB  ★ 根卷源，不能删
+#   out/userdata/userdata-root.json  864 B    几何与 manifest 摘要
+#   可重建（已删，用这两个工具重建）：
+#       tools/split-sparse.py  → pieces-240m/（34 个 240 MB 块）
+#       tools/flash-pieces.py  → 刷入
+#   out/userdata/flash.log / flash-official.log  刷写记录（很小，留）
+#
+# ── 4. 打包与上机 ────────────────────────────────────────────────
+#
+#   out/Mu-nio-0.img, out/Mu-nio-0-raw.img   当前镜像
+#   out/payload-ram.fat                      payload FAT 卷
+#   out/nio.adt, out/kernel.macho, out/kernel.macho.adt
+#   out/zigcache/                            ZIG 编译缓存（打包要用）
+#   out/patchwork/                           本地类型检查片段
+#   device/UniXNU-nio/rootfs/rootfs.img
+#   device/UniXNU-nio/package/unixnu.toml
+#
+# ── 5. 源码、工具链、固件 ────────────────────────────────────────
+#
+#   ios165/            23.9 GB  ★ 16.5 的 IPSW + root —— 进用户层必需
+#   refs/              UniXNU 主仓、sm8250 feed、ShengUfs、Adreno650 等
+#   refs-ext/, ref/    额外参考树
+#   .tmp/              XNU 源码检出（本地生成补丁要用）
+#   toolchain/         zig 等工具链
+#   build/             ★ 含 build/uefi-umi（edk2 树，编 EFI 要用）
+#   uefi-nio/          nio 的 EFI 菜单程序源码与构建
+#   firmware/          固件
+#   qemu-pkg/, qemu/   QEMU
+#   platform-tools/    fastboot / adb
+#   nioPkg/            引导包
+#   device/UniXNU-nio/  ★ 本仓
+#
+# ── 6. 基带与参考资料 ────────────────────────────────────────────
+#
+#   nio-rom-flash/     6.3 GB  BTFM.bin / NON-HLOS.bin / regulatory
+#                             ★ nio 自己的刷机 ROM 组件
+#   E:\XT2125-4_NIO_RETCN_12_S1RN32.55-16-13_subsidy-DEFAULT_regulatory-DEFAULT_CFC.xml.zip
+#                       3.8 GB  ★ nio 的基带 regulatory 固件
+#   E:\ios_nio_tmp_*.md        各机型的移植项目索引（参考资料）
+#   E:\nio-unixnu-port/         本项目
+#
+# ── 7. 不属于移植的（机主的东西，别动）────────────────────────────
+#
+#   E:\DoubaoData\  E:\DeepSeek Harness\  E:\BaiduNetdiskDownload\
+#   E:\Nebula225-SP2超级整合版\  E:\dada-src\
+#
+# ── 已删且可重建的（2026-11-17）──────────────────────────────────
+#
+#   out/userdata/userdata-root.sparse.img   split-sparse.py 可重建
+#   out/userdata/pieces-240m/               split-sparse.py 可重建
+#   out/ 的历史诊断目录与镜像               CI 重跑可重建
+#   tmp/（项目根）                           本地核验基线，可重建
+#
+# ── 已删且不可重建的（2026-11-17，回收站已清）────────────────────
+#
+#   E:\Xiaomi15-iOS16.5-V4-Dev-DSU.zip   2.8 GB  小米 15 的 DSU
+#   E:\ios15pro\                        198 MB  小米 15 Pro 用户态
+#   E:\ios-payload-dada-源码.zip          493 MB  dada 的 payload 源码
+#   E:\ios16.5-15Pro-xnu.zip             629 MB  XNU 源码包（GitHub 可重下）
+#
+# ── 删除规矩（2026-11-17 起）────────────────────────────────────
+#
+#   1. 不直接 rm。删除 = 移到 E:\待删-2026-11-17\。
+#   2. 不清回收站 —— 回收站是最后一道兜底。
+#   3. 移进来之前先把要移的列给机主看。
+#   4. 移走之前先核一遍本清单，一个都不能少。
