@@ -46,6 +46,8 @@ hold.
 ---
 
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
 @@ -5326,6 +5326,8 @@
  
  	while (keepGuessing) {
