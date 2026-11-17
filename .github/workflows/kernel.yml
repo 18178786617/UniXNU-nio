@@ -1364,7 +1364,15 @@ jobs:
           # directly.  The build's own log therefore carries the round's
           # picture, and the round can be read without a photograph of the
           # phone.
-          for shot in out/qemu/fb.png out/qemu/console.txt out/qemu/qemu-guest-errors.log; do
+          #
+          # The console ring from the same run comes with it, and that one
+          # is text: the kernel mirrors every character it prints into the
+          # ramoops console record, so reading that ring back out of the
+          # guest's memory gives the whole console as a string.  Text is
+          # read more exactly than a picture of pixels, and it is what says
+          # which of the driver's steps were taken.
+          for shot in out/qemu/fb.png out/qemu/ramoops.bin out/qemu/console.txt \
+                      out/qemu/qemu-guest-errors.log; do
             if [ -f "$shot" ]; then
               cp "$shot" "$stage/ci-kernel/$(basename "$shot")"
               echo "the round's screen: $(basename "$shot") ($(wc -c < "$shot") bytes)"
