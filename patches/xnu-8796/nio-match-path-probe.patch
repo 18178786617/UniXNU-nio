@@ -66,7 +66,7 @@ diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
 +					unsigned nio_k = 0;
 +					while ((nio_cand = matches->getObject(nio_k)) != NULL) {
 +						OSDictionary *nio_d = OSDynamicCast(OSDictionary, nio_cand);
-+						OSString *nio_cls = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOClassKey.get())) : NULL;
++						OSString *nio_cls = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOClassKey)) : NULL;
 +						OSString *nio_nm  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIONameMatchKey)) : NULL;
 +						OSString *nio_pc  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOProviderClassKey)) : NULL;
 +						printf("\nnio: cand %u cls=%s nm=%s pc=%s", nio_k,
