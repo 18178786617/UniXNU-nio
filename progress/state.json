@@ -1,8 +1,8 @@
 {
   "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
   "updated": "2026-11-17 16:50",
-  "headline": "★★★ 453 照片读出决定性事实：设备树第一次被真正读到（根 nub 名 D22AP，/arm-io/ufs 在树里），personality 也发出去了；但整屏没有一条 M 行、没有一条 'nio: C' 行 —— 这两条串都在内核二进制里，⇒ probeCandidates 一次都没进 ⇒ 匹配根本没跑。根因（代码层已查实）：'nio: DSM enter' 探针只打在 startMatching 的**同步**分支，而根 nub 走的是 _IOServiceJob::startJob **异步**分支（配置线程 + 信号量），所以整条异步路径在面板上完全不可见。454（已推 8ee1508）：在 pingConfig / 配置线程取 job / doServiceMatch 入口 / 候选清单四处加 printf，把 enq→wait→pick→DSMi→cand→DSMx 全链露出来，下一张照片即可判决断在哪个环节。",
-  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：454 待验证匹配是否真的在跑） → P2 存储层 → P3 launchd 起用户态",
+  "headline": "★★★ 453 照片读出决定性事实：设备树第一次被真正读到（根 nub 名 D22AP，/arm-io/ufs 在树里），personality 也发出去了；但整屏没有一条 M 行、没有一条 'nio: C' 行 —— 这两条串都在内核二进制里，⇒ probeCandidates 一次都没进 ⇒ 匹配根本没跑。根因（代码层已查实）：'nio: DSM enter' 探针只打在 startMatching 的**同步**分支，而根 nub 走的是 _IOServiceJob::startJob **异步**分支（配置线程 + 信号量），所以整条异步路径在面板上完全不可见。454 失败在打补丁阶段（git apply 嫌缺 --- / +++ 两行），455（已推 bca6b7e）补上并用 CI 的方式双向验证通过：探针覆盖 enq→wait→pick→DSMi→**cand 候选清单**→DSMx，下一张照片即可判决断在哪个环节、以及每个候选要的 IONameMatch 到底是什么。",
+  "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：455 待验证匹配到底跑没跑） → P2 存储层 → P3 launchd 起用户态",
   "phases": [
     {
       "id": "P0",
@@ -18,7 +18,7 @@
       "status": "current",
       "criteria": "根卷挂载成功的日志",
       "evidence": "★ 453 照片（决定性）：设备树第一次被真正读到 —— 'nio: root nub is named D22AP'、'nio: tree has /arm-io=1 /arm-io/intc=1 /arm-io/ufs=1'、'nio: publishing 3 static personalities' 全部出现。但整屏 **零条 M 行、零条 'nio: C' 行**（这两串已确认在 out/kernel.macho 二进制里）⇒ probeCandidates 一次都没进 ⇒ 匹配器根本没跑，不是匹配失败。★ 根因（代码查实）：'nio: DSM enter' 只在 startMatching 的同步分支打印；根 nub 是 needConfig=1 且 sync=false ⇒ 走 _IOServiceJob::startJob 异步分支（配置线程 + gJobsSemaphore），整条异步路径此前**没有任何输出**，所以面板上什么都看不到。",
-      "next": "454（commit 8ee1508，已推）：新增补丁 nio-match-path-probe.patch，在四处加 printf —— pingConfig 入队（'CFG enq'）、配置线程醒/取 job（'CFG wait'/'CFG pick'）、doServiceMatch 入口带候选数（'DSMi %s n=%d'）、**候选清单**（'cand %u cls=.. nm=.. pc=..'，含 IONameMatch）、一轮结束（'DSMx'）。判读：看到 enq 没看到 wait ⇒ 配置线程没醒；看到 pick 没看到 DSMi ⇒ job 没执行；看到 cand 里 nm= 不是我以为的名字 ⇒ personality 名字对不上（'cand' 行直接给出答案）。"
+      "next": "455（commit bca6b7e，已推，CI 在跑）：补丁 nio-match-path-probe.patch —— 在 pingConfig 入队（'CFG enq'）、配置线程醒与取 job（'CFG wait'/'CFG pick'）、doServiceMatch 入口带候选数（'DSMi %s n=%d'）、**候选清单**（'cand %u cls=.. nm=.. pc=..'，含每个候选要的 IONameMatch）、一轮结束（'DSMx'）五处加 printf。★ 本地已按 CI 的方式（git apply，双向 --check）验证通过，不会再栽在补丁格式上。判读：enq 有 wait 无 ⇒ 配置线程没醒；wait 有 pick 无 ⇒ job 没被取走；pick 有 DSMi 无 ⇒ 没进 doServiceMatch；DSMi 有 cand 无 ⇒ 桶是空的；cand 里 nm 不对 ⇒ personality 名字对不上（cand 行直接给答案，不用推理）。"
     },
     {
       "id": "P2",
