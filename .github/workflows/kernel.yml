@@ -693,12 +693,8 @@ jobs:
           fi
           qemu-system-aarch64 --version | head -1
           python3 device/scripts/make-qemu-adt.py --output out/qemu/kernel.adt
-          cmdline=$(python3 - <<'PYCMD'
-          import tomllib
-          board = tomllib.load(open("device/board.toml", "rb"))
-          print(" ".join(board["payload"]["kernel_args"]))
-          PYCMD
-          )
+          cmdline=$(python3 device/scripts/merge-kernel-args.py --print \
+            device/package/unixnu.toml device/board.toml)
           echo "cmdline: $cmdline"
           kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
           if [ -z "$kernel" ]; then
