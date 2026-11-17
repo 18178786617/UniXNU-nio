@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★ 2026-11-18 01:30 ★ 到用户态的**唯一阻塞点**：startRoot 在驱动 start() 里同步执行，bring-up 卡住 ⇒ 匹配链卡住 ⇒ 后面全上不来。★ 两条备路都不通：① mockfs 只能装 2 个文件且 ≤32 MiB（内核限制），且仍在匹配链上；② initrd 完整系统盘被 owned_memory_size=256MiB 挡住（原厂 XBL 固件 DRAM 碎片化，无 4 GB 连续段）⇒ 除非换 UniXNU 定制固件。★ 但 rootfs.img 里装的**已经是真 launchd + 真 dyld**（16.5 的），mockfs 机制本身 R100 就验证过。",
     "★★★★ 2026-11-18 01:15 ★★ 到用户态的关键事实：**用户态机制早已通**（R100 的 initprobe 加载成功、画到帧缓冲、GPU 探针经 fd 1 输出）⇒ mockfs 根卷/ELF/系统调用/画屏全验证过。缺的只是真的 iOS 16.5 用户态内容（ios165/root + dyld_cache 都有）。⇒ 两条路：主路 UFS（6-8 步，3-8 小时）与备路 initrd 只读系统盘（2-3 步，1.5-3 小时，官方形态）。",
     "★★★★ 2026-11-18 01:40 官方对照（unixnu.com/zh/）：官方启动链第 5 步与 nio 完全一致（平台专家匹配 ADT 根节点 → 存储驱动发布 userdata 分区 → 发布 OS/SystemOS → 按 UUID 匹配根卷 → 启动 launchd）。★ 发现真实问题：board.toml 的 kernel_args 从未进 payload 卷（官方 build payload 会写进去）⇒ 已加 tools/merge-kernel-args.py 合并并实测通过。",
     "★★★★ 2026-11-18 01:20 关键发现：refs/umi = 机主给的 xm6661885/hakios-xnu-kernel-umi-fixes，**HakiOS (iOS 16.5) on Xiaomi Mi 10** ⇒ 与 nio 同为 iOS 16.5、同为 SM8250。WiFi 走 ath11k（Linux 移植 + 开源固件），不是 Apple 闭源 WCNSS。★ 但它的用户态是 Darwin 的，不是 iOS 的 ⇒ '进 iOS 用户态'仍只有 nio 自己在做。",
@@ -266,6 +267,23 @@
         },
         "★ 建议": "两条并行：主路继续推 CI（473 在跑，不占额外轮次）；备路的系统盘制作是**纯本地工作，不占 CI 轮次** ⇒ 值得同时做。⇒ 到用户态的现实估计：乐观半天，悲观 1-2 天。",
         "★ 注意": "到'用户层'与'用户层可用'是两件事：前者是内核把控制交给 launchd；后者还要 launchd 起完、SpringBoard 起完、UI 出画面。"
+      },
+      "到用户态的唯一阻塞点": {
+        "★ 机制": "startRoot() 在驱动 start() 里**同步**执行（迭代化之后就在匹配线程的调用栈上）。bring-up 卡住 ⇒ start() 不返回 ⇒ personality 不算 attach 成功 ⇒ **匹配链被卡住 ⇒ 后面的一切都上不来**（连 mockfs 根里的 launchd 也一样）。",
+        "★ 两条备路为什么都不通": [
+          "① mockfs 根：rootfs/rootfs.img 里装的**已经是真的** iOS 16.5 launchd(525088 B) + 真的 dyld(922912 B)，N4KROOT 格式（8sII4Q 头，version=1 count=2，launch@4096，test@4K 对齐）。**但内核的 mockfs 限制：count 必须==2、镜像 ≤32 MiB**（mockfs_vfsops.c:146）⇒ 装不下完整用户态；而且它仍在匹配链上，UFS 卡住时它也起不来。",
+          "② initrd 完整系统盘（官方 scratch-data.img / payload.runtime 形态）：**被硬件挡住** —— board.toml 的 owned_memory_size = 0x10000000 = 256 MiB，board.toml 注释：'no 4 GiB run exists (alioth qualifies 4 GiB only on the hand-tuned UniXNU firmware)'，nio 原厂 XBL 固件把 DRAM 切碎了 ⇒ 装不下 2-4 GB 的系统盘。⇒ 要走这条得换 UniXNU 定制固件（36 个干净描述符的那种）。"
+        ],
+        "★ 到用户态的完整清单": [
+          "1. bring-up 剩 4 步：nop-out → power mode query → wake(START STOP UNIT) → LUN ready（473 在验）",
+          "2. step 2 读根卷布局（findRootLayout）★ 第一次真正用 UFS 读数据",
+          "3. step 3 manifest 校验（status 必须 0，7 种失败码）",
+          "4. 发布根卷窗口 + APFS 卷身份（windowVolumeIdentity）+ 媒体等待（mediaWithUuidExists，30 秒）",
+          "5. APFS 挂载 —— ★ 机制已就位：ADT 的 /chosen/root-matching 字典 + scripts/extract-root-volume-uuid.py 读出 OS 窗口的 UUID（官方第 5 段'按 UUID 匹配根卷'）",
+          "6. launchd 启动 —— 必须在**真系统盘**上（mockfs 只有 launchd+dyld，缺 /usr/lib、/System/Library）"
+        ],
+        "时间": "乐观 4-8 轮 ≈ 2-4 小时（bring-up 4 步都通的话）；悲观 1-2 天",
+        "★ 顺带查明": "probe=12 起的 mediaReportThread 也是 kernel_thread_start 起的 ⇒ **不跑** ⇒ probe=12 的 IOMedia 报告**永远看不到**，以后别指望它。probe=12 与正常路径走同一个 startRoot，差别只在失败时 panic vs return false。"
       }
     },
     "P2_存储层_DSU只读系统盘": {
