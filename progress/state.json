@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★ 2026-11-18 02:10 ★★ 更正上一条：**备路的真正硬伤不是内存窗口（3 GB 确实可行），而是 ramdisk 的体积** ——\n  ramdisk 来自 payload 卷（上限 64 MiB）⇒ 装不下 2.3 GB cache / 2.6 GB OS 窗口 ⇒ mockfs 路线彻底死；\n  备路唯一形态 = NX769J 那条（ramdisk 打进内核镜像 + APFS kext 注入）⇒ 多轮 CI + 大量本地工作。\n  ⇒ **主路明显更快**，475 不改窗口（对主路价值边际），等 474 照片带最有价值的下一步。",
     "★★★★★ 2026-11-18 02:00 ★★★ **内存窗口的答案：3 GB 可行，备路不再是死路**\n  · nio-hardware.json 的 memory_banks = 一整段 0x80000000+6GB（覆盖 2-8 GB）\n  · ★ 注释里的血泪史：早前从 XBL Conventional runs 得到的两段是 0xC0000000+512MiB 与 **0x100000000+4GiB（4-8 GB 一整段 4 GB）**；那次失败是因为漏了内核加载地址 0x9A8xxxxx\n  · ★★ board.toml 的 'no 4 GiB run exists' 是**从 alioth 抄来的**，与 nio 实况相反\n  · ⇒ 475 方案：owned_memory_size → 0xC0000000（3 GB）⇒ 备路两条都装得下",
     "★★★★ 2026-11-18 01:55 ★★ 用户态侧的三条更正：dyld cache **完整 43 片 2.3 GB**（之前说 5 片是错的）；mockfs **不走 IOKit 匹配链**（VFS 层最后一项）；cache 镜像**剥了 __LINKEDIT** ⇒ re-export 表缺失 ⇒ mockfs 多文件方案死（IPSW 里也没有 .tbd）",
     "★★★★ 2026-11-18 01:50 ★★ board.toml 的 root_match_volume_uuid 与我们镜像一致（97a3eb1a-…）✓ 且取的是 volume UUID 不是 container UUID ✓",
@@ -419,6 +420,14 @@
         "两条都装得下3GB": "✔"
       },
       "★ 体积参照": "ios165/root（完整用户态树）= 8.1 GB；SystemOS dmg = 4.5 GB ⇒ 这两个装不下 ⇒ 只能走'裁剪后的最小用户态'或'OS 窗口'"
+    },
+    "★★ 更正_备路的真正硬伤不是内存窗口": {
+      "RAMDisk_机制完整可用": "XNU 自己的 iokit/bsddev/IOKitBSDInit.cpp:837 —— 读 /chosen/memory-map/RAMDisk （16 字节 = base+size）⇒ mdevadd() 把它做成 /dev/md0 ⇒ rd=md0 时 IOFindBSDRoot 选中它 ⇒ mockfs 挂在这个块设备上（N4KROOT 头在开头）⇒ launchd+dyld 两个文件。上限 MAX_PHYS_RAM = 4GB-4KB ⇒ 2.3GB/2.6GB 都合法。机制不缺。",
+      "★ 真正硬伤_ramdisk的体积": "ramdisk 的内容是 **payload 卷里的一个文件**（rootfs.img），而 payload 卷上限 64 MiB ⇒ ★ **装不下 2.3 GB 的完整 cache，也装不下 2.6 GB 的 OS 窗口** ⇒ **mockfs 路线彻底死**（除非把 ramdisk 打进内核镜像，即 packed_data_ramdisk=true）。",
+      "★ 备路唯一可行形态": "**NX769J 那条**：packed_data_ramdisk=true ⇒ ramdisk（2.6 GB 的 OS 窗口 APFS）打包进**内核镜像** ⇒ 内核镜像变成 2.6 GB（CI 构建/传输/时间都是大问题）⇒ 再加 **APFS kext 注入**（apfs 是 Apple 闭源 kext，在 16.5 root 里）⇒ 再加 mockfs 或 APFS 的挂载选择。",
+      "★ 工作量对比": "mockfs 路线：内核补丁（支持第三个文件+上限 4GB）+ 2.6GB 进内核镜像 + APFS kext 注入 + 启动极慢（2.6GB 要解压进内存）⇒ **多轮 CI + 大量本地工作**",
+      "★ 结论": "**主路（UFS 根卷）明显更快**。已到 DP=1，剩 4-6 步，全是我们自己写的代码、每步都有直写探针；备路要从零造 4 样东西。",
+      "★ 475 是否改窗口": "**不改** —— 窗口是内核的物理内存，UFS 读根卷不需要更多内存，边际价值很小；475 应该带主路下一步需要的探针（等 474 的照片来定）。"
     }
   }
 }
