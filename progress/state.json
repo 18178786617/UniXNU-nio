@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 09:40 ★★★★★ **480 判读 + 481/482 分诊**：\n  · ★ UCD 移到 4096 **不是根因**（仍停在 doorbell about to ring）\n  · ★★ 逐项对照：两路径的 UTRD 字段/UCD 页/cacheClean/16KiB 映射/UTRLBA **现已全部一致**\n  · ★★ 剩下的唯一差异 = root 独有的 bringup（stop-queue / SMMU bypass / hostStartQueue）\n  · ★ 硬件 2026-10-17 实测：内核分配的缓冲区会让系统复位 ⇒ 请求列表必须用固件那块；DT 标 dma-coherent\n  · ★ 481/482 = 在 probe=12 里**先跑唯一验证过的 adoptAndRead**（4 = TEST UNIT READY + READ CAPACITY）再跑 startRoot\n  · ★ 481（level 3）会 panic 出**控制器寄存器快照**（phys/hcs/is/db/rsr/ba/bau/ie）⇒ 免费信息",
     "★★★★★ 2026-11-18 09:15 ★★★★★ **run-479 定位到一条指令**（c907f94 修）：\n  · ★ NOP OUT 跳过成功（8| skipped）⇒ 越过 run 65/66/467 的老卡点\n  · ★ 走到 power query（9|）⇒ ★★ 首次越过历史卡点\n  · ★★★ **探针：'doorbell about to ring' 有、'doorbell rang' 无** ⇒ ★★ **卡在 hostWrite(0x58,1)**\n  · ★★★ 这就是 run-65/66 的老血案（'ringing the first doorbell hung the fabric, twice'）\n  · ★★ 480：kUcdOffset 128 → 4096（★ 唯一差别：UCD 在请求列表页 vs 下一页；两条路径的 UTRD 字段一字不差；验证过的 adoptAndRead 用 4096）\n  · ★★★ 全自动已通：auto-loop 自动打包+自动刷机（479 于 09:03 自动刷上）；**唯一边界：设备跑着我们自己的内核时 adb/fastboot 都不可达 ⇒ 需长按电源键重启一次**",
     "★★★★★ 2026-11-18 08:20 ★★★★★ run-476 里程碑 + 478 根治（9a3dfba）：\n  · ★ 476 过了 469 的卡点（poll 0 got 出现）⇒ 470 的修复生效\n  · ★ 时钟是活的（clock hw=19008 kernel=19003）⇒ 更正：根因不是时基冻结，是 WFE 在关中断上下文睡死\n  · ★ 卡在 nop-out begin 之后 ⇒ RootCommands.h:15 的 IODelay(2)（poll 的 pause）—— 我上次漏了共享头\n  · ★ 478 根治：等待改读控制器寄存器 + 计数式等待 + 轮询上限兜底 ⇒ NOP OUT 必定超时返回并走 UIC 恢复\n  · ★ 477 在真机上（已刷）；QEMU 的 ramoops 仍全零 ⇒ QEMU 放弃\n  · ★ CI 默认 runner 改回 macos-15（arm64）（机主要求；15 与 26 同池，26 有失败史）",
     "★★★★★ 2026-11-18 02:50 ★★★★ **QEMU 画面全白的原因找到并已修（477 / 427d608）**：\n  · ★ QEMU 用 board.toml 的 kernel_args，**真机用 unixnu.toml 的 args（合并后）** ⇒ ★ **合并后那份含 rd=md0（根卷），board.toml 那份不含** ⇒ QEMU 里内核无根可挂 ⇒ 画面全白\n  · ★ 477 起 QEMU 用与真机完全同一份 cmdline ⇒ **QEMU 的结论可直接外推到真机**\n  · merge-kernel-args.py 进仓 + --print 模式 ⇒ **命令行只有一处定义**",
@@ -604,5 +605,26 @@
       "★ 若 480 过了": "⇒ 根因锁定 ⇒ 直接走向读根卷布局（P1 的第 5 步）",
       "★ 若 480 仍挂": "⇒ ⇒ 连验证过的配方也会挂 ⇒ **是映射/硬件层**（SMMU / 时钟 / 电源 / fabric）"
     }
+  },
+  "★ 里程碑_run-480_UCD不是根因": {
+    "★ 判读": "仍然只有 `10| ufs bu doorbell about to ring`、没有 `rang` ⇒ ★ **UCD 移到 4096 不是根因**",
+    "★★ 逐项对照后_两路径已几乎完全一致": [
+      "UTRD 字段：utrd+0/8/16/20/24/28 ↔ words[0]/[2]/[4]/[5]/[6]/[7] ⇒ 一致",
+      "UCD 页：root 路径已改成 4096 ⇒ 与 adoptAndRead 一致",
+      "cacheClean / cacheCleanInvalidate / doorbell 写 / 轮询 ⇒ 一致",
+      "16 KiB 映射：两边都是 IOMemoryDescriptor::withPhysicalAddress(fwList, 16384) + map(kIOMapAnywhere) + zero32 ⇒ 一致",
+      "UTRLBA(0x50/0x54)：root 路径写 gHost.phys 并检查读回 ⇒ 一致"
+    ],
+    "★ 剩下的唯一差异": "★ **root 路径独有的 bringup**：stop-queue → SMMU 'globally bypassed' → hostStartQueue；★ **adoptAndRead 是 'adopt'（接管固件留下的控制器，不做这些）**",
+    "★ 硬件 2026-10-17 的三条实测事实（adoptAndRead 注释里）": [
+      "★ 内核新分配的缓冲区（0xf080f000）在第一条命令时会**让系统复位** ⇒ 请求列表必须用固件那块（UTRLBA）",
+      "★ **0xc8000000 以下不可分配**",
+      "★ DT 标了 host dma-coherent ⇒ cached 映射是对的（run-280 改回 cached 的依据）"
+    ]
+  },
+  "★ 分诊_481与482": {
+    "★ 设计": "★ **在 probe=12 分支里先跑唯一验证过的配方 adoptAndRead(4)（TEST UNIT READY + READ CAPACITY），再跑 startRoot** ⇒ 一轮两信息",
+    "★ 481（8db3d69，已在跑）": "level 3 = '检测请求列表被替换' ⇒ 会 panic，但 ★ **panic 消息带控制器寄存器快照**（phys / hcs→hcs / is / db / rsr / ba / bau / ie）⇒ ★ **免费的状态信息**",
+    "★ 482（ceed559）": "level 4 = 真正发读命令 ⇒ ★ 若它完成 ⇒ **门铃在这块板子上能响 ⇒ 根因是 root 的 bringup（SMMU bypass 等）**；★ 若它也 panic 'first command did not complete' ⇒ ⇒ **写挂与驱动无关 ⇒ 墙在驱动之下**"
   }
 }
