@@ -663,7 +663,6 @@ void NioUfs::adoptAndRead (unsigned level)
   bzero (ownBytes, kListBytes);
   /* The firmware's list is read once, to be put back when this port is
    * done with the controller. */
-  uint64_t fwList = (uint64_t (read32 (hc, 0x54)) << 32) | read32 (hc, 0x50);
   uint32_t fwLo = read32 (hc, 0x50), fwHi = read32 (hc, 0x54);
   nioUfsSay ("nio: adopt A0 own=%llx fw=%08x:%08x\n", phys, fwHi, fwLo);
   /* nio run-488: a second view of the same pages, without the cache.
@@ -1114,7 +1113,7 @@ void NioUfs::adoptAndRead (unsigned level)
         "cmp x12, %[limit]\n"
         "b.lo 1b\n"
         :
-        : [limit] "r" (2000000U)
+        : [limit] "r" (static_cast<uint64_t> (2000000U))
         : "x12", "cc", "memory"
     );
     fbMark (2190, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
