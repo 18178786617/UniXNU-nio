@@ -1060,29 +1060,24 @@ void NioUfs::adoptAndRead (unsigned level)
     write32 (hc, 0x58, 1);          // ring slot 0
     fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
     nioUfsSay ("nio: ufs I1 written\n");
-    uint32_t dbAfter = read32 (hc, 0x58);
-    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the doorbell read came back
-    nioUfsSay ("nio: ufs I2 db=%08x\n", dbAfter);
-    bool done = false;
-    for (unsigned loops = 0; loops < 100000; loops++) {
-      if (!(read32 (hc, 0x58) & 1)) {
-        done = true;
-        break;
-      }
-      nioUfsSpin (1);
-    }
-    if (done) {
-      fbMark (2320, 0xff, 0xff, 0x00);  // cyan: the doorbell bit cleared
-    }
-    nioUfsSay ("nio: ufs J done=%d db=%08x hcs=%08x\n",
-               (int) done, read32 (hc, 0x58), read32 (hc, 0x30));
+    /* nio run-501: round 500's panel carried green and red but no blue.
+     * The write returns; the read of the doorbell that follows it does
+     * not.  Ringing starts the controller fetching, and an MMIO read of
+     * this controller then blocks the caller.  Nothing after here needs
+     * that read.  Wait on the hardware counter instead -- it is read
+     * from the CPU, not over the bus -- and then read the completion
+     * state from the descriptor in ordinary memory.
+     */
+    nioUfsSpin (200000);              // 200 ms, no controller read
+    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the wait finished
     cacheCleanInvalidate (virt, 8192);
-    if (!done) {
-      return result;
-    }
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
       fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the controller completed the command
+    }
+    nioUfsSay ("nio: ufs J ocs=%02x\n", result.ocs);
+    if (result.ocs == 0xfU) {
+      return result;
     }
     const uint8_t *rsp = ucd + rspOffset;
     result.response = rsp[6];
