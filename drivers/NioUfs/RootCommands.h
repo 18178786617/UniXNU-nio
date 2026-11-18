@@ -1,6 +1,24 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // Shared production command path. Included inside the root transport namespace.
 // The host harness replaces only MMIO, DMA synchronization, clock and lock primitives.
+
+/* nio: a place for the board's driver to say where a command has got to.
+ *
+ * The host harness has no console, so the report is a no-op there.  It is
+ * a macro rather than a function because the shared path is compiled on
+ * the host as well, and a function would need a definition in both trees.
+ *
+ * The reports sit around the doorbell on purpose.  Run 478 stopped with
+ * the NOP OUT begun and nothing after it, and the difference between a
+ * wait that does not end and a read that never returns has to be seen
+ * from the inside: a report that reads nothing of the controller can
+ * still be written after the doorbell, and one that comes before it
+ * says the command was on its way out.
+ */
+#ifndef NIO_UFS_REPORT
+#define NIO_UFS_REPORT(text) ((void) 0)
+#endif
+
 struct HardwareTransferPort {
   uint64_t deadline;
   uint32_t doorbell () { return read32 (gHost.hc, 0x58); }
@@ -89,7 +107,9 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
+  NIO_UFS_REPORT ("nio: ufs bu doorbell about to ring");
   hostWrite (0x58, 1);
+  NIO_UFS_REPORT ("nio: ufs bu doorbell rang");
   UfsTransferPoll state;
   UfsTransferEnd end = pollUfsTransfer (port, state);
   gRootDiagnostic.polls = state.polls;

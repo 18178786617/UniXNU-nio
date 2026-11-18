@@ -74,6 +74,29 @@ void boot_progress_poll (void);
 void boot_progress_poll (void) __attribute__((weak));
 #endif
 volatile uint32_t native_ufs_probe_calls = 0;
+
+/* nio run-479: whether the NOP OUT is sent at all.
+ *
+ * Run 478 stopped with the NOP OUT begun and nothing after it, and the
+ * reports that were added around the doorbell are what say why: the
+ * command goes out and the controller never answers, or the read after
+ * the doorbell never comes back.  Either way the thread is inside a
+ * command that will not finish, so the failure path inside it is never
+ * reached -- which is why making the wait end, in run 478, changed
+ * nothing.
+ *
+ * The NOP OUT is a probe: it proves the transport before the SCSI layer
+ * is touched.  The power mode query that follows is a command that has
+ * to be sent anyway, and it carries the same doorbell, so the probe is
+ * not worth a thread that cannot come back.  It is switched off here and
+ * the reports around the doorbell say what the command that does go out
+ * does.
+ *
+ * The variable is volatile so that the compiler cannot decide the test
+ * is constant and refuse the branch; that is also what lets a later
+ * round turn it back on without another edit to the structure.
+ */
+volatile uint32_t native_ufs_run_nop_out = 0;
 volatile uint32_t native_ufs_matched = 0;
 volatile uint32_t native_ufs_probe_requested = 0;
 volatile uint32_t native_ufs_mapped = 0;
@@ -1088,6 +1111,10 @@ static void hostWrite (unsigned offset, uint32_t value)
   __asm__ volatile ("dsb sy" ::: "memory");
 }
 
+/* nio: the shared command path reports through this, and the host harness
+ * has no console so its own build leaves the report a no-op. */
+#define NIO_UFS_REPORT(text) nioUfsSay ("%s", (text))
+
 #include "RootQueue.h"
 
 #include "RootCommands.h"
@@ -1402,10 +1429,22 @@ static bool hostBringUp (const char **why)
    * this hardware is the proven one: prove the transport first, and only go
    * near the DME if the transport does not answer. */
   gRootDiagnostic.stage = "NOP OUT";
-  nioUfsSay ("nio: ufs bu nop-out begin dp=%d hcs=%08x\n",
+  nioUfsSay ("nio: ufs bu nop-out %s dp=%d hcs=%08x\n",
+          native_ufs_run_nop_out ? "begin" : "skipped",
           (int) (read32 (gHost.hc, 0x30) & 1), read32 (gHost.hc, 0x30));
   // NOP OUT proves the transport before touching the SCSI layer.
-  if (hostNop () != kIOReturnSuccess) {
+  //
+  // nio run-478: it did not return, and the way it is written the failure
+  // is fatal -- the recovery below and then a panic.  But a command that
+  // the controller never answers must not be the reason nothing after it
+  // is tried: the NOP OUT is a probe, and a probe that does not answer is
+  // not a reason to stop.  So the failure is reported and the path goes
+  // on to the power mode query, which is a command that has to be sent
+  // anyway.  The reports around the doorbell say which of the two it is:
+  // the command that went out and was never answered, or the read that
+  // never came back.
+  if (native_ufs_run_nop_out && hostNop () != kIOReturnSuccess) {
+    nioUfsSay ("nio: ufs bu nop-out failed, going on\n");
     // The transport did not answer.  Now the UniPro link is a suspect and the
     // standard recovery is the only thing left: DME_RESET, DME_ENABLE,
     // DME_LINK_STARTUP (UIC_CMD_DME_RESET = 0x14, UIC_CMD_DME_ENABLE = 0x12,
