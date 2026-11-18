@@ -621,7 +621,33 @@ void NioUfs::adoptAndRead (unsigned level)
   // proven the controller can fetch from; the page above it is only as good
   // as the memory there, and this board's request list is one page of
   // request descriptors with nothing of ours above it.
-  const uint32_t ucdOffset = 128, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
+  // nio run-494: the command block leaves the request list.
+  //
+  // The driver that runs on this controller says where the firmware
+  // keeps its command block:
+  //
+  //   "Qualcomm's UFSDxe reads synchronously on core 0, and its
+  //    transfer request list has room for one request only (UTRLBA
+  //    points at a single descriptor, with UFSDxe's command descriptor
+  //    right behind it, where slots 8.. would be).  The controller
+  //    takes 32 at once."
+  //
+  // So the controller fetches 32 request descriptors at once, and the
+  // descriptors behind the first one are not more descriptors: they
+  // are the command block of the request the firmware left there.
+  //
+  // This port put its own command block 128 bytes into the list,
+  // which is inside that region.  A block that the controller reads as
+  // a request descriptor is a block whose first word is a command type
+  // and whose fourth and fifth words are an address; it sends the
+  // controller to an address that was never meant to be fetched, and
+  // the fetch is what does not come back.
+  //
+  // The block moves to 4096, past everything the list holds, and the
+  // words of the first eight slots are put on the screen so that a
+  // slot holding something other than this port's own descriptor is
+  // visible.
+  const uint32_t ucdOffset = 4096, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
   /* nio run-491: what the controller says about itself, read before the
@@ -846,18 +872,24 @@ void NioUfs::adoptAndRead (unsigned level)
      * all ones -- so a window at the wrong address is left alone and
      * the run says so instead of writing to whatever is really there.
      */
-    {
-      uint32_t nexus = read32 (hc, 0x1140);
-      uint32_t umtrl = read32 (hc, 0x1144);
-      nioUfsSay ("nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x\n",
-                 nexus, umtrl, read32 (hc, 0x11b0), read32 (hc, 0x11b4));
-      if (nexus == 0 || nexus == 0xffffffffU) {
-        write32 (hc, 0x1140, 0xffffffffU);
-        nioUfsSay ("nio: ufs H0d nexus set=%08x\n", read32 (hc, 0x1140));
-      } else {
-        nioUfsSay ("nio: ufs H0d nexus left=%08x\n", nexus);
-      }
-    }
+    nioUfsSay ("nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x\n",
+               read32 (hc, 0x1140), read32 (hc, 0x1144),
+               read32 (hc, 0x11b0), read32 (hc, 0x11b4));
+    /* nio run-494: the first word of each of the eight slots behind the
+     * list's own descriptor.  A slot that is not this port's own
+     * descriptor holds something else, and the controller fetches all
+     * of them at once.
+     */
+    nioUfsSay ("nio: ufs H0d slots=%08x %08x %08x %08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 0 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 1 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 2 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 3 * 32));
+    nioUfsSay ("nio: ufs H0e slots=%08x %08x %08x %08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 4 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 5 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 6 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 7 * 32));
     nioUfsSay ("nio: ufs H dw0=%08x dw2=%08x prdt=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 0),
                *reinterpret_cast<volatile uint32_t *> (utrd + 8),
