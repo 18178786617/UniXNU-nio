@@ -1095,42 +1095,51 @@ void NioUfs::adoptAndRead (unsigned level)
     nioUfsSay ("nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x\n",
                read32 (hc, 0x1140), read32 (hc, 0x1144),
                read32 (hc, 0x11b0), read32 (hc, 0x11b4));
-    /* nio run-510: the vendor-specific window is told what kind of
-     * request the list holds before the doorbell is rung.
+    /* nio run-511: the vendor-specific register is NOT written, and the
+     * reason is worth writing down.
      *
-     * The EDK2 driver that runs on this board family writes the
-     * register before every request, and the value depends on the kind
-     * of request:
+     * Run 510 wrote it, on the strength of the EDK2 driver in this
+     * tree:
      *
      *   case UPIU_TRANSACTION_COMMAND:
      *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0xFFFFFFFF); break;
-     *   case UPIU_TRANSACTION_NOP_OUT:
-     *   case UPIU_TRANSACTION_QUERY_REQ:
-     *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0x0); break;
-     *   ...
-     *   MmioWrite32 (IoAddr + REG_UTP_TRANSFER_REQ_DOOR_BELL, 1);
      *
-     * A command and a query are not the same thing to the controller.
-     * This port never wrote the register at all -- it was written down
-     * in round 493 and then only read -- so what it held was whatever
-     * the firmware last needed, and the firmware's last need was not a
-     * command.  The photograph of run 516 shows it holding zero, which
-     * is the value EDK2 writes for a query and for a NOP OUT.
+     * and the photograph of run 517 answers the question that step
+     * asked:
      *
-     * The write is guarded, as it was in round 493: the register is
-     * written only when what it holds reads as one of the two values
-     * EDK2 writes there -- zero or all ones.  A window at the wrong
-     * address is therefore left alone, and the run says so instead of
-     * writing to whatever is really there.
+     *   13i nio: ufs H0e nexus set vs=00000000
+     *
+     * The write went in and the register read back as zero.  That
+     * register is not there.
+     *
+     * The reason is that the driver that code comes from is for a
+     * different chip.  It is Exynos 9810:
+     *
+     *   #define EXYNOS9810_UFS_BASE    0x11120000
+     *   #define EXYNOS9810_UFS_VS_BASE (EXYNOS9810_UFS_BASE + 0x1100)
+     *
+     * and this board is SM8250, whose UFS controller sits at
+     * 0x1d84000 with a window of 0x3000 bytes:
+     *
+     *   reg = <0 0x1d84000 0 0x3000>;      (sm8250.dtsi)
+     *
+     * The driver that runs on THIS chip -- the one on the phone of the
+     * same model that works -- never touches that register at all.  It
+     * has no vendor window in its list of registers.
+     *
+     * So the address was never a vendor window on this board.  It was
+     * some other register that happens to sit inside the controller's
+     * window, and run 510 wrote all ones into it.
+     *
+     * The write is undone here and the register is only read from now
+     * on.  Rounds 493, 495 and 510 all chased this register on the
+     * strength of a reference for a different chip; that line of
+     * enquiry is closed.
+     *
+     * The register is still read, because reading it costs nothing and
+     * the number on the screen is worth having.
      */
-    uint32_t nexus = read32 (hc, 0x1140);
-    if (nexus == 0x00000000U || nexus == 0xffffffffU) {
-      write32 (hc, 0x1140, 0xffffffffU);
-      __asm__ volatile ("dsb sy" ::: "memory");
-      nioUfsSay ("nio: ufs H0e nexus set vs=%08x\n", read32 (hc, 0x1140));
-    } else {
-      nioUfsSay ("nio: ufs H0e nexus left vs=%08x\n", nexus);
-    }
+    nioUfsSay ("nio: ufs H0e vs=%08x\n", read32 (hc, 0x1140));
     /* nio run-495: two registers this port had never read.
      *
      *   0x5c  UTRLCLR   the clear register for the request list.  It
@@ -1189,10 +1198,79 @@ void NioUfs::adoptAndRead (unsigned level)
      * by a store to the framebuffer, which is a posted write and does
      * not wait for anything.
      */
+    /* nio run-511: the doorbell is rung the way the driver that runs on
+     * this chip rings it.
+     *
+     * That driver -- on the phone of the same model, with the same
+     * SM8250, with a UFS controller at the same 0x1d84000 -- does not
+     * simply write the doorbell register.  It checks five things
+     * first, and it does all of it with interrupts off:
+     *
+     *   lck_mtx_lock (&hc_lock);
+     *   istate = ml_set_interrupts_enabled (FALSE);
+     *   ok = hc_in && !hc_closed && !hc_dead && *hc_loader.take_back == 0 &&
+     *       hc_read (UFSHC_UTRLBA)  == hc_list_lo &&
+     *       hc_read (UFSHC_UTRLBAU) == hc_list_hi &&
+     *       (hc_read (UFSHC_UTRLRSR) & 1) != 0 &&
+     *       (hc_read (UFSHC_UTRLDBR) & bit) == 0;
+     *   if (ok) {
+     *       hc_write (UFSHC_UTRLDBR, bit);
+     *   }
+     *   ml_set_interrupts_enabled (istate);
+     *
+     * Three of those five this port did not do at all:
+     *
+     *   · the interrupts were not off.  Ringing the doorbell starts the
+     *     controller fetching, and the fetch holds the bus.  An
+     *     interrupt that arrives in that window, and whose handler
+     *     touches the bus, waits for a bus the controller is holding.
+     *     The reference driver closes that window by masking interrupts
+     *     for the whole of the ring, and this port has no such window
+     *     anywhere in its UFS path.
+     *
+     *   · the list base was never read back and compared.  This port
+     *     writes the base and prints what it wrote, which is the CPU's
+     *     own account of it; the reference reads the register back and
+     *     compares, so a controller that is pointing somewhere else is
+     *     caught before the doorbell, not after.
+     *
+     *   · the doorbell's own state was read, but not as part of a
+     *     decision: this port reads it and prints it, and rings the
+     *     doorbell whatever it says.
+     *
+     * The interrupts are masked with the arm64 DAIF register, which is
+     * what the kernel itself uses:
+     *
+     *   msr DAIFSet, #(DAIFSC_FIQF | DAIFSC_IRQF)
+     *
+     * and unmasked with DAIFClr.  The state is saved first, so the
+     * caller's own state is put back.
+     */
     fbMark (1860, 32, 0x00, 0xff, 0x00);   // column 2: reached the doorbell
     __asm__ volatile ("dsb sy" ::: "memory");
     fbMark (1860, 56, 0x00, 0x00, 0xff);   // column 3: the descriptor is in memory
+
+    /* The reads happen with the interrupts off, because the reference
+     * driver takes its readings in that state too.  The report of them
+     * is printed BEFORE the interrupts are masked: the console takes a
+     * lock that is released by an interrupt, so printing with the
+     * interrupts off would wait for ever. */
+    uint32_t baLo = read32 (hc, 0x50);
+    uint32_t baHi = read32 (hc, 0x54);
+    uint32_t rsrNow = read32 (hc, 0x60);
+    uint32_t dbNow = read32 (hc, 0x58);
+    uint32_t wantLo = static_cast<uint32_t> (phys);
+    uint32_t wantHi = static_cast<uint32_t> (phys >> 32);
+    nioUfsSay ("nio: ufs H6 ba=%08x:%08x want=%08x:%08x rsr=%08x db=%08x\n",
+               baHi, baLo, wantHi, wantLo, rsrNow, dbNow);
+
+    uint64_t daif = 0;
+    __asm__ volatile ("mrs %0, daif" : "=r" (daif));
+    __asm__ volatile ("msr daifset, #0x3" ::: "memory");
+
     write32 (hc, 0x58, 1);          // ring slot 0
+
+    __asm__ volatile ("msr daifclr, %0" :: "r" ((uint32_t) (daif & 0x3)) : "memory");
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
