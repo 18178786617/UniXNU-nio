@@ -610,6 +610,30 @@ void NioUfs::adoptAndRead (unsigned level)
   OSSharedPtr<IOMemoryMap> smmuMap;
   uint32_t smmuReport[3] = { 0, 0, 0 };
   nioUfsSay ("nio: adopt A enter phys=%llx hcs=%08x\n", phys, hcsBefore);
+  /* nio run-486: the host controller enable.
+   *
+   * The reference implementation that runs on this controller refuses to
+   * go on unless the host controller enable bit is set:
+   *
+   *   if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) { stop; }
+   *
+   * It only reads the register.  Nothing in this port ever wrote it, on
+   * either the SM8550 recipe or this one, and the firmware hands the
+   * controller over with the bit wherever its own shutdown left it --
+   * a UEFI driver disables the controller on the way out, so the bit is
+   * probably clear by the time this code runs.
+   *
+   * A controller that is not enabled does not fetch the request
+   * descriptor when the doorbell is rung, and the write does not come
+   * back.  So the bit is set here if it is not already set, and its
+   * value before and after is on the screen.
+   */
+  uint32_t hceBefore = read32 (hc, 0x34);
+  nioUfsSay ("nio: adopt A2 hce=%08x\n", hceBefore);
+  if (!(hceBefore & 1)) {
+    write32 (hc, 0x34, 1);
+    nioUfsSay ("nio: adopt A3 hce set hce=%08x\n", read32 (hc, 0x34));
+  }
   write32 (hc, 0x24, 0);            // mask interrupts
   write32 (hc, 0x60, 0);            // stop the firmware's request list
   __asm__ volatile ("dsb sy" ::: "memory");

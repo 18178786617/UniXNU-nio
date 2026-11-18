@@ -42,11 +42,25 @@ static bool hostStopQueue (const char **why)
   // HCS.DP (device present) is bit 0 and HCS.UCRDY (UIC command ready) is
   // bit 3; the other bits in between report device and link errors, so
   // waiting for all of them would mean waiting for a failure.
-  if (!(read32 (gHost.hc, 0x34) & 1) ||
-      (read32 (gHost.hc, 0x30) & (0x1 | 0x8)) != (0x1 | 0x8)) {
+  //
+  // nio run-486: the host controller enable bit is set if it is not
+  // already set.  The reference implementation on this controller
+  // refuses to go on unless it is set, and a UEFI driver disables the
+  // controller on its way out, so the bit is probably clear by the time
+  // this runs.  A controller that is not enabled does not fetch the
+  // request descriptor when the doorbell is rung.
+  if ((read32 (gHost.hc, 0x30) & (0x1 | 0x8)) != (0x1 | 0x8)) {
     recordTransport (kIOReturnNotReady, 15);
     *why = "controller not ready for takeover";
     return false;
+  }
+  if (!(read32 (gHost.hc, 0x34) & 1)) {
+    hostWrite (0x34, 1);
+    if (!(read32 (gHost.hc, 0x34) & 1)) {
+      recordTransport (kIOReturnNotReady, 15);
+      *why = "controller enable refused";
+      return false;
+    }
   }
   if (read32 (gHost.hc, 0x58) || read32 (gHost.hc, 0x78)) {
     recordTransport (kIOReturnBusy, 15);
