@@ -2682,7 +2682,12 @@ bool NioUfs::start (IOService *provider)
      * It may also read: that is the first command this board has been
      * asked to answer since the port began.
      */
-    adoptAndRead (3);
+    /* Level 4 is the one that reads: a TEST UNIT READY and then a READ
+     * CAPACITY, which is the smallest thing that puts a command on the
+     * wire and reads a length back.  Level 3 is the check for a list that
+     * was replaced, and this port replaces the list, so that one would
+     * stop before it said anything. */
+    adoptAndRead (4);
     bool published = startRoot (provider);
     if (!published) {
       panic ("NATIVE_UFS media report: root start failed (%s; stage=%s, blocks=%u)",
