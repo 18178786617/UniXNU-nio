@@ -1,8 +1,8 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-17 23:35（468 里程碑：DP=1 设备被看见；469 已推修 console 环）",
- "headline": "★★★★ 里程碑：run-461 照片证明**匹配链通了**。'root nub 就地匹配'（461 的改动）生效后，面板出现 'nio: SM locked ArmDTPlatform' → 'nio: ufs driver start enter' → 'nio: ufs startRoot enter' ⇒ **NioUfs 的 personality attach 成功、驱动真的启动了、根卷流程开始了**。（另外 MKOK 有、ALIVE 无 ⇒ 配置线程仍不跑，但已不再是阻塞项。）★★ 461 面板暴露的最后一个盲区：UFS 根路径**失败时只走 IOLog，而 IOLog 到不了屏幕**（代码注释反复说'驱动的 printf/IOLog 到不了屏'，但 'nio: ufs driver start enter' 证明**驱动 printf 能上屏**）。⇒ 已推 462（3c8fe3d）：给 UFS 根路径每一步加 printf 进度与失败原因，并打出 **HCS.DP（设备是否被控制器看见）与 HCS 实测值** —— 一眼分开'供电/时钟问题'与'链路问题'。",
- "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：457 待判决配置线程为何不存在） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部三个硬闸门：① 配置线程起来（当前卡点） ② NioUfs personality 匹配并 attach 到 /arm-io/ufs ③ 链路 + LUN/GPT 枚举（HCS=0x8 → DP=0 是历史卡点） ④ APFS 根卷只读挂载。",
+ "updated": "2026-11-18 22:50（★★★★★ 卡点已从硬件收回到我们自己的代码里：514/515 真机照片判决 `H4 bad=00000080` + `H4c descriptor differs; not ringing` + 末尾 `ocs=f resp=ff scsi=ff`（result 初值）⇒ 门铃根本没敲，是 507/508 新加的读回校验自己把自己拦下了；509 已修，八个字只建一次）",
+ "headline": "★★★★★ **卡点从硬件收回到我们自己的代码里（2026-11-18 22:43 真机照片，514/515）**。判读链：① `nio: ufs H4 bad=00000080` ⇒ 八个字里**只有 word[7] 一位不符**（PRD 表偏移/条目数）；② `nio: ufs H4c descriptor differs; not ringing` ⇒ 我们的读回校验判失败、**主动不敲门铃**；③ 末尾 `NATIVE_UFS adopt: TEST UNIT READY lun0 / ocs=f resp=ff scsi=ff` ⇒ 这三个值正是代码里 `result` 的**初值** `{0xf,0xff,0xff}` ⇒ 命令**从未真正发出去**（level==4 的 panic 路径）。⇒ **不是硬件、不是 SMMU、不是内存归属、不是描述符内容**，是我们 round 507/508 新加的读回校验里**写入公式与比对公式是两套**：写入端 `utrd[28]=prdEntries|((prdtOffset>>2)<<16)`（PRD 偏移**总是**在），比对端 `want[7]= length?(1U|((prdtOffset>>2)<<16)):0U`（无数据时**期望 0**）。而本端口发的**第一条命令就是 TEST UNIT READY（无数据）** ⇒ 写入 `0x01000000`、期望 `0` ⇒ `bad|=0x80` ⇒ **永远不敲门铃**。★ MI10 参照实现 `refs/umi/drivers/storage/hakios.ufshc.c:505` `s->utrd[7]=((UCD_PRDT/4)<<16)|n` 证实：**偏移总在，只有条目数随传输变**。⇒ 已推 **509**（bff8bf3）：八个字**只构造一次**（`uint32_t want[8]`），先写进列表、再拿列表回读比对，两套公式从此不可能不一致；回读有差异才真正意味着「内存里不是我们放的东西」。★★ **本轮最值钱的通用教训**：**同一份「期望值」绝不写两遍** —— 写入端与校验端各写一遍公式早晚会漂移，而漂移的表现是「校验误报 → 主动放弃」，**看着像硬件坏了**，骗过了 507/508 两轮 + 514/515 两台真机。★ 515 已于 22:48:52 刷上机（sha256 `39945afd`），但 515 与 514 **内核代码完全相同**（都是 round 508、同样的 bug），所以 515 的照片不会是新答案 —— **真正的答案是 516**（已推、后台监测中）。",
+ "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：卡在门铃写） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部硬闸门：① NioUfs personality 匹配并 attach（**已过**）② 供电/时钟（**已过**：DP=1、时钟在走）③ 接管请求列表（**已过**：探针 A→G 全过）④ **门铃写可返回**（当前卡点 —— 514/515 判决：不是硬件，是我们自己的读回校验误报，509 已修）⑤ 控制器应答命令 ⑥ LUN/GPT 枚举 ⑦ APFS 根卷只读挂载。",
  "phases": [
   {
    "id": "P0",
@@ -17,8 +17,8 @@
    "name": "UFS 起来 + 挂上 APFS 根卷",
    "status": "current",
    "criteria": "根卷挂载成功的日志",
-   "evidence": "★★★★★ run-468 照片（里程碑）：**UFS 控制器第一次看见设备** —— 'nio: ufs bu queue-up dp=1 hcs=0000010f'（HCS bit0=DP=1，历史卡点 hcs=0x8 解除）；'nio: SM queued ArmDTPlatform'（迭代化生效）；'nio: ufs driver start enter' + 'startRoot enter' + 'step 1 bringup'；'bu stop-queue' + 'bu smmu' 都过了；★ 停在 bu queue-up 之后，无 panic，beacon 继续跑 ⇒ 线程卡住但系统没死。",
-   "next": "469（已推 24d722d）：① console_write 排不空时直写输出（根治 console 环阻塞）② 采样循环读前/读后各打一行（分辨是读挂住还是环满）③ UFS 的 24 条进度行改走 vcputc_options 直写帧缓冲。判读：'poll N read' 有而 'poll N got' 无 ⇒ 读 HC 寄存器挂住（fabric）；两条都有 ⇒ 是 console 环。"
+   "evidence": "★★★★★ run-508/509 判决（22:43 真机照片，514 与 515）：**卡点从硬件收回到我们自己的代码里** —— `H4 bad=00000080`（只有 word[7] 一位不符）+ `H4c descriptor differs; not ringing` + 末尾 `ocs=f resp=ff scsi=ff`（result 初值）⇒ **门铃根本没敲**。根因：507/508 的读回校验里**写入公式与比对公式是两套**（PRD 偏移总在 vs 无数据时期望 0），而第一条命令 TEST UNIT READY 恰是无数据命令 ⇒ 永久误报。MI10 `s->utrd[7]=((UCD_PRDT/4)<<16)|n` 证实偏移总在。⇒ 509 已修：八个字只建一次。★ 此前 490 已排除描述符内容、cacheClean、门铃前状态、SMMU、HCE、总线死；499–506 已用 framebuffer 方块证明门铃写**确实返回**（十轮误判的根源是 console 打印会永久卡住）。",
+   "next": "516（已推 bff8bf3，后台监测中）：八个字只建一次 ⇒ 这次门铃会**真的被敲响**。判读：**出现 `I1 written` ⇒ 门铃通了**（下一步把 root 路径也改成同样布局）；**仍无 ⇒ 查 SMMU stream `0x60` 的 context bank**（smmuReport 的 idx/bank 都是 0，说明那次旁路可能没找到目标流）。"
   },
   {
    "id": "P2",
@@ -46,6 +46,20 @@
   }
  ],
  "rounds": [
+  {
+   "run": 508,
+   "time": "21:34",
+   "marker": "nio: ufs H0 r=508 / H4 bad=00000080",
+   "qemu": "macos-15-intel",
+   "result": "★★★★★ 已推 9c2e6fc：修 513 的两个编译错；**第一次结构性重写** —— 请求列表不再借用固件 DXE heap，改用【内核自己窗口内的物理连续非缓存内存】，布局照抄米10（32 槽 UTRD + 每槽独立 UCD + 数据区），描述符写完回读比对八字。★★ 独立正确性论证：DarwinBoot 只给内核 256 MiB 的 EfiConventionalMemory 窗口（`0x80000000-0x90000000`），固件 DXE heap（`0x9b24xxxx`）不在其中 ⇒ XNU 页表里没有它。★★ **判决（22:43 照片）**：本轮引入的读回校验**自己把自己拦下了**，门铃从未敲；真正的门铃路径要等 509"
+  },
+  {
+   "run": 509,
+   "time": "22:43",
+   "marker": "nio: ufs H4 bad= / H4c descriptor differs / I1 written",
+   "qemu": "macos-15-intel",
+   "result": "★★★★★ 已推 bff8bf3：★★ **卡点从硬件收回到我们自己的代码里** —— 514/515 真机照片判决 `H4 bad=00000080`（只有 word[7] 一位不符）+ `H4c not ringing` + 末尾 `ocs=f resp=ff scsi=ff`（result 初值）⇒ **门铃根本没敲**。根因：写入公式与比对公式**两套**（PRD 偏移总在 vs 无数据期望 0），TEST UNIT READY 无数据 ⇒ 写 `0x01000000`/期望 `0` ⇒ `bad|=0x80` ⇒ 永久拒敲。MI10 证实偏移总在。★ 修法：**八个字只建一次**，写进列表再拿列表比对。★ 判读：`I1 written` 出现 ⇒ 门铃通了"
+  },
   {
    "run": 469,
    "time": "23:30",
@@ -159,6 +173,8 @@
   "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
  ],
  "notes": [
+  "★★★ 纪律：先刷手上已有的产物，再改代码推下一个 CI\n★★ 机主 2026-11-18 22:45 再次强调（最高优先级）：**一次只构建一个 CI**；构建→挂那一个的后台→成功则打包刷机、后台结束；失败则拉日志打印 error:、后台结束，再由 agent 整改并触发下一个。\n★★ **顺序纪律（本次违反了一次，记下来）**：**先把手上的已构建产物下载刷机，再动代码推下一个 CI。** 22:45 我先推了 509，导致 516 与 515 两个构建并存、515 的包被拖到 22:48 才刷上机，且 `watch-round.sh 515` 在打包中途被打断，`out/kernel.macho` 留了 0 字节。\n⇒ 正确顺序：**① 先刷手上已有的 → ② 再改代码 → ③ 推 CI → ④ 立刻挂那一个的后台**。\n★★ 推了新代码之后，`watch-round.sh` 的「新构建取代旧构建」逻辑会让**旧构建不刷机**（它比对 `ci-started/run-N` 里 kernel 相关路径的差异）⇒ 推代码前先确认手上没有待刷的产物。",
+  "★★★★★ 514/515 判决（22:43 真机照片）：卡点在我们自己的代码里（写入公式与比对公式漂移）\n★★ 判读：`9i nio: ufs H4 bad=00000080 w0=11000000 w4=0c98d00` ⇒ **八个字里只有 bit7 一位不符**（word[7] = PRD 表偏移/条目数）；`10i nio: ufs H4c descriptor differs; not ringing` ⇒ 我们主动拒绝敲门铃；末尾 `NATIVE_UFS adopt: TEST UNIT READY lun0 / ocs=f resp=ff scsi=ff` ⇒ 这正是 `result` 的初值 `{0xf,0xff,0xff}` ⇒ 命令**从未发出**。\n★★ **根因**：507/508 的读回校验把「期望值」写了**两遍** —— 写入端 `utrd[28]=prdEntries|((prdtOffset>>2)<<16)`（PRD 偏移**总是**在），比对端 `want[7]= length?(1U|((prdtOffset>>2)<<16)):0U`（无数据时**期望 0**）；而第一条命令 TEST UNIT READY 恰是无数据命令 ⇒ 写入 `0x01000000`、期望 `0` ⇒ `bad|=0x80` ⇒ **永远不敲门铃**。\n★★ **MI10 参照证实偏移总在**：`refs/umi/drivers/storage/hakios.ufshc.c:505` `s->utrd[7] = ((UCD_PRDT / 4) << 16) | n;` —— 偏移恒在，只有条目数随传输变。\n★★ **修法（509 / bff8bf3）**：八个字**只构造一次**（`uint32_t want[8]`），先写进列表、再拿列表回读比对；两套公式从此不可能不一致，回读有差异才真正意味着「内存里不是我们放的东西」。\n★★★ **通用铁律（比任何硬件结论都值钱）**：**同一份「期望值」绝不写两遍**；写入端与校验端漂移的表现是「校验误报 → 主动放弃」，**看着像硬件坏了**，骗过了 507/508 两轮 + 514/515 两台真机。⇒ 看到 `H4c` / `not ringing` 这类「主动放弃」的字样，第一反应应是「我们的判据错了」，而不是「硬件坏了」。",
   "★★★★★ 2026-11-18 09:40 ★★★★★ **480 判读 + 481/482 分诊**：\n  · ★ UCD 移到 4096 **不是根因**（仍停在 doorbell about to ring）\n  · ★★ 逐项对照：两路径的 UTRD 字段/UCD 页/cacheClean/16KiB 映射/UTRLBA **现已全部一致**\n  · ★★ 剩下的唯一差异 = root 独有的 bringup（stop-queue / SMMU bypass / hostStartQueue）\n  · ★ 硬件 2026-10-17 实测：内核分配的缓冲区会让系统复位 ⇒ 请求列表必须用固件那块；DT 标 dma-coherent\n  · ★ 481/482 = 在 probe=12 里**先跑唯一验证过的 adoptAndRead**（4 = TEST UNIT READY + READ CAPACITY）再跑 startRoot\n  · ★ 481（level 3）会 panic 出**控制器寄存器快照**（phys/hcs/is/db/rsr/ba/bau/ie）⇒ 免费信息",
   "★★★★★ 2026-11-18 09:15 ★★★★★ **run-479 定位到一条指令**（c907f94 修）：\n  · ★ NOP OUT 跳过成功（8| skipped）⇒ 越过 run 65/66/467 的老卡点\n  · ★ 走到 power query（9|）⇒ ★★ 首次越过历史卡点\n  · ★★★ **探针：'doorbell about to ring' 有、'doorbell rang' 无** ⇒ ★★ **卡在 hostWrite(0x58,1)**\n  · ★★★ 这就是 run-65/66 的老血案（'ringing the first doorbell hung the fabric, twice'）\n  · ★★ 480：kUcdOffset 128 → 4096（★ 唯一差别：UCD 在请求列表页 vs 下一页；两条路径的 UTRD 字段一字不差；验证过的 adoptAndRead 用 4096）\n  · ★★★ 全自动已通：auto-loop 自动打包+自动刷机（479 于 09:03 自动刷上）；**唯一边界：设备跑着我们自己的内核时 adb/fastboot 都不可达 ⇒ 需长按电源键重启一次**",
   "★★★★★ 2026-11-18 08:20 ★★★★★ run-476 里程碑 + 478 根治（9a3dfba）：\n  · ★ 476 过了 469 的卡点（poll 0 got 出现）⇒ 470 的修复生效\n  · ★ 时钟是活的（clock hw=19008 kernel=19003）⇒ 更正：根因不是时基冻结，是 WFE 在关中断上下文睡死\n  · ★ 卡在 nop-out begin 之后 ⇒ RootCommands.h:15 的 IODelay(2)（poll 的 pause）—— 我上次漏了共享头\n  · ★ 478 根治：等待改读控制器寄存器 + 计数式等待 + 轮询上限兜底 ⇒ NOP OUT 必定超时返回并走 UIC 恢复\n  · ★ 477 在真机上（已刷）；QEMU 的 ramoops 仍全零 ⇒ QEMU 放弃\n  · ★ CI 默认 runner 改回 macos-15（arm64）（机主要求；15 与 26 同池，26 有失败史）",
