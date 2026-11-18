@@ -1059,14 +1059,15 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (2200, 0x00, 0xff, 0x00);   // green: reached the doorbell
     write32 (hc, 0x58, 1);          // ring slot 0
     fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
-    nioUfsSay ("nio: ufs I1 written\n");
-    /* nio run-501: round 500's panel carried green and red but no blue.
-     * The write returns; the read of the doorbell that follows it does
-     * not.  Ringing starts the controller fetching, and an MMIO read of
-     * this controller then blocks the caller.  Nothing after here needs
-     * that read.  Wait on the hardware counter instead -- it is read
-     * from the CPU, not over the bus -- and then read the completion
-     * state from the descriptor in ordinary memory.
+    /* nio run-502: round 500 carried green and red but no blue, even
+     * though the read of the doorbell had been removed.  What sat between
+     * red and blue was a report through nioUfsSay.  The write returns;
+     * the report takes the console's ticket lock and never comes back,
+     * so no code after it ever ran.  Eight rounds read that silence as a
+     * stuck doorbell.
+     *
+     * There is no console call at all now, from the write until the
+     * result is complete.  The five lock-free marks carry the state.
      */
     nioUfsSpin (200000);              // 200 ms, no controller read
     fbMark (2280, 0xff, 0x00, 0x00);   // blue: the wait finished
@@ -1075,7 +1076,6 @@ void NioUfs::adoptAndRead (unsigned level)
     if (result.ocs != 0xfU) {
       fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the controller completed the command
     }
-    nioUfsSay ("nio: ufs J ocs=%02x\n", result.ocs);
     if (result.ocs == 0xfU) {
       return result;
     }
