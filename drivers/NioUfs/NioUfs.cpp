@@ -592,6 +592,59 @@ void NioUfs::adoptAndRead (unsigned level)
       }
     }
   };
+  /* nio run-513: a counter of steps, drawn in white and black only.
+   *
+   * The coloured marks say where a run stopped by their colour, and a
+   * photograph of a phone cannot be relied on for a colour: the panel
+   * renders every pixel as three stripes, the camera resamples them,
+   * and the owner read the marks by eye and could not tell a blue
+   * square from a white one.
+   *
+   * White and black survive that.  A white square on the panel's black
+   * background is white in the picture whatever the camera does with
+   * the stripes, and neither counting squares nor telling them apart
+   * by size needs a sense of colour at all.
+   *
+   * So the steps after the doorbell are counted instead of coloured,
+   * and each box is bigger than the one before it: sixteen pixels
+   * wide, then twenty-four, then thirty-two, then forty.  The picture
+   * then shows a row of boxes growing from left to right, and the
+   * number of them is the number of steps that were taken.  A box that
+   * is missing is the step that did not finish.
+   *
+   * Nothing here reads the controller and nothing here prints: the
+   * boxes are written to ordinary memory, which is what the marks were
+   * for, and the run of them after the doorbell is where a console
+   * print would not come back.
+   */
+  auto fbStep = [fbBytes] (unsigned index) {
+    if (!fbBytes) {
+      return;
+    }
+    static const unsigned widths[4] = { 16, 24, 32, 40 };
+    unsigned size = widths[index < 4 ? index : 3];
+    unsigned row = 1900, col = 8 + index * 56;
+    for (unsigned y = row; y < row + 32; y++) {
+      for (unsigned x = col; x < col + size; x++) {
+        volatile uint8_t *pixel = fbBytes + y * 4320 + x * 4;
+        pixel[0] = 0xff;
+        pixel[1] = 0xff;
+        pixel[2] = 0xff;
+      }
+    }
+  };
+  /* Clear the row the counter is drawn in, so a stale boot's boxes
+   * cannot be counted as this boot's. */
+  if (fbBytes) {
+    for (unsigned y = 1900; y < 1932; y++) {
+      for (unsigned x = 0; x < 400; x++) {
+        volatile uint8_t *pixel = fbBytes + y * 4320 + x * 4;
+        pixel[0] = 0x00;
+        pixel[1] = 0x00;
+        pixel[2] = 0x00;
+      }
+    }
+  }
   /* nio run-505: the owner saw white, green and red on the panel but
    * nothing below red.  Rows past about 2240 are outside the area this
    * panel shows -- the framebuffer is taller than the visible screen --
@@ -1305,11 +1358,50 @@ void NioUfs::adoptAndRead (unsigned level)
      *
      * (refs/xnu-src/osfmk/arm/machine_routines.h:79)
      */
+    /* nio run-513: the steps after the doorbell are reported in WORDS,
+     * and the words are printed BEFORE the step they announce.
+     *
+     * The marks in the framebuffer said where the run stopped on
+     * rounds 499 to 512, but they say it by their COLOUR, and a colour
+     * is the one thing a photograph of a phone cannot be relied on for:
+     * the panel renders each pixel as three stripes, the camera
+     * resamples them, and a blue square on a black screen is easy to
+     * miss.  The owner had to read the colours out by eye, and what
+     * the eye could see was not what the pixels said.
+     *
+     * Words are the opposite: the console's text is sharp in every
+     * photograph, and it has been readable in every one of them.
+     *
+     * Each step is announced before it is taken:
+     *
+     *   nio: ufs I1 doorbell
+     *   nio: ufs I3 delay
+     *   nio: ufs I5 barrier
+     *
+     * and the step that stopped is the one whose announcement is on the
+     * screen without the confirmation that follows it.
+     *
+     * The announcement is printed BEFORE the step, because a step that
+     * never returns would otherwise print nothing at all and leave the
+     * screen showing the previous step as if it had worked.
+     *
+     * There is no announcement between the doorbell and the reading of
+     * the descriptor.  Round 502 found that the first console print
+     * after the doorbell does not come back -- it waits for the
+     * console's ticket lock, and the lock is not given while the
+     * controller is fetching -- so a print there would hide the very
+     * step it was meant to report.  The marks are still drawn at each
+     * of those points, and they are drawn without the console and
+     * without reading the controller, so they cost nothing that could
+     * be the thing that stops.
+     */
+    nioUfsSay ("nio: ufs I1 doorbell\n");
     boolean_t interruptState = ml_set_interrupts_enabled (FALSE);
 
     write32 (hc, 0x58, 1);          // ring slot 0
 
     (void) ml_set_interrupts_enabled (interruptState);
+    fbStep (0);                     // box 1: the doorbell write came back
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
@@ -1359,11 +1451,14 @@ void NioUfs::adoptAndRead (unsigned level)
         : [limit] "r" (static_cast<uint64_t> (2000000U))
         : "x12", "cc", "memory"
     );
+    fbStep (1);                     // box 2: the delay finished
     fbMark (1860, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 50176);
+    fbStep (2);                     // box 3: the cache barrier finished
     fbMark (1860, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
+      fbStep (3);                   // box 4: the descriptor was read
       fbMark (1860, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
     }    if (result.ocs == 0xfU) {
       return result;
