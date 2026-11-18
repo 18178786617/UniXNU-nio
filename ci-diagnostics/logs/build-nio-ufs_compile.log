@@ -1,0 +1,81 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:431:38: warning: implicit conversion loses integer precision: 'uint32_t' (aka 'unsigned int') to 'uint8_t' (aka 'unsigned char') [-Wimplicit-int-conversion]
+  431 |   at[0] = value >> 24; at[1] = value >> 16; at[2] = value >> 8; at[3] = value;
+      |                              ~ ~~~~~~^~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:431:59: warning: implicit conversion loses integer precision: 'uint32_t' (aka 'unsigned int') to 'uint8_t' (aka 'unsigned char') [-Wimplicit-int-conversion]
+  431 |   at[0] = value >> 24; at[1] = value >> 16; at[2] = value >> 8; at[3] = value;
+      |                                                   ~ ~~~~~~^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:431:73: warning: implicit conversion loses integer precision: 'uint32_t' (aka 'unsigned int') to 'uint8_t' (aka 'unsigned char') [-Wimplicit-int-conversion]
+  431 |   at[0] = value >> 24; at[1] = value >> 16; at[2] = value >> 8; at[3] = value;
+      |                                                                       ~ ^~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:1105:24: error: value size does not match register size specified by the constraint and modifier [-Werror,-Wasm-operand-widths]
+ 1105 |         : [limit] "r" (2000000U)
+      |                        ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:1102:19: note: use constraint modifier "w"
+ 1102 |         "cmp x12, %[limit]\n"
+      |                   ^~~~~~~~
+      |                   %w[limit]
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:1293:54: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 1293 |       used += snprintf (text + used, sizeof (text) - used, "%u:%s %llx-%llx%s", index, name,
+      |                                                    ~ ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:1297:44: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 1297 |     snprintf (text + used, sizeof (text) - used, "\nlisted=%u", listed);
+      |                                          ~ ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2805:72: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 2805 |     used += snprintf (gRootMediaText + used, sizeof (gRootMediaText) - used,
+      |                                                                      ~ ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2865:68: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 2865 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Start ? kIOReturnIOError : kIOReturnTimeout;
+      |                            ~                                       ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:157:34: note: expanded from macro 'kIOReturnIOError'
+  157 | #define kIOReturnIOError         iokit_common_err(0x2ca) // General I/O error
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2865:87: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 2865 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Start ? kIOReturnIOError : kIOReturnTimeout;
+      |                            ~                                                          ^~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:169:34: note: expanded from macro 'kIOReturnTimeout'
+  169 | #define kIOReturnTimeout         iokit_common_err(0x2d6) // I/O Timeout
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:2990:68: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 2990 |     used += snprintf (gMediaReport + used, sizeof (gMediaReport) - used, "%s %s size=%llx uuid=%s\n",
+      |                                                                  ~ ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:3002:60: warning: implicit conversion changes signedness: 'int' to 'unsigned long' [-Wsign-conversion]
+ 3002 |     snprintf (gMediaReport + used, sizeof (gMediaReport) - used,
+      |                                                          ~ ^~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:3375:71: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3375 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
+      |                            ~                                          ^~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:146:34: note: expanded from macro 'kIOReturnNotPrivileged'
+  146 | #define kIOReturnNotPrivileged   iokit_common_err(0x2c1) // privilege violation
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:3376:48: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3375 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
+      |                            ~
+ 3376 |       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
+      |                                                ^~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:143:34: note: expanded from macro 'kIOReturnNoResources'
+  143 | #define kIOReturnNoResources     iokit_common_err(0x2be) // resource shortage
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/drivers/NioUfs/NioUfs.cpp:3376:71: warning: operand of ? changes signedness: 'int' to 'uint32_t' (aka 'unsigned int') [-Wsign-conversion]
+ 3375 |     gRootDiagnostic.result = result.phase == UfsRootPhase::Identity ? kIOReturnNotPrivileged :
+      |                            ~
+ 3376 |       result.phase == UfsRootPhase::Schedule ? kIOReturnNoResources : kIOReturnError;
+      |                                                                       ^~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:141:34: note: expanded from macro 'kIOReturnError'
+  141 | #define kIOReturnError           iokit_common_err(0x2bc) // general error
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/IOKit/IOReturn.h:136:71: note: expanded from macro 'iokit_common_err'
+  136 | #define iokit_common_err(return )          (sys_iokit|sub_iokit_common|return)
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+13 warnings and 1 error generated.
