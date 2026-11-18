@@ -686,22 +686,36 @@ void NioUfs::adoptAndRead (unsigned level)
     cacheClean (virt, 16384);
     write32 (hc, 0x20, 0xffffffffU);
     /* nio run-483: the request descriptor is the last thing the CPU writes
-     * before the doorbell, so its eight words are printed here.  If they
-     * are wrong on the screen, the controller is fetching something else
-     * and the doorbell is only where that shows up.
+     * before the doorbell, so its words are printed here.  If they are
+     * wrong on the screen, the controller is fetching something else and
+     * the doorbell is only where that shows up.
      *
      * nio run-484: the eight words are longer than the panel's line, and
-     * the tail of a long line scrolls off the top of the screen, so the
-     * word that matters (dw0) is printed on its own short line. */
-    nioUfsSay ("nio: adopt cmd H dw0=%08x dw2=%08x\n",
-               *reinterpret_cast<volatile uint32_t *> (utrd + 0),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 8));
-    nioUfsSay ("nio: adopt cmd H2 ucd %02x %02x %02x %02x  hcs=%08x is=%08x db=%08x rsr=%08x ba=%08x bau=%08x\n",
-               ucd[0], ucd[1], ucd[2], ucd[3],
-               read32 (hc, 0x30), read32 (hc, 0x20), read32 (hc, 0x58), read32 (hc, 0x60),
-               read32 (hc, 0x50), read32 (hc, 0x54));
+     * the tail of a long line scrolls off the top of the screen, which is
+     * where the last round's first word went.  A long line also folds
+     * and the fold overwrites the row above it, which is where round
+     * 484's own first word went.  Every line from here on is short.
+     *
+     * nio run-485: two questions are separated by writing the doorbell
+     * register with a harmless value first.  A write of zero rings
+     * nothing and asks the controller no fetch, so if that write comes
+     * back the register and its bus are alive and the fault is in what
+     * the doorbell makes the controller do; if it does not come back,
+     * the register's bus is dead and the descriptor is not the question.
+     */
+    nioUfsSay ("nio: ufs H dw0=%08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 0));
+    nioUfsSay ("nio: ufs H2 dw2=%08x ba=%08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 8),
+               read32 (hc, 0x50));
+    nioUfsSay ("nio: ufs H3 hcs=%08x is=%08x\n",
+               read32 (hc, 0x30), read32 (hc, 0x20));
+    /* The harmless doorbell write. */
+    write32 (hc, 0x58, 0);
+    nioUfsSay ("nio: ufs H4 db0 ok db=%08x\n", read32 (hc, 0x58));
+    /* The real doorbell. */
     write32 (hc, 0x58, 1);          // ring slot 0
-    nioUfsSay ("nio: adopt cmd I doorbell written\n");
+    nioUfsSay ("nio: ufs I db1 ok db=%08x\n", read32 (hc, 0x58));
     UfsResult result = { 0xf, 0xff, 0xff, 0, 0, 0 };
     bool done = false;
     for (unsigned loops = 0; loops < 100000; loops++) {
@@ -711,8 +725,8 @@ void NioUfs::adoptAndRead (unsigned level)
       }
       nioUfsSpin (1);
     }
-    nioUfsSay ("nio: adopt cmd J poll done done=%d db=%08x hcs=%08x is=%08x\n",
-               (int) done, read32 (hc, 0x58), read32 (hc, 0x30), read32 (hc, 0x20));
+    nioUfsSay ("nio: ufs J done=%d db=%08x hcs=%08x\n",
+               (int) done, read32 (hc, 0x58), read32 (hc, 0x30));
     cacheCleanInvalidate (virt, 16384);
     if (!done) {
       return result;
