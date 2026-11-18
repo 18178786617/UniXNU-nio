@@ -1061,6 +1061,7 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
     nioUfsSay ("nio: ufs I1 written\n");
     uint32_t dbAfter = read32 (hc, 0x58);
+    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the doorbell read came back
     nioUfsSay ("nio: ufs I2 db=%08x\n", dbAfter);
     bool done = false;
     for (unsigned loops = 0; loops < 100000; loops++) {
@@ -1070,6 +1071,9 @@ void NioUfs::adoptAndRead (unsigned level)
       }
       nioUfsSpin (1);
     }
+    if (done) {
+      fbMark (2320, 0xff, 0xff, 0x00);  // cyan: the doorbell bit cleared
+    }
     nioUfsSay ("nio: ufs J done=%d db=%08x hcs=%08x\n",
                (int) done, read32 (hc, 0x58), read32 (hc, 0x30));
     cacheCleanInvalidate (virt, 8192);
@@ -1077,6 +1081,9 @@ void NioUfs::adoptAndRead (unsigned level)
       return result;
     }
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
+    if (result.ocs != 0xfU) {
+      fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the controller completed the command
+    }
     const uint8_t *rsp = ucd + rspOffset;
     result.response = rsp[6];
     result.scsi = rsp[7];
