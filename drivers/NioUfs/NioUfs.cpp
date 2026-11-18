@@ -566,6 +566,30 @@ void NioUfs::adoptAndRead (unsigned level)
   if (!hc) {
     panic ("NATIVE_UFS adopt: controller map failed");
   }
+  /* nio run-499: a mark written straight into the framebuffer, with no
+   * console lock and no printf.  Every report so far has gone through
+   * vcputc_options(), whose ticket lock waits for ever if another CPU
+   * holds it -- so "I1 written" not appearing has never proved that the
+   * doorbell write failed to return.  Two squares settle it: green before
+   * the write, red after it.  The panel's own characters are above these
+   * rows, so neither square is written over.
+   */
+  OSSharedPtr<IOMemoryMap> fbMap;
+  uintptr_t fb = mapPhys (0x9c000000ULL, 0x2400000ULL, fbMap);
+  volatile uint8_t *fbBytes = reinterpret_cast<volatile uint8_t *> (fb);
+  auto fbMark = [fbBytes] (unsigned row, uint8_t blue, uint8_t green, uint8_t red) {
+    if (!fbBytes) {
+      return;
+    }
+    for (unsigned y = row; y < row + 16; y++) {
+      for (unsigned x = 8; x < 24; x++) {
+        volatile uint8_t *pixel = fbBytes + y * 4320 + x * 4;
+        pixel[0] = blue;
+        pixel[1] = green;
+        pixel[2] = red;
+      }
+    }
+  };
   // The controller's own request list is the one region its DMA is known to reach
   // (hardware 2026-10-17: a kernel-allocated buffer at 0xf080f000 reset the system when the
   // first command was issued, and nothing below 0xc8000000 is allocatable). The firmware
@@ -1032,7 +1056,9 @@ void NioUfs::adoptAndRead (unsigned level)
      * the write that never came back and the read after it looked the
      * same from the screen.  Two lines tell them apart.
      */
+    fbMark (2200, 0x00, 0xff, 0x00);   // green: reached the doorbell
     write32 (hc, 0x58, 1);          // ring slot 0
+    fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
     nioUfsSay ("nio: ufs I1 written\n");
     uint32_t dbAfter = read32 (hc, 0x58);
     nioUfsSay ("nio: ufs I2 db=%08x\n", dbAfter);
