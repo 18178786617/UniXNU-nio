@@ -937,5 +937,24 @@
   "  · H0b 的 urlcc：UTRD 数量 × 32 > 128 ⇒ 我们的 UCD@128 落在 UTRD 数组里 ⇒ 必须把 UCD 移出该页",
   "  · H0c/H0d 的 err 全 0 ⇒ link 层无错 ⇒ 纯 HBA 内部；非 0 ⇒ 直接指出哪一层",
   "  · 有 I1 无 I2 ⇒ 门铃写返回了、读挂死；无 I1 ⇒ 门铃写本身挂死（491 已证：无 I1）"
+ ],
+ "★ 492 已刷上机（14:42:57）—— 判读表": [
+  "★★ 492 的探针全部挪到了门铃之前，所以这一次【一定看得见】（491 的教训：recipe 开头的行会被 bootloader 盖出屏幕）。",
+  "★ 面板上要找的四行：",
+  "  · 'H0 r=492 cap=XXXXXXXX mcq=XXXXXXXX'",
+  "  · 'H0b urlcc=XXXXXXXX'",
+  "  · 'H0c err=XXXXXXXX XXXXXXXX XXXXXXXX'",
+  "  · 'H0d err=XXXXXXXX XXXXXXXX'",
+  "★ ★★ 【cap 是本轮最关键的一个数】—— 三种读法：",
+  "  ① cap & 0x40000000 置位 ⇒ 控制器【支持 MCQ】",
+  "  ② (cap & 0x1f) > 0x1f ⇒ 【运行在 MCQ 模式】（SDB 模式槽位上限 0x1F，MCQ 是 0xFF）",
+  "  ③ mcq (0x04) 的高 16 位 = MCQ 数量；低 16 位 × 4 + 0x04 = MCQ 区域基址",
+  "  ⇒ 若确认 MCQ 模式：MCQ 下 0x58 的每个 bit 对应一个队列，控制器按各自的 head pointer 取描述符，",
+  "    我们『写 1 再轮询 bit0 清零』的做法【从一开始就是错的】，必须改按 MCQ 走（先推 head pointer 再敲铃）。",
+  "★ ★★ urlcc（0x64）：低 16 位 = UTRD 数量，高 16 位 = 每个 UTRD 的 DWORD 数。",
+  "  ⇒ 数量 × 32 字节 > 128 ⇒ 我们的 UCD 在 phys+128 就【落在 UTRD 数组里】，必须把它移出那一页。",
+  "★ ★★ err（0x38..0x48）：PHY adapter / data link / network / transport / DME 五个错误码。",
+  "  ⇒ 全 0 ⇒ link 层没有记录任何错误 ⇒ 问题纯属 HBA 内部；非 0 ⇒ 直接指出是哪一层。",
+  "★ I1 written 出现与否 ⇒ 门铃写是否返回（491 已证：不出现 ⇒ 门铃写本身挂死）。"
  ]
 }
