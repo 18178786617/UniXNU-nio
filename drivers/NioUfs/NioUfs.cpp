@@ -600,10 +600,26 @@ void NioUfs::adoptAndRead (unsigned level)
    * magenta at columns 8, 32, 56, 80, 104, 128, 152.  Clear that strip
    * first so a stale boot's marks cannot be read as this boot's.
    */
+  /* nio run-510: the marks move up to a row the camera can see.
+   *
+   * They were on row 2190, which round 505 found to be visible and round
+   * 508 believed to be visible.  The photograph of run 516 shows it is
+   * not: the picture holds the screen's own pixels down to the bottom
+   * of the panel and the marks are not in it.  Reading the photograph
+   * for a mark and not finding one there proves nothing -- the mark may
+   * simply be outside the picture.
+   *
+   * So the row is now 1860, which is inside the area the phone's own
+   * screen shows and inside the area a photograph of it holds.  The
+   * marks are read out of the picture by looking for flat patches of
+   * one colour: a mark is sixteen pixels of one colour, and a character
+   * of the console is lit and unlit pixels side by side, so a run of
+   * equal pixels does not survive in text.
+   */
   for (unsigned col = 0; col < 176; col += 16) {
-    fbMark (2190, col, 0x00, 0x00, 0x00);
+    fbMark (1860, col, 0x00, 0x00, 0x00);
   }
-  fbMark (2190, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
+  fbMark (1860, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
   /* nio run-507: this port uses the list the firmware left behind.
    *
    * That list is a piece of the firmware's DXE heap, at an address that
@@ -1079,6 +1095,42 @@ void NioUfs::adoptAndRead (unsigned level)
     nioUfsSay ("nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x\n",
                read32 (hc, 0x1140), read32 (hc, 0x1144),
                read32 (hc, 0x11b0), read32 (hc, 0x11b4));
+    /* nio run-510: the vendor-specific window is told what kind of
+     * request the list holds before the doorbell is rung.
+     *
+     * The EDK2 driver that runs on this board family writes the
+     * register before every request, and the value depends on the kind
+     * of request:
+     *
+     *   case UPIU_TRANSACTION_COMMAND:
+     *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0xFFFFFFFF); break;
+     *   case UPIU_TRANSACTION_NOP_OUT:
+     *   case UPIU_TRANSACTION_QUERY_REQ:
+     *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0x0); break;
+     *   ...
+     *   MmioWrite32 (IoAddr + REG_UTP_TRANSFER_REQ_DOOR_BELL, 1);
+     *
+     * A command and a query are not the same thing to the controller.
+     * This port never wrote the register at all -- it was written down
+     * in round 493 and then only read -- so what it held was whatever
+     * the firmware last needed, and the firmware's last need was not a
+     * command.  The photograph of run 516 shows it holding zero, which
+     * is the value EDK2 writes for a query and for a NOP OUT.
+     *
+     * The write is guarded, as it was in round 493: the register is
+     * written only when what it holds reads as one of the two values
+     * EDK2 writes there -- zero or all ones.  A window at the wrong
+     * address is therefore left alone, and the run says so instead of
+     * writing to whatever is really there.
+     */
+    uint32_t nexus = read32 (hc, 0x1140);
+    if (nexus == 0x00000000U || nexus == 0xffffffffU) {
+      write32 (hc, 0x1140, 0xffffffffU);
+      __asm__ volatile ("dsb sy" ::: "memory");
+      nioUfsSay ("nio: ufs H0e nexus set vs=%08x\n", read32 (hc, 0x1140));
+    } else {
+      nioUfsSay ("nio: ufs H0e nexus left vs=%08x\n", nexus);
+    }
     /* nio run-495: two registers this port had never read.
      *
      *   0x5c  UTRLCLR   the clear register for the request list.  It
@@ -1112,15 +1164,58 @@ void NioUfs::adoptAndRead (unsigned level)
      * the write that never came back and the read after it looked the
      * same from the screen.  Two lines tell them apart.
      */
-    fbMark (2190, 32, 0x00, 0xff, 0x00);   // column 2: reached the doorbell
+    /* nio run-510: the doorbell is rung with the descriptor already in
+     * memory.
+     *
+     * The controller reads the descriptor over the bus as soon as the
+     * doorbell is rung.  The list this port uses is mapped without the
+     * cache, so the stores into it have gone out to memory already --
+     * but "have gone out" is the CPU's own account of them, and the
+     * reference implementation that runs on this controller does not
+     * take it on trust:
+     *
+     *   __asm__ volatile ("dsb sy" ::: "memory");
+     *   for (int i = 0; i < 8; i++) back[i] = s->ucd[i];
+     *
+     * The barrier before the read back is what makes the read back
+     * worth reading.  The same barrier belongs before the doorbell: the
+     * controller must not be told to fetch a descriptor that is still
+     * in the store buffer.
+     *
+     * The barrier goes before the doorbell and not after it.  A barrier
+     * after the doorbell waits for the controller's fetch to finish,
+     * and the fetch holds the bus, so such a barrier is where round
+     * 506's marks stopped.  The doorbell write itself is followed only
+     * by a store to the framebuffer, which is a posted write and does
+     * not wait for anything.
+     */
+    fbMark (1860, 32, 0x00, 0xff, 0x00);   // column 2: reached the doorbell
+    __asm__ volatile ("dsb sy" ::: "memory");
+    fbMark (1860, 56, 0x00, 0x00, 0xff);   // column 3: the descriptor is in memory
     write32 (hc, 0x58, 1);          // ring slot 0
-    fbMark (2190, 56, 0x00, 0x00, 0xff);   // column 3: the write came back
+    fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
      * the next store did not land; red and white together but no blue
      * separates the delay from the store.
+     *
+     * nio run-510: the columns are now, from the left:
+     *
+     *   1 white    this boot, the marks were cleared
+     *   2 green    reached the doorbell
+     *   3 red      the descriptor is in memory (the barrier before the
+     *              doorbell came back)
+     *   4 white    the doorbell write came back
+     *   5 blue     the delay finished
+     *   6 yellow   the cache barrier finished
+     *   7 magenta  the descriptor was read (the controller answered)
+     *
+     * So: 1-2-3 but no 4 means the doorbell write itself did not come
+     * back.  1-2-3-4 but no 5 means the store right after it did not
+     * land.  5 but no 6 means the cache barrier did not finish.  6 but no
+     * 7 means the descriptor could not be read.  All seven means the
+     * command path works and what is left is the response.
      */
-    fbMark (2190, 80, 0xff, 0xff, 0xff);   // column 4: a store right after the red one
     /* nio run-506: round 505's panel carried white, green, red and this
      * fourth white, but no blue.  The three before it are all stores --
      * posted writes, which the CPU does not wait for.  What follows is a
@@ -1147,14 +1242,13 @@ void NioUfs::adoptAndRead (unsigned level)
         : [limit] "r" (static_cast<uint64_t> (2000000U))
         : "x12", "cc", "memory"
     );
-    fbMark (2190, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
+    fbMark (1860, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 50176);
-    fbMark (2190, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
+    fbMark (1860, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
-      fbMark (2190, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
-    }
-    if (result.ocs == 0xfU) {
+      fbMark (1860, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
+    }    if (result.ocs == 0xfU) {
       return result;
     }
     const uint8_t *rsp = ucd + rspOffset;
