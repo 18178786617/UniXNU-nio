@@ -590,6 +590,17 @@ void NioUfs::adoptAndRead (unsigned level)
       }
     }
   };
+  /* nio run-504: a stale square from the previous boot cannot be told
+   * from one drawn by this boot.  The watchdog resets the machine about
+   * a minute in, and the framebuffer survives the reset, so a photo
+   * taken early in a new boot shows the last boot's marks.  Clear the
+   * whole mark strip first, then draw a white square: white present means
+   * this boot reached here, so every square below it is this boot's.
+   */
+  for (unsigned row = 2160; row < 2400; row += 16) {
+    fbMark (row, 0x00, 0x00, 0x00);
+  }
+  fbMark (2160, 0xff, 0xff, 0xff);   // white: this boot, marks cleared
   // The controller's own request list is the one region its DMA is known to reach
   // (hardware 2026-10-17: a kernel-allocated buffer at 0xf080f000 reset the system when the
   // first command was issued, and nothing below 0xc8000000 is allocatable). The firmware
@@ -1059,19 +1070,15 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (2200, 0x00, 0xff, 0x00);   // green: reached the doorbell
     write32 (hc, 0x58, 1);          // ring slot 0
     fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
-    /* nio run-503: round 502 still carried only green and red, with every
-     * console call already gone.  What sat between red and blue was
-     * nioUfsSpin(), whose isb waits for the posted doorbell write to be
-     * accepted by the device -- the same kind of wait that the MMIO read
-     * was doing.  A plain volatile loop counts time without any barrier
-     * and without the counter, so it cannot wait on the controller.
-     *
-     * The cache maintenance below ends in dsb sy, which is another wait
-     * on the same bus.  A yellow mark goes down after it, so one panel
-     * says whether the wait, the barrier, or the descriptor read is the
-     * one that stops.
+    /* nio run-504: the red square is drawn immediately after the write,
+     * before any delay or barrier, so it always proves the write came
+     * back.  The white one below is drawn immediately after it too, with
+     * nothing in between: if red is present but white is not, the write
+     * returned and something in the store itself is what the panel sees
+     * as a hang.  Red + white but no blue separates the delay.
      */
-    for (volatile unsigned delay = 0; delay < 4000000U; delay++) {
+    fbMark (2260, 0xff, 0xff, 0xff);   // white: a store right after the red one
+    for (volatile unsigned delay = 0; delay < 800000U; delay++) {
       /* nothing: a volatile loop cannot be optimised away */
     }
     fbMark (2280, 0xff, 0x00, 0x00);   // blue: the delay finished
