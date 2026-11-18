@@ -914,18 +914,59 @@ void NioUfs::adoptAndRead (unsigned level)
      * write does not come back and the descriptor is the only thing that
      * differs before it.  Bit 24 is set here for the same reason.
      */
-    *reinterpret_cast<uint32_t *> (utrd + 0) = 0x10000000U | (direction << 25) | 0x01000000U;
-    *reinterpret_cast<uint32_t *> (utrd + 8) = 0x0fU;     // OCS: not completed
-    *reinterpret_cast<uint32_t *> (utrd + 16) = static_cast<uint32_t> (ucdPhys);
-    *reinterpret_cast<uint32_t *> (utrd + 20) = static_cast<uint32_t> (ucdPhys >> 32);
-    *reinterpret_cast<uint32_t *> (utrd + 24) = (512U >> 2) | ((rspOffset >> 2) << 16);   // response length | offset (dwords)
-    uint32_t prdEntries = length ? 1U : 0U;
+    /* nio run-509: the eight words of the request descriptor are built
+     * once, in one place, and used twice: once to be written into the
+     * list, once to be compared against what the list reads back.
+     *
+     * Round 508 wrote the descriptor with one formula and compared it
+     * with a second one, and the two formulas disagreed about the last
+     * word.  The writer always put the PRD table's offset in it:
+     *
+     *   utrd[28] = prdEntries | ((prdtOffset >> 2) << 16);
+     *
+     * and the comparison expected a bare zero when the command moved no
+     * data:
+     *
+     *   want[7] = length ? (1U | ((prdtOffset >> 2) << 16)) : 0U;
+     *
+     * The first command this port sends is TEST UNIT READY, which moves
+     * no data, so the comparison saw 0x01000000 where it wanted 0, and
+     * the doorbell was never rung.  The panel said "descriptor differs"
+     * about a descriptor that was correct -- the port refused to ring
+     * because it was comparing the descriptor against a second opinion
+     * of itself instead of against what it had written.
+     *
+     * The driver that runs on this controller writes the same word the
+     * same way, with the offset always in it and only the entry count
+     * depending on the transfer:
+     *
+     *   s->utrd[7] = ((UCD_PRDT / 4) << 16) | n;
+     *
+     * so the offset is not the part that changes; the count is.
+     *
+     * There is now one array of eight words.  It is written into the
+     * list and compared against the list, so the two can no longer
+     * disagree: a difference in the read back now means the memory
+     * does not hold what was put in it, which is the only thing this
+     * check is for.
+     */
+    uint32_t want[8];
+    want[0] = 0x10000000U | (direction << 25) | 0x01000000U;
+    want[1] = 0;
+    want[2] = 0x0fU;                   // OCS: not completed
+    want[3] = 0;
+    want[4] = static_cast<uint32_t> (ucdPhys);
+    want[5] = static_cast<uint32_t> (ucdPhys >> 32);
+    want[6] = (512U >> 2) | ((rspOffset >> 2) << 16);   // response length | offset (dwords)
     /* The descriptor's last word names the PRD table's offset and how many
      * entries it has.  The offset is written whether the command moves data
      * or not, and the count alone says whether there is a table: this is
      * what the driver that runs on this controller writes, and the two
      * recipes this port was written from agree with it. */
-    *reinterpret_cast<uint32_t *> (utrd + 28) = prdEntries | ((prdtOffset >> 2) << 16);
+    want[7] = (length ? 1U : 0U) | ((prdtOffset >> 2) << 16);
+    for (unsigned index = 0; index < 8; index++) {
+      *reinterpret_cast<uint32_t *> (utrd + index * 4) = want[index];
+    }
     if (length) {
       uint64_t dataPhys = phys + dataOffset;
       uint8_t *prd = ucd + prdtOffset;
@@ -956,16 +997,6 @@ void NioUfs::adoptAndRead (unsigned level)
      */
     {
       uint32_t back[8];
-      uint32_t want[8];
-      uint32_t direction = length ? (toHost ? 2U : 1U) : 0U;
-      want[0] = 0x10000000U | (direction << 25) | 0x01000000U;
-      want[1] = 0;
-      want[2] = 0x0fU;
-      want[3] = 0;
-      want[4] = static_cast<uint32_t> (ucdPhys);
-      want[5] = static_cast<uint32_t> (ucdPhys >> 32);
-      want[6] = (512U >> 2) | ((rspOffset >> 2) << 16);
-      want[7] = length ? (1U | ((prdtOffset >> 2) << 16)) : 0U;
       for (unsigned index = 0; index < 8; index++) {
         back[index] = *reinterpret_cast<volatile uint32_t *> (utrd + index * 4);
       }
