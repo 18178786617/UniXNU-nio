@@ -575,7 +575,7 @@ void NioUfs::adoptAndRead (unsigned level)
   if (!fwList || (fwList & 0xfff)) {
     panic ("NATIVE_UFS adopt: no usable firmware list base=%llx", fwList);
   }
-  IOMemoryDescriptor *region = IOMemoryDescriptor::withPhysicalAddress (fwList, 32768, kIODirectionInOut);
+  IOMemoryDescriptor *region = IOMemoryDescriptor::withPhysicalAddress (fwList, 16384, kIODirectionInOut);
   OSSharedPtr<IOMemoryMap> regionMap;
   /* nio run-488: a second view of the same pages, without the cache.
    *
@@ -606,8 +606,8 @@ void NioUfs::adoptAndRead (unsigned level)
   }
   uint8_t *virt = reinterpret_cast<uint8_t *> (regionMap->getVirtualAddress ());
   uint64_t phys = fwList;
-  zero32 (virt, 32768);
-  cacheClean (virt, 32768);
+  zero32 (virt, 8192);
+  cacheClean (virt, 8192);
   // Layout: [0,4096) request list (slot 0 used), [4096,5120) command + response UPIU +
   // PRDT, [8192,16384) data.
   //
@@ -646,15 +646,35 @@ void NioUfs::adoptAndRead (unsigned level)
   // nio run-495: 4096 was not far enough.
   //
   // Run 494 moved the block to 4096 and the doorbell still did not come
-  // back.  The reason is in the same sentence: a request descriptor
-  // holds eight slots, and the controller takes thirty-two of them, so
-  // it reads 32 * 8 * 32 = 8192 bytes from the base of the list.  A
-  // command block at 4096 is the first slot of the seventeenth group
-  // -- still inside those 8192 bytes, still read as a descriptor.
+  // back.  A request descriptor holds eight slots and the controller
+  // takes thirty-two of them, so it reads 32 * 8 * 32 = 8192 bytes from
+  // the base of the list.  A command block at 4096 is the first slot of
+  // the seventeenth group -- still inside those 8192 bytes, still read
+  // as a descriptor.  Run 495 moved it to 16384 and the doorbell still
+  // did not come back.
   //
-  // The block moves to 16384, past everything the controller fetches,
-  // and the mapping grows to 32 KiB to hold it and the data buffer.
-  const uint32_t ucdOffset = 16384, rspOffset = 512, prdtOffset = 1024, dataOffset = 24576;
+  // nio run-496: the block goes where the reference says it belongs.
+  //
+  // "With UFSDxe's command descriptor right behind it, where slots 8..
+  // would be" is not a complaint about where the firmware put its
+  // command block.  It is where the controller expects to find one:
+  // immediately behind the request descriptor, in the slot that would
+  // otherwise be a second descriptor.  A host that uses the
+  // firmware's list has its command block in that slot, and one that
+  // brings a list of its own has its command block in the same slot of
+  // that list -- which is what the driver that works on this
+  // controller does, in memory of its own.
+  //
+  // This port uses the firmware's list, so its command block belongs
+  // immediately behind the request descriptor: 32 bytes in, the first
+  // slot after it.  It goes there, and the request descriptor's own
+  // address in the descriptor says so.
+  //
+  // Only the 8192 bytes the controller reads are cleared now.  The
+  // rest of the firmware's memory is left as it was found, because
+  // this port has never read what is in it and has no reason to
+  // destroy it.
+  const uint32_t ucdOffset = 32, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
   /* nio run-491: what the controller says about itself, read before the
@@ -811,7 +831,7 @@ void NioUfs::adoptAndRead (unsigned level)
       *reinterpret_cast<uint32_t *> (prd + 4) = static_cast<uint32_t> (dataPhys >> 32);
       *reinterpret_cast<uint32_t *> (prd + 12) = length - 1;
     }
-    cacheClean (virt, 32768);
+    cacheClean (virt, 8192);
     write32 (hc, 0x20, 0xffffffffU);
     /* nio run-489: the result is declared here because the checks below
      * return it when the descriptor does not hold what was put into it. */
@@ -995,7 +1015,7 @@ void NioUfs::adoptAndRead (unsigned level)
     }
     nioUfsSay ("nio: ufs J done=%d db=%08x hcs=%08x\n",
                (int) done, read32 (hc, 0x58), read32 (hc, 0x30));
-    cacheCleanInvalidate (virt, 32768);
+    cacheCleanInvalidate (virt, 8192);
     if (!done) {
       return result;
     }
@@ -1035,7 +1055,7 @@ void NioUfs::adoptAndRead (unsigned level)
     *reinterpret_cast<uint32_t *> (utrd + 20) = static_cast<uint32_t> (ucdPhys >> 32);
     *reinterpret_cast<uint32_t *> (utrd + 24) = (512U >> 2) | ((rspOffset >> 2) << 16);
     *reinterpret_cast<uint32_t *> (utrd + 28) = (prdtOffset >> 2) << 16;
-    cacheClean (virt, 32768);
+    cacheClean (virt, 4096);
     write32 (hc, 0x20, 0xffffffffU);
     write32 (hc, 0x58, 1);
     bool done = false;
@@ -1046,7 +1066,7 @@ void NioUfs::adoptAndRead (unsigned level)
       }
       nioUfsSpin (1);
     }
-    cacheCleanInvalidate (virt, 32768);
+    cacheCleanInvalidate (virt, 4096);
     if (!done) {
       return 0xf;
     }
