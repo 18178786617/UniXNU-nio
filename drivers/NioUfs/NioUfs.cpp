@@ -658,13 +658,15 @@ void NioUfs::adoptAndRead (unsigned level)
    *
    * They are read here because after the doorbell the controller may
    * not answer a read at all.
+   *
+   * nio run-492: these three reports were read here, at the door of the
+   * recipe, and the screen never showed them.  The panel holds about
+   * twenty lines and this recipe writes more than that, so the first
+   * lines of a run are pushed out of sight by the time it ends -- the
+   * bootloader has already covered the bottom of the panel by then.
+   * They are read now, next to the doorbell, where they cannot be
+   * missed.
    */
-  nioUfsSay ("nio: adopt A1 cap=%08x urlcc=%08x\n",
-             read32 (hc, 0x00), read32 (hc, 0x64));
-  nioUfsSay ("nio: adopt A2 err=%08x %08x %08x\n",
-             read32 (hc, 0x38), read32 (hc, 0x3c), read32 (hc, 0x40));
-  nioUfsSay ("nio: adopt A3 err=%08x %08x\n",
-             read32 (hc, 0x44), read32 (hc, 0x48));
   if (doorbellBefore != 0 || read32 (hc, 0x78) != 0) {
     panic ("NATIVE_UFS adopt: firmware request outstanding doorbell=%08x hcs=%08x", doorbellBefore, hcsBefore);
   }
@@ -690,10 +692,13 @@ void NioUfs::adoptAndRead (unsigned level)
    * value before and after is on the screen.
    */
   uint32_t hceBefore = read32 (hc, 0x34);
-  nioUfsSay ("nio: adopt A2 hce=%08x\n", hceBefore);
+  /* nio run-492: the value of the enable bit is no longer reported on
+   * a line of its own.  Round 487 showed it set (hce=00000001) on
+   * every boot, so the report said the same thing every time and took
+   * a line the panel could have given to something that changes. */
   if (!(hceBefore & 1)) {
     write32 (hc, 0x34, 1);
-    nioUfsSay ("nio: adopt A3 hce set hce=%08x\n", read32 (hc, 0x34));
+    nioUfsSay ("nio: adopt A2 hce set hce=%08x\n", read32 (hc, 0x34));
   }
   write32 (hc, 0x24, 0);            // mask interrupts
   write32 (hc, 0x60, 0);            // stop the firmware's request list
@@ -801,22 +806,26 @@ void NioUfs::adoptAndRead (unsigned level)
      * doorbell asks for.  The write is replaced by a read, which cannot
      * ring anything and tells the same story about the register.
      */
-    nioUfsSay ("nio: ufs H dw0=%08x\n",
-               *reinterpret_cast<volatile uint32_t *> (utrd + 0));
-    nioUfsSay ("nio: ufs H2 dw2=%08x ba=%08x\n",
+    /* nio run-492: the descriptor's three words that matter are put on
+     * one line, and the controller's own idea of itself goes on the line
+     * above it.  The panel holds about twenty lines and this recipe
+     * writes more than that, so a line that is not near the end of the
+     * recipe is a line that is never seen: the bootloader has covered
+     * the bottom of the panel by the time the run ends.  Round 491 read
+     * the controller's capabilities at the door of the recipe and the
+     * screen never showed them for that reason.
+     */
+    nioUfsSay ("nio: ufs H0 r=%d cap=%08x mcq=%08x\n",
+               NIO_UFS_ROUND, read32 (hc, 0x00), read32 (hc, 0x04));
+    nioUfsSay ("nio: ufs H0b urlcc=%08x\n", read32 (hc, 0x64));
+    nioUfsSay ("nio: ufs H0c err=%08x %08x %08x\n",
+               read32 (hc, 0x38), read32 (hc, 0x3c), read32 (hc, 0x40));
+    nioUfsSay ("nio: ufs H0d err=%08x %08x\n",
+               read32 (hc, 0x44), read32 (hc, 0x48));
+    nioUfsSay ("nio: ufs H dw0=%08x dw2=%08x prdt=%08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 0),
                *reinterpret_cast<volatile uint32_t *> (utrd + 8),
-               read32 (hc, 0x50));
-    /* nio run-488: the descriptor's last word, which names the PRD table's
-     * offset and how many entries it has.  The driver that runs on this
-     * controller writes the offset either way and lets the count say
-     * whether there is a table, and so does this one.  It is on the
-     * screen because the descriptor is the only thing between the
-     * controller and the fetch, and it has never been on the screen in
-     * one piece. */
-    nioUfsSay ("nio: ufs H3 prdt=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 28));
-    nioUfsSay ("nio: ufs H3b hcs=%08x is=%08x\n",
-               read32 (hc, 0x30), read32 (hc, 0x20));
     /* nio run-488: read the descriptor back before ringing.
      *
      * The driver that runs on this controller checks the descriptor
