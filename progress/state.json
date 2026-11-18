@@ -884,5 +884,23 @@
   "  我们『写 1 再轮询 bit0 清零』的做法从一开始就是错的 ⇒ 需按 MCQ 走（MCQxCFH / UTRLCCTCL 等）。",
   "★ UTRLCC (0x64) 在 UFS 2.x 是 UTRD 列表的『Control Number』；在 MCQ 模式下相关寄存器是 MCQCFG/UTRIODLR 等。",
   "★ ⇒ 491 的 cap 值是本轮最关键的一个数：它决定后面是继续按单列表走，还是必须改按 MCQ 走。"
+ ],
+ "★ 491 已刷上机（14:18:43）—— 判读表": [
+  "★★ 照片上要看的三组数，一次回答三个问题：",
+  "  ① 'A1 cap=XXXXXXXX urlcc=XXXXXXXX'：",
+  "     · cap 的 bit30 (0x40000000) 置位 ⇒ 控制器【支持 MCQ】",
+  "     · cap 的 [4:0] > 0x1F ⇒ 运行在【MCQ 模式】（SDB 模式槽位上限 0x1F，MCQ 是 0xFF）",
+  "     · ★★ 若确认 MCQ 模式 ⇒ 我们『写 1 到 0x58 + 轮询 bit0 清零』的门铃用法【从一开始就是错的】",
+  "       （MCQ 下 0x58 每个 bit 对应一个队列，控制器用各自 head pointer 取描述符）⇒ 必须改按 MCQ 走",
+  "     · urlcc 的低 16 位 = UTRD 数量，高 16 位 = 每个 UTRD 的 DWORD 数",
+  "       ⇒ 数量 × 32 若 > 128，我们的 UCD 落在 UTRD 数组里 ⇒ 必须把 UCD 移出该页",
+  "  ② 'A2 err=X X X' 与 'A3 err=X X'：",
+  "     · 0x38 PHY adapter / 0x3c data link / 0x40 network / 0x44 transport / 0x48 DME",
+  "     · ★ 全 0 ⇒ link 层没有记录错误 ⇒ 问题不在设备侧 ⇒ 纯 HBA 内部",
+  "     · ★ 非 0 ⇒ 直接指出是哪一层出错 ⇒ 方向立刻明确",
+  "  ③ 'I1 written' 与 'I2 db='：",
+  "     · 有 I1 无 I2 ⇒ 门铃写【返回了】，是随后的读挂死 ⇒ 控制器进入了坏状态",
+  "     · 无 I1 ⇒ 门铃写【本身】挂死 ⇒ 抓取动作本身卡住",
+  "★★ 494 已经刷上（14:18:43），等真机照片。"
  ]
 }
