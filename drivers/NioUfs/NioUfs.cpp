@@ -604,17 +604,68 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (2190, col, 0x00, 0x00, 0x00);
   }
   fbMark (2190, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
-  // The controller's own request list is the one region its DMA is known to reach
-  // (hardware 2026-10-17: a kernel-allocated buffer at 0xf080f000 reset the system when the
-  // first command was issued, and nothing below 0xc8000000 is allocatable). The firmware
-  // zeroed it; use 16 KiB from UTRLBA as ordinary cached memory (the DT marks the host
-  // dma-coherent). Test instrument only: the kernel may also own these pages.
-  uint64_t fwList = (uint64_t (read32 (hc, 0x54)) << 32) | read32 (hc, 0x50);
-  if (!fwList || (fwList & 0xfff)) {
-    panic ("NATIVE_UFS adopt: no usable firmware list base=%llx", fwList);
+  /* nio run-507: this port uses the list the firmware left behind.
+   *
+   * That list is a piece of the firmware's DXE heap, at an address that
+   * changes every boot, and the loader on the reference phone keeps its
+   * own list instead -- in memory the loader owns, with the loader
+   * checking on every way back that the controller still points at it
+   * and putting the firmware's address back if it does not.  This port
+   * has no such agreement with anything: it takes the controller and
+   * assumes the firmware's pages are still there.
+   *
+   * So the list is now memory of this port's own, asked for as
+   * physically contiguous and mapped without the cache, which is what
+   * the reference list is.  It is laid out the way the reference lays
+   * its own out, because the reference states the geometry the loader
+   * has to offer:
+   *
+   *   loader->ucd_offset >= SLOTS * 32
+   *   loader->area_size  >= loader->ucd_offset + SLOTS * loader->ucd_size
+   *
+   * Thirty-two request descriptors of thirty-two bytes each, then one
+   * command descriptor per slot, each of its own.  This port has been
+   * putting a single command descriptor inside the list, where the
+   * controller reads it as a request descriptor.
+   */
+  constexpr uint32_t kSlotCount = 32;
+  constexpr uint32_t kUtrdBytes = 32;
+  constexpr uint32_t kUcdBytes = 1280;            // command + response UPIU + PRDT
+  constexpr uint32_t kDataBytes = 8192;           // the data buffer
+  constexpr uint32_t kUcdBase = kSlotCount * kUtrdBytes;      // 1024
+  constexpr uint32_t kDataBase = kUcdBase + kSlotCount * kUcdBytes;
+  constexpr uint32_t kListBytes = kSlotCount * kUtrdBytes + kSlotCount * kUcdBytes + kDataBytes;
+  const uint32_t rspOffset = 512, prdtOffset = 1024, dataOffset = kDataBase;
+
+  IOBufferMemoryDescriptor *ownList =
+    IOBufferMemoryDescriptor::inTaskWithOptions (
+      kernel_task, static_cast<IOOptionBits> (kIODirectionInOut) |
+      static_cast<IOOptionBits> (kIOMemoryPhysicallyContiguous) |
+      static_cast<IOOptionBits> (kIOMemoryMapperNone), kListBytes, 4096);
+  if (!ownList) {
+    panic ("NATIVE_UFS adopt: no list memory of our own");
   }
-  IOMemoryDescriptor *region = IOMemoryDescriptor::withPhysicalAddress (fwList, 16384, kIODirectionInOut);
-  OSSharedPtr<IOMemoryMap> regionMap;
+  uint8_t *ownBytes = static_cast<uint8_t *> (ownList->getBytesNoCopy ());
+  uint64_t ownPhys = ownList->getPhysicalSegment (0, nullptr, kIOMemoryMapperNone);
+  if (!ownBytes || !ownPhys || (ownPhys & 0xfff)) {
+    panic ("NATIVE_UFS adopt: list memory is not usable pa=%llx", ownPhys);
+  }
+  /* The list is mapped without the cache: the controller reads it over
+   * the bus, and a cached view would show this port's own copy rather
+   * than what the controller will fetch. */
+  OSSharedPtr<IOMemoryMap> ownMap =
+    OSSharedPtr<IOMemoryMap> (ownList->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
+  if (!ownMap) {
+    panic ("NATIVE_UFS adopt: list memory did not map");
+  }
+  uint8_t *virt = reinterpret_cast<uint8_t *> (ownMap->getVirtualAddress ());
+  uint64_t phys = ownPhys;
+  bzero (ownBytes, kListBytes);
+  /* The firmware's list is read once, to be put back when this port is
+   * done with the controller. */
+  uint64_t fwList = (uint64_t (read32 (hc, 0x54)) << 32) | read32 (hc, 0x50);
+  uint32_t fwLo = read32 (hc, 0x50), fwHi = read32 (hc, 0x54);
+  nioUfsSay ("nio: adopt A0 own=%llx fw=%08x:%08x\n", phys, fwHi, fwLo);
   /* nio run-488: a second view of the same pages, without the cache.
    *
    * The list is mapped cached, so a word read back from it is a word read
@@ -628,22 +679,9 @@ void NioUfs::adoptAndRead (unsigned level)
    * descriptor against what was put into it before it rings.  This one
    * has to look twice: once at the cache, once at memory.
    */
-  OSSharedPtr<IOMemoryMap> plainMap;
-  if (region) {
-    plainMap = OSSharedPtr<IOMemoryMap> (region->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
-  }
-  uint8_t *plain = plainMap
-    ? reinterpret_cast<uint8_t *> (plainMap->getVirtualAddress ())
-    : nullptr;
-  if (region) {
-    regionMap = OSSharedPtr<IOMemoryMap> (region->map (kIOMapAnywhere), OSNoRetain);
-    region->release ();
-  }
-  if (!regionMap) {
-    panic ("NATIVE_UFS adopt: firmware list map failed base=%llx", fwList);
-  }
-  uint8_t *virt = reinterpret_cast<uint8_t *> (regionMap->getVirtualAddress ());
-  uint64_t phys = fwList;
+  /* The firmware's list is not mapped any more: this port uses its own.
+   * The address is read once, above, to be written back if the controller
+   * is ever handed over again. */
   /* nio run-497: the firmware's own descriptors are left alone.
    *
    * The controller takes thirty-two request descriptors at once, so it
@@ -662,7 +700,7 @@ void NioUfs::adoptAndRead (unsigned level)
    * found now, and only the words this port writes -- its own
    * descriptor and its own command block -- are cleared.
    */
-  cacheClean (virt, 16384);
+  cacheClean (virt, 50176);
   // Layout: [0,4096) request list (slot 0 used), [4096,5120) command + response UPIU +
   // PRDT, [8192,16384) data.
   //
@@ -729,7 +767,17 @@ void NioUfs::adoptAndRead (unsigned level)
   // rest of the firmware's memory is left as it was found, because
   // this port has never read what is in it and has no reason to
   // destroy it.
-  const uint32_t ucdOffset = 256, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
+  /* nio run-507: the list is laid out the way the reference lays its own
+   * out, and the geometry comes from the loader's own conditions:
+   *
+   *   loader->ucd_offset >= SLOTS * 32
+   *   loader->area_size  >= loader->ucd_offset + SLOTS * loader->ucd_size
+   *
+   * Thirty-two request descriptors of thirty-two bytes, then one command
+   * descriptor per slot, each of its own, then the data buffer.  Slot 0
+   * is the one this port uses; the rest are there because the controller
+   * fetches thirty-two descriptors at a time and reads whatever it finds
+   * past the first one. */
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
   /* nio run-491: what the controller says about itself, read before the
@@ -815,7 +863,7 @@ void NioUfs::adoptAndRead (unsigned level)
   while ((read32 (hc, 0x60) & 1) && stopLoops--) nioUfsSpin (10);
   if (read32 (hc, 0x60) & 1) panic ("NATIVE_UFS adopt: request list did not stop");
   nioUfsSay ("nio: adopt B stopped rsr=%08x\n", read32 (hc, 0x60));
-  smmuBypassStream (0x60, smmuMap, smmuReport, phys, 16384);
+  smmuBypassStream (0x60, smmuMap, smmuReport, phys, 50176);
   nioUfsSay ("nio: adopt C smmu\n");
   write32 (hc, 0x50, static_cast<uint32_t> (phys));
   write32 (hc, 0x54, static_cast<uint32_t> (phys >> 32));
@@ -839,24 +887,10 @@ void NioUfs::adoptAndRead (unsigned level)
   }
 
   auto command = [&] (uint8_t lun, const uint8_t *cdb, unsigned cdbLength, bool toHost, uint32_t length) -> UfsResult {
-    uint8_t *utrd = virt;
-    uint8_t *ucd = virt + ucdOffset;
-    /* nio run-497: what the firmware left in the descriptors behind the
-     * first one, read before anything of this port's is written over
-     * it.  Every round until now cleared them before they were read,
-     * so this is the first look at them.
-     */
-    nioUfsSay ("nio: ufs H0f fwd=%08x %08x %08x %08x\n",
-               *reinterpret_cast<volatile uint32_t *> (utrd + 1 * 32),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 2 * 32),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 3 * 32),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 4 * 32));
-    nioUfsSay ("nio: ufs H0g fwd=%08x %08x %08x\n",
-               *reinterpret_cast<volatile uint32_t *> (utrd + 5 * 32),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 6 * 32),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 7 * 32));
+    uint8_t *utrd = virt;                        // slot 0's request descriptor
+    uint8_t *ucd = virt + kUcdBase;              // slot 0's command descriptor
     zero32 (utrd, 32);
-    zero32 (ucd, 1024 + 16);
+    zero32 (ucd, kUcdBytes);
     zero32 (virt + dataOffset, 8192);
     ucd[0] = 0x01;                  // COMMAND UPIU
     ucd[1] = toHost ? 0x40 : 0x00;  // flags: read
@@ -866,7 +900,7 @@ void NioUfs::adoptAndRead (unsigned level)
     for (unsigned index = 0; index < cdbLength; index++) {
       ucd[16 + index] = cdb[index];
     }
-    uint64_t ucdPhys = phys + ucdOffset;
+    uint64_t ucdPhys = phys + kUcdBase;
     uint32_t direction = length ? (toHost ? 2U : 1U) : 0U;
     /* nio run-484: the request descriptor's first word.
      *
@@ -900,11 +934,55 @@ void NioUfs::adoptAndRead (unsigned level)
       *reinterpret_cast<uint32_t *> (prd + 4) = static_cast<uint32_t> (dataPhys >> 32);
       *reinterpret_cast<uint32_t *> (prd + 12) = length - 1;
     }
-    cacheClean (virt, 8192);
+    cacheClean (virt, 50176);
     write32 (hc, 0x20, 0xffffffffU);
     /* nio run-489: the result is declared here because the checks below
      * return it when the descriptor does not hold what was put into it. */
     UfsResult result = { 0xf, 0xff, 0xff, 0, 0, 0 };
+    /* nio run-507: the descriptor is read back before the doorbell.
+     *
+     * The reference implementation on this controller writes its
+     * descriptor, waits for the store to reach memory, reads it back
+     * and refuses to ring when what it reads is not what it wrote:
+     *
+     *   __asm__ volatile ("dsb sy" ::: "memory");
+     *   for (int i = 0; i < 8; i++) back[i] = s->ucd[i];
+     *   if (memcmp (back, c->upiu, sizeof (back)) != 0 || s->utrd[0] != c->dw0
+     *       || !ufshc_permitted (...)) { ... not rung ... }
+     *
+     * This port's list is mapped without the cache, so the read back
+     * sees what the controller will fetch.  The eight words are compared
+     * against the values that were put in, and the doorbell is not rung
+     * when they differ.
+     */
+    {
+      uint32_t back[8];
+      uint32_t want[8];
+      uint32_t direction = length ? (toHost ? 2U : 1U) : 0U;
+      want[0] = 0x10000000U | (direction << 25) | 0x01000000U;
+      want[1] = 0;
+      want[2] = 0x0fU;
+      want[3] = 0;
+      want[4] = static_cast<uint32_t> (ucdPhys);
+      want[5] = static_cast<uint32_t> (ucdPhys >> 32);
+      want[6] = (512U >> 2) | ((rspOffset >> 2) << 16);
+      want[7] = length ? (1U | ((prdtOffset >> 2) << 16)) : 0U;
+      for (unsigned index = 0; index < 8; index++) {
+        back[index] = *reinterpret_cast<volatile uint32_t *> (utrd + index * 4);
+      }
+      uint32_t bad = 0;
+      for (unsigned index = 0; index < 8; index++) {
+        if (back[index] != want[index]) {
+          bad |= (1U << index);
+        }
+      }
+      nioUfsSay ("nio: ufs H4 bad=%08x w0=%08x w4=%08x\n",
+                 bad, back[0], back[4]);
+      if (bad != 0) {
+        nioUfsSay ("nio: ufs H4c descriptor differs; not ringing\n");
+        return result;
+      }
+    }
     /* nio run-483: the request descriptor is the last thing the CPU writes
      * before the doorbell, so its words are printed here.  If they are
      * wrong on the screen, the controller is fetching something else and
@@ -992,72 +1070,6 @@ void NioUfs::adoptAndRead (unsigned level)
                *reinterpret_cast<volatile uint32_t *> (utrd + 0),
                *reinterpret_cast<volatile uint32_t *> (utrd + 8),
                *reinterpret_cast<volatile uint32_t *> (utrd + 28));
-    /* nio run-488: read the descriptor back before ringing.
-     *
-     * The driver that runs on this controller checks the descriptor
-     * against what was put into it before it rings, and refuses to ring
-     * when the two differ:
-     *
-     *   if (memcmp(back, c->upiu, sizeof(back)) != 0 || s->utrd[0] != c->dw0 ...)
-     *       ... "does not hold what was put in it: not rung"
-     *
-     * This port never read the descriptor back.  It wrote the words,
-     * cleaned the cache and rang, and the only thing that showed was
-     * that the ring did not come back -- which says nothing about
-     * whether the controller is fetching what was written or something
-     * else.  The words are read back here and compared, and each one
-     * that differs is named on the screen.
-     *
-     * The read has to see the cache, not memory: the controller reads
-     * the list through the bus, so the two are compared after the
-     * clean, and the clean is what puts the words there.
-     */
-    {
-      uint32_t words[8];
-      for (unsigned index = 0; index < 8; index++) {
-        words[index] = *reinterpret_cast<volatile uint32_t *> (utrd + index * 4);
-      }
-      uint32_t bad = 0;
-      for (unsigned index = 0; index < 8; index++) {
-        uint32_t want = 0;
-        switch (index) {
-          case 0: want = 0x10000000U | (direction << 25) | 0x01000000U; break;
-          case 1: want = 0; break;
-          case 2: want = 0x0fU; break;
-          case 3: want = 0; break;
-          case 4: want = static_cast<uint32_t> (ucdPhys); break;
-          case 5: want = static_cast<uint32_t> (ucdPhys >> 32); break;
-          case 6: want = (512U >> 2) | ((rspOffset >> 2) << 16); break;
-          default: want = prdEntries | ((prdtOffset >> 2) << 16); break;
-        }
-        if (words[index] != want) bad |= (1U << index);
-      }
-      /* The same words, read without the cache: this is what the
-       * controller is about to fetch. */
-      uint32_t plainBad = 0, plainWord0 = 0, plainWord4 = 0, plainWord7 = 0;
-      if (plain) {
-        for (unsigned index = 0; index < 8; index++) {
-          uint32_t got = *reinterpret_cast<volatile uint32_t *> (plain + index * 4);
-          if (got != words[index]) plainBad |= (1U << index);
-          if (index == 0) plainWord0 = got;
-          if (index == 4) plainWord4 = got;
-          if (index == 7) plainWord7 = got;
-        }
-        nioUfsSay ("nio: ufs H4 bad=%08x\n", bad);
-        nioUfsSay ("nio: ufs H4b pbad=%08x p0=%08x p4=%08x p7=%08x\n",
-                   plainBad, plainWord0, plainWord4, plainWord7);
-        if (plainBad != 0) {
-          nioUfsSay ("nio: ufs H4c memory differs; not ringing\n");
-          return result;
-        }
-      } else {
-        nioUfsSay ("nio: ufs H4 bad=%08x no-plain-map\n", bad);
-      }
-      if (bad != 0) {
-        nioUfsSay ("nio: ufs H4d descriptor differs; not ringing\n");
-        return result;
-      }
-    }
     /* The doorbell register, read before it is rung.  A read cannot ring
      * anything, so this is safe to do where a write is not. */
     nioUfsSay ("nio: ufs H5 db0=%08x\n", read32 (hc, 0x58));
@@ -1106,7 +1118,7 @@ void NioUfs::adoptAndRead (unsigned level)
         : "x12", "cc", "memory"
     );
     fbMark (2190, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
-    cacheCleanInvalidate (virt, 8192);
+    cacheCleanInvalidate (virt, 50176);
     fbMark (2190, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
@@ -1131,9 +1143,9 @@ void NioUfs::adoptAndRead (unsigned level)
   // the 32-bit value field (attributes) or flag byte via *value; ocs 0xf means no completion.
   auto query = [&] (unsigned kind, uint8_t opcode, uint8_t idn, uint32_t *value, uint32_t *respByte) -> uint32_t {
     uint8_t *utrd = virt;
-    uint8_t *ucd = virt + ucdOffset;
+    uint8_t *ucd = virt + kUcdBase;
     zero32 (utrd, 32);
-    zero32 (ucd, 1024 + 16);
+    zero32 (ucd, kUcdBytes);
     if (kind == 0) {
       ucd[0] = 0x00;                // NOP OUT
     } else {
@@ -1143,14 +1155,14 @@ void NioUfs::adoptAndRead (unsigned level)
       ucd[13] = idn;
     }
     ucd[3] = 1;                     // task tag
-    uint64_t ucdPhys = phys + ucdOffset;
+    uint64_t ucdPhys = phys + kUcdBase;
     *reinterpret_cast<uint32_t *> (utrd + 0) = 0x10000000U;
     *reinterpret_cast<uint32_t *> (utrd + 8) = 0x0fU;
     *reinterpret_cast<uint32_t *> (utrd + 16) = static_cast<uint32_t> (ucdPhys);
     *reinterpret_cast<uint32_t *> (utrd + 20) = static_cast<uint32_t> (ucdPhys >> 32);
     *reinterpret_cast<uint32_t *> (utrd + 24) = (512U >> 2) | ((rspOffset >> 2) << 16);
     *reinterpret_cast<uint32_t *> (utrd + 28) = (prdtOffset >> 2) << 16;
-    cacheClean (virt, 4096);
+    cacheClean (virt, 50176);
     write32 (hc, 0x20, 0xffffffffU);
     write32 (hc, 0x58, 1);
     bool done = false;
@@ -1161,7 +1173,7 @@ void NioUfs::adoptAndRead (unsigned level)
       }
       nioUfsSpin (1);
     }
-    cacheCleanInvalidate (virt, 4096);
+    cacheCleanInvalidate (virt, 50176);
     if (!done) {
       return 0xf;
     }
@@ -1190,7 +1202,7 @@ void NioUfs::adoptAndRead (unsigned level)
   if (level == 4) {
     uint8_t tur0[6] = { 0, 0, 0, 0, 0, 0 };
     UfsResult t = command (0, tur0, 6, false, 0);
-    const uint8_t *rsp0 = virt + ucdOffset + rspOffset;
+    const uint8_t *rsp0 = virt + kUcdBase + rspOffset;
     panic ("NATIVE_UFS adopt: TEST UNIT READY lun0\n"
            "ocs=%x resp=%02x scsi=%02x\n"
            "phys=%llx hcs=%08x->%08x smmu idx/bank=%08x cbar=%08x\n"
@@ -1210,7 +1222,7 @@ void NioUfs::adoptAndRead (unsigned level)
       r = command (static_cast<uint8_t> (lun), tur, 6, false, 0);
       if (lun == 0 && attempt == 0 && r.ocs == 0xf) {
         // Never completed: stop here and report instead of waiting out every command.
-        const uint8_t *rsp = virt + ucdOffset + rspOffset;
+        const uint8_t *rsp = virt + kUcdBase + rspOffset;
         panic ("NATIVE_UFS adopt: first command did not complete\n"
                "phys=%llx hcs=%08x->%08x\n"
                "is=%08x db=%08x rsr=%08x ba=%08x\n"
@@ -1335,10 +1347,10 @@ void NioUfs::adoptAndRead (unsigned level)
          status[4], last[4], blockSize[4], senseOf[4], status[5], last[5], blockSize[5], senseOf[5],
          (inq.ocs << 16) | (inq.response << 8) | inq.scsi, inqWord[0], inqWord[1], inqWord[2], inqWord[3],
          inq.sense, inq.senseLen, inq.seg,
-         getBe32 (virt + ucdOffset + rspOffset), getBe32 (virt + ucdOffset + rspOffset + 4),
-         getBe32 (virt + ucdOffset + rspOffset + 8), getBe32 (virt + ucdOffset + rspOffset + 12),
-         getBe32 (virt + ucdOffset + rspOffset + 32), getBe32 (virt + ucdOffset + rspOffset + 36),
-         getBe32 (virt + ucdOffset + rspOffset + 40), getBe32 (virt + ucdOffset + rspOffset + 44),
+         getBe32 (virt + kUcdBase + rspOffset), getBe32 (virt + kUcdBase + rspOffset + 4),
+         getBe32 (virt + kUcdBase + rspOffset + 8), getBe32 (virt + kUcdBase + rspOffset + 12),
+         getBe32 (virt + kUcdBase + rspOffset + 32), getBe32 (virt + kUcdBase + rspOffset + 36),
+         getBe32 (virt + kUcdBase + rspOffset + 40), getBe32 (virt + kUcdBase + rspOffset + 44),
          gptStatus, sig0, sig1);
 }
 

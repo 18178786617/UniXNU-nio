@@ -19,7 +19,7 @@
 // numbers, and the two were told apart by the shape of their probe lines
 // rather than by anything on the screen that said so.  The number here
 // belongs to the driver, so it moves only when the driver does.
-#define NIO_UFS_ROUND                  506
+#define NIO_UFS_ROUND                  507
 
 // Physical windows from the kona device tree
 // (clock-controller@100000, ufshc@1d84000). The UFS host controller and the
