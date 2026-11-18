@@ -1270,7 +1270,21 @@ void NioUfs::adoptAndRead (unsigned level)
 
     write32 (hc, 0x58, 1);          // ring slot 0
 
-    __asm__ volatile ("msr daifclr, %0" :: "r" ((uint32_t) (daif & 0x3)) : "memory");
+    /* nio run-512: the register is written back with the whole of the
+     * saved state, and the operand is 64 bits wide.
+     *
+     * DAIF is a 64-bit register on arm64 and "msr daifclr" takes it as
+     * one.  Round 511 passed the value as a 32-bit operand, and the
+     * compiler refused it:
+     *
+     *   error: value size does not match register size specified by the
+     *   constraint and modifier [-Werror,-Wasm-operand-widths]
+     *
+     * The state that is put back is the state that was read, with the
+     * two interrupt bits as they were: an interrupt that was already
+     * masked stays masked, and one that was not comes back.
+     */
+    __asm__ volatile ("msr daifclr, %0" :: "r" (daif) : "memory");
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but

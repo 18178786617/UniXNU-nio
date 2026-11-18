@@ -77,6 +77,29 @@ ASM_OPERAND = re.compile(
 )
 ASM_CONSTRAINT = re.compile(r":\s*\[(\w+)\]\s*\"([^\"]*)\"\s*\(\s*([^;]*?)\s*\)")
 
+# A system register instruction: "mrs %0, daif" or "msr daifclr, %0".
+# The register is 64 bits on arm64 whatever the value that carries it is.
+#
+# The operand may be written in either of the two ways the compiler
+# takes.  The named way is "%[name]" with a constraint ":[name] "r" (...)";
+# the positional way is "%0" with the constraints in order after the
+# outputs.  Both are looked at, because round 512 used the positional
+# one and the check that only knew the named one missed it.
+SYSTEM_OPERAND = re.compile(
+    r"\b(?P<op>mrs|msr)\b[^;]*?%\[(?P<name>\w+)\]"
+)
+
+# The same instruction with a positional operand: the number after the
+# percent sign is the index of the operand.
+SYSTEM_OPERAND_POSITIONAL = re.compile(
+    r"\b(?P<op>mrs|msr)\b[^;]*?%(?P<index>\d+)"
+)
+
+# The constraints of the operands, in the order they are written.  The
+# outputs come first and the inputs after them, so the index of an
+# operand is its place in this list.
+ASM_CONSTRAINT_LIST = re.compile(r"\"([^\"]*)\"\s*\(\s*([^;]*?)\s*\)")
+
 # A declaration of a local variable: a type, a name, and an assignment or
 # an opening bracket.  A parameter list is not a declaration.
 # One type, then one name, then an assignment.  The type is written
@@ -193,6 +216,51 @@ def check(path: str) -> list[str]:
                     problems.append(
                         "%s:%d: the assembly limit for %%[%s] is 32-bit and it is "
                         "compared against a 64-bit register" % (path, number, named))
+
+    # A system register read or written by name is 64 bits wide on arm64,
+    # and the compiler says so:
+    #
+    #   error: value size does not match register size specified by the
+    #   constraint and modifier [-Werror,-Wasm-operand-widths]
+    #
+    # This is the mistake round 512 made: "mrs %0, daif" and
+    # "msr daifclr, %0" were given a 32-bit value.  The check looks for
+    # an operand of a "mrs" or "msr" instruction that is carried by a
+    # value the text says is 32 bits wide.
+    for block in asm_blocks:
+        base = raw.count("\n", 0, raw.find(block)) + 1
+        for offset, line in enumerate(block.split("\n")):
+            number = base + offset
+            for match in SYSTEM_OPERAND.finditer(line):
+                constraint = None
+                for found in ASM_CONSTRAINT.finditer(block):
+                    if found.group(1) == match.group("name"):
+                        constraint = found.group(3)
+                if constraint is None:
+                    continue
+                if re.search(r"\bu?int32_t\b|\bu?int16_t\b|\buint\b\s*$|"
+                             r"\bint\b\s*$", constraint):
+                    problems.append(
+                        "%s:%d: the operand of \"%s\" is 32-bit and the "
+                        "register it names is 64-bit"
+                        % (path, number, match.group("op")))
+
+            # The positional way: the operand is "%0" or "%1" and the
+            # constraints are written in order.  The outputs come first
+            # in the list of constraints, so the index of the operand is
+            # its place in that list.
+            for match in SYSTEM_OPERAND_POSITIONAL.finditer(line):
+                index = int(match.group("index"))
+                constraints = ASM_CONSTRAINT_LIST.findall(block)
+                if index >= len(constraints):
+                    continue
+                constraint = constraints[index][1]
+                if re.search(r"\bu?int32_t\b|\bu?int16_t\b|\buint\b\s*$|"
+                             r"\bint\b\s*$", constraint):
+                    problems.append(
+                        "%s:%d: the operand of \"%s\" is 32-bit and the "
+                        "register it names is 64-bit"
+                        % (path, number, match.group("op")))
 
     return problems
 
