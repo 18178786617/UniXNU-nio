@@ -20,7 +20,7 @@
 | defconfig | `configs/nio_defconfig`（`nio_defconfig`） |
 | 补丁 | `patches/xnu-8796/series`，168 条 |
 | donor | 仓库内的 `donor/kernelcache.decompressed.gz`（16.5 的 kernelcache 切片），sha256 `e6fa7559…` |
-| runner | `macos-15-intel`（x86_64，交叉编译出 arm64 内核） |
+| runner | `macos-15`（arm64，机主 2026-11-18 定的：只用 15 或 26） |
 
 > ⚠️ 早期版本这份文档写的是 17.7.11 / `xnu-10063.141.1` / 18 个补丁，那已经过时了。
 > 16.5 的切换记录见 `board.toml` 开头的注释。
@@ -66,8 +66,8 @@ Actions → **Build nio kernel** → **Run workflow**，参数保持默认：
 |---|---|---|
 | `unixnu_ref` | `04573c510c5fd4892ca6948739389141cc9e05f5` | 固定的 UniXNU 版本，**不要改成 `main`** |
 | `defconfig` | `nio_defconfig` | `configs/` 里的名字 |
-| `runner` | `macos-15-intel` | x86_64 的 macOS 15。这是 GitHub 现在唯一的 Intel macOS 标签（4 vCPU / 14 GB，公开仓库免费，2027 年 8 月下线）。`macos-15` / `macos-26` 是 arm64，两者不能混 |
-| `xcode` | `auto` | 取镜像里最新的 `/Applications/Xcode*.app`。Intel 镜像上同时有 Xcode 16.x 和 26.x，`auto` 这次选中 26.3 |
+| `runner` | `macos-15` | **arm64**。机主 2026-11-18 定：只用 `macos-15` 或 `macos-26`，不用 x86 的 `macos-15-intel`。两者是**同一个 arm64 池**，会一起排队；`macos-26` 在 run 23 之前从未产出过内核（Xcode 26 的 clang 更严 + 日志截断），所以默认取 `macos-15` |
+| `xcode` | `auto` | 取镜像里最新的 `/Applications/Xcode*.app` |
 | `ipsw_url` | 空 | 空 = 用仓库里的 `donor/kernelcache.decompressed.gz`。**不需要 IPSW** |
 | `kernelcache_url` | 空 | 同上 |
 
