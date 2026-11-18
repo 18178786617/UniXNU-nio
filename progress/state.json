@@ -1002,5 +1002,23 @@
   "  · H0c 的 vs= 是别的值 ⇒ VS 窗口基址假设不对（候选：+0x1000），下轮换地址试",
   "  · ★★★ 若 493 出现 I1 written ⇒ 【nexus type 就是根因】，门铃通了；接下来把 root 路径也补上同样的写",
   "  · ★★★ 若 493 仍无 I1 ⇒ nexus type 不是根因，下一步按 EDK2 的完整初始化走：VS_SW_RST=3（软件复位）+ VS_CLKSTOP_CTRL 清 bit4 + VS_FORCE_HCS=0x0DE0"
+ ],
+ "★ 493 已刷上机（15:08:30）—— 判读表": [
+  "★★ 面板上要找的三行（493 的探针都在门铃前，一定看得见）：",
+  "  · 'H0c vs=XXXXXXXX XXXXXXXX clk=XXXXXXXX fh=XXXXXXXX'",
+  "  · 'H0d nexus set=XXXXXXXX'  或  'H0d nexus left=XXXXXXXX'",
+  "  · 'I1 written'  ← 有没有这一行，是本轮唯一要回答的问题",
+  "★ 判读一：nexus type 是不是根因",
+  "  · 【出现 I1 written】⇒ 门铃写返回了 ⇒ 【VS_UTRL_NEXUS_TYPE 就是根因】",
+  "    ⇒ 下一步：把同样的写补进 root 路径（RootCommands.h 的 hostCommand），并把整条 root 接管流程按 EDK2 的顺序走一遍",
+  "  · 【仍无 I1 written】⇒ nexus type 不是根因 ⇒ 下一步走 EDK2 的完整初始化：",
+  "    VS_SW_RST = 3（软件复位）+ 等它清零；VS_CLKSTOP_CTRL &= ~(1<<4)（解除时钟门控）；VS_FORCE_HCS = 0x0DE0",
+  "★ 判读二：VS 窗口地址对不对",
+  "  · 'H0d nexus set=' 出现 ⇒ 读到的值是 0 或 0xFFFFFFFF ⇒ 【地址正确】，且已写成 0xFFFFFFFF（COMMAND 模式）",
+  "  · 'H0d nexus left=' 出现 ⇒ 读到的值是别的东西 ⇒ 【VS 基址假设不对】，下轮试 UFS_BASE + 0x1000",
+  "  · ★ 参考值：VS_UTRL_NEXUS_TYPE 合法值只有 0 与 0xFFFFFFFF 两种（EDK2 只写这两个）",
+  "★ 顺带读到的 clk= 是 VS_CLKSTOP_CTRL(0x11b0)，fh= 是 VS_FORCE_HCS(0x11b4)",
+  "  · EDK2 初始化时写 VS_CLKSTOP_CTRL &= ~(1<<4) 解除时钟门控、VS_FORCE_HCS = 0x0DE0",
+  "  · ★ 这两个值若与 EDK2 期望的不同，就是下一步的直接目标"
  ]
 }
