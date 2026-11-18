@@ -1079,9 +1079,32 @@ void NioUfs::adoptAndRead (unsigned level)
      * separates the delay from the store.
      */
     fbMark (2190, 80, 0xff, 0xff, 0xff);   // column 4: a store right after the red one
-    for (volatile unsigned delay = 0; delay < 800000U; delay++) {
-      /* nothing: a volatile loop cannot be optimised away */
-    }
+    /* nio run-506: round 505's panel carried white, green, red and this
+     * fourth white, but no blue.  The three before it are all stores --
+     * posted writes, which the CPU does not wait for.  What follows is a
+     * volatile loop, and every iteration reads its counter back from
+     * memory.  Ringing the doorbell starts the controller fetching, and
+     * that fetch holds the bus: a store can still be posted into the
+     * write buffer, but a load waits for the bus and does not come back.
+     * Every wait tried so far -- an MMIO read, isb, a volatile counter --
+     * needed a read, which is why they all stopped at the same place.
+     *
+     * Count in registers instead.  This loop touches no memory and no
+     * bus, so it can wait out the controller's fetch.  Blue after it
+     * means the wait itself was the problem; yellow after the cache
+     * barrier and magenta after the OCS read then say which read, if
+     * any, still cannot be taken while the controller is busy.
+     */
+    __asm__ volatile (
+        "mov x12, #0\n"
+        "1:\n"
+        "add x12, x12, #1\n"
+        "cmp x12, %[limit]\n"
+        "b.lo 1b\n"
+        :
+        : [limit] "r" (2000000U)
+        : "x12", "cc", "memory"
+    );
     fbMark (2190, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 8192);
     fbMark (2190, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
