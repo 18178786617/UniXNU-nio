@@ -8,13 +8,13 @@ name: Build nio kernel
 # cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
 # arm64.
 #
-# The runner is macos-15, which is the arm64 image and the architecture
-# upstream develops against.  The owner asked for the arm64 pair on
-# 2026-11-18: macos-15 and macos-26 are the same arm64 pool and queue
-# together, and macos-26 is the image that failed before run 23, so
-# macos-15 is the one of the pair that has not been shown to fail.
-# macos-15-intel (x86_64) stays available by name for a machine that
-# cannot reach an arm64 runner.  The product is the same either way.
+# The default runner is macos-15-intel (x86_64).  On 2026-11-18 evening the
+# owner reported that both arm64 images -- macos-15 and macos-26 -- are in
+# the same pool and queue together with the other tenants, so neither can
+# be acquired at night.  macos-15-intel is a separate x86_64 pool and can
+# still be scheduled; the built product is the same.  Upstream still
+# develops against the arm64 pair, and either can be named explicitly in
+# the runner input when the arm64 pool is free.
 #
 # Upstream develops against macos-26 (arm64) with the Xcode 26 line, and it
 # says so in its own workflow:
@@ -78,7 +78,7 @@ on:
           (run-393: "The job was not acquired by Runner of type hosted even
           after multiple attempts").
         required: false
-        default: "macos-26"
+        default: "macos-15-intel"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -174,7 +174,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15-intel' }}
   cancel-in-progress: false
 
 env:
@@ -193,7 +193,7 @@ jobs:
     # begun to queue, so the default moved here. The flag-matching step below
     # trims the -Wno-* options this image's clang does not know, which is what
     # stopped the older macos-26 builds from producing a kernel.
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
