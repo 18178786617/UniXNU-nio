@@ -577,12 +577,13 @@ void NioUfs::adoptAndRead (unsigned level)
   OSSharedPtr<IOMemoryMap> fbMap;
   uintptr_t fb = mapPhys (0x9c000000ULL, 0x2400000ULL, fbMap);
   volatile uint8_t *fbBytes = reinterpret_cast<volatile uint8_t *> (fb);
-  auto fbMark = [fbBytes] (unsigned row, uint8_t blue, uint8_t green, uint8_t red) {
+  auto fbMark = [fbBytes] (unsigned row, unsigned col,
+                           uint8_t blue, uint8_t green, uint8_t red) {
     if (!fbBytes) {
       return;
     }
     for (unsigned y = row; y < row + 16; y++) {
-      for (unsigned x = 8; x < 24; x++) {
+      for (unsigned x = col; x < col + 16; x++) {
         volatile uint8_t *pixel = fbBytes + y * 4320 + x * 4;
         pixel[0] = blue;
         pixel[1] = green;
@@ -590,17 +591,19 @@ void NioUfs::adoptAndRead (unsigned level)
       }
     }
   };
-  /* nio run-504: a stale square from the previous boot cannot be told
-   * from one drawn by this boot.  The watchdog resets the machine about
-   * a minute in, and the framebuffer survives the reset, so a photo
-   * taken early in a new boot shows the last boot's marks.  Clear the
-   * whole mark strip first, then draw a white square: white present means
-   * this boot reached here, so every square below it is this boot's.
+  /* nio run-505: the owner saw white, green and red on the panel but
+   * nothing below red.  Rows past about 2240 are outside the area this
+   * panel shows -- the framebuffer is taller than the visible screen --
+   * so the marks below red were drawn into a part of memory nobody can
+   * see.  All marks now go on one row that is known to be visible, side
+   * by side instead of stacked: white, green, red, white, blue, yellow,
+   * magenta at columns 8, 32, 56, 80, 104, 128, 152.  Clear that strip
+   * first so a stale boot's marks cannot be read as this boot's.
    */
-  for (unsigned row = 2160; row < 2400; row += 16) {
-    fbMark (row, 0x00, 0x00, 0x00);
+  for (unsigned col = 0; col < 176; col += 16) {
+    fbMark (2190, col, 0x00, 0x00, 0x00);
   }
-  fbMark (2160, 0xff, 0xff, 0xff);   // white: this boot, marks cleared
+  fbMark (2190, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
   // The controller's own request list is the one region its DMA is known to reach
   // (hardware 2026-10-17: a kernel-allocated buffer at 0xf080f000 reset the system when the
   // first command was issued, and nothing below 0xc8000000 is allocatable). The firmware
@@ -1067,26 +1070,24 @@ void NioUfs::adoptAndRead (unsigned level)
      * the write that never came back and the read after it looked the
      * same from the screen.  Two lines tell them apart.
      */
-    fbMark (2200, 0x00, 0xff, 0x00);   // green: reached the doorbell
+    fbMark (2190, 32, 0x00, 0xff, 0x00);   // column 2: reached the doorbell
     write32 (hc, 0x58, 1);          // ring slot 0
-    fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
-    /* nio run-504: the red square is drawn immediately after the write,
-     * before any delay or barrier, so it always proves the write came
-     * back.  The white one below is drawn immediately after it too, with
-     * nothing in between: if red is present but white is not, the write
-     * returned and something in the store itself is what the panel sees
-     * as a hang.  Red + white but no blue separates the delay.
+    fbMark (2190, 56, 0x00, 0x00, 0xff);   // column 3: the write came back
+    /* nio run-505: column 4 is drawn immediately after the write, before
+     * any delay or barrier.  Red without it means the write returned but
+     * the next store did not land; red and white together but no blue
+     * separates the delay from the store.
      */
-    fbMark (2260, 0xff, 0xff, 0xff);   // white: a store right after the red one
+    fbMark (2190, 80, 0xff, 0xff, 0xff);   // column 4: a store right after the red one
     for (volatile unsigned delay = 0; delay < 800000U; delay++) {
       /* nothing: a volatile loop cannot be optimised away */
     }
-    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the delay finished
+    fbMark (2190, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 8192);
-    fbMark (2300, 0xff, 0xff, 0x00);   // yellow: the cache barrier finished
+    fbMark (2190, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
-      fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the descriptor was read
+      fbMark (2190, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
     }
     if (result.ocs == 0xfU) {
       return result;
