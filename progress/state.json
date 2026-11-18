@@ -271,7 +271,8 @@
   "★★★★★ 2026-11-18 14:24 ★★★★★ **491 判决 + 492 已推（be176ee）**：\n  · ★★★ 491 判决一：【门铃写本身挂死】—— 拆成两行后没有 I1 written ⇒ write32(0x58,1) 不返回（首次与『读挂死』分开）。\n  · ★★★ 491 判决二：【探针位置错了】—— 行号 1,2,3（CAP/错误码）不在屏幕内 ⇒ 屏幕约 20 行，recipe 开头的行会被 bootloader 盖住。\n  · ★★ 492：把 CAP/MCQCAP/UTRLCC/五个 UIC 错误码【移到门铃前】，轮次号打进 H0 行，删两行腾位置。\n  · ★ 492 已挂后台（task Vt4YPg，CI 编号 492）。",
   "★★★★★ 2026-11-18 14:51 ★★★★★ **492 判决 + 493 已推（1ff6209）**：\n  · ★★★ 492：cap=1587031f ⇒ 不支持 MCQ（bit30=0、slots=0x1F、mcq=0）⇒ MCQ 路排除；urlcc=1 ⇒ 列表只有一个 UTRD ⇒ UCD 不压数组；err 全 0 ⇒ link 层无错。\n  · ★★★★★ 【找到根因方向】：EDK2 在写门铃前写 VS_UTRL_NEXUS_TYPE（COMMAND ⇒ 0xFFFFFFFF），我们从没写过 ⇒ 控制器按『查询』解析 UTRD。\n    VS 窗口 = UFS_BASE + 0x1100 ⇒ VS_UTRL_NEXUS_TYPE @ 0x1d85140，落在已映射的 0x3000 内。\n  · ★★ 493 的写是【自适应】的：读到的值 ∈ {0, 0xFFFFFFFF} 才写，否则不动 ⇒ 地址不对也不会破坏东西。\n  · ★ 493 已挂后台（task SfY9zY，CI 编号 493）。",
   "★★★★★ 2026-11-18 15:14 ★★★★★ **493 判决 + 494 已推（00d6db8）**：\n  · ★★★ 493：写 VS_UTRL_NEXUS_TYPE 后读回仍是 0 ⇒ 该地址写不进去；DT 说 SM8250 的 UFS HBA 只有一个 12 KiB 窗口；米10（同 SoC，真机跑通）完全不碰 VS 寄存器 ⇒ nexus type 路断。\n  · ★★★★★ 【真正的根因方向】：米10 驱动注释说 UEFI 的 command descriptor 就在 UTRD 后面，且【控制器一次取 32 个】⇒ 我们把 UCD 放在 UTRLBA+128 正好落在那个区域 ⇒ 控制器把 command descriptor 当 UTRD 解析 ⇒ 去抓垃圾地址 ⇒ 挂死。\n  · ★★ 494：UCD 挪到 4096 + 打印 slot 0..7 的首字作证据。已挂后台（task xQlkiE，CI 编号 494）。",
-  "★★★★★ 2026-11-18 15:36 ★★★★★ **494 判决 + 495 已推（f3d2863）**：\n  · ★★★ 494：UCD 挪到 4096 仍挂（p4=9b24a000 证明布局生效了）⇒ 原因在同一句注释里：\n    一个 request descriptor 组 = 8 slot = 256 字节，控制器一次取 32 组 = 8192 字节 ⇒ UCD@4096 是组 16 的 slot 0，仍在被读的范围内。\n  · ★★ 495：映射扩到 32 KiB + UCD 挪到 16384（在 8192 之外）+ 撤掉没信息量的 slots 探针，换成读 UTRLCLR(0x5c)/UTRLRSR(0x60)。\n  · ★ 495 已挂后台（task FMwwto，CI 编号 495）。"
+  "★★★★★ 2026-11-18 15:36 ★★★★★ **494 判决 + 495 已推（f3d2863）**：\n  · ★★★ 494：UCD 挪到 4096 仍挂（p4=9b24a000 证明布局生效了）⇒ 原因在同一句注释里：\n    一个 request descriptor 组 = 8 slot = 256 字节，控制器一次取 32 组 = 8192 字节 ⇒ UCD@4096 是组 16 的 slot 0，仍在被读的范围内。\n  · ★★ 495：映射扩到 32 KiB + UCD 挪到 16384（在 8192 之外）+ 撤掉没信息量的 slots 探针，换成读 UTRLCLR(0x5c)/UTRLRSR(0x60)。\n  · ★ 495 已挂后台（task FMwwto，CI 编号 495）。",
+  "★★★★★ 2026-11-18 16:58 ★★★★★ **497 判决 + 498 已推（9fbdb93）**：\n  · ★★ 497 仍挂门铃（p4=9b245020 = phys+32，布局生效）；『不清零固件描述符』假设被证伪。\n  · ★★★ 照片判读更正：右边 0503-0522 是 framebuffer 地址连续 ⇒ 行 1-17 同一次启动；7-11 行被 UEFI 文本盖住。\n  · ★★★ 498：米10 原文『command descriptor ... where slots 8.. would be』⇒ slot 8 = 32*8 = 偏移 256，    这是 128/4096/16384/32 之后唯一没试过的位置。\n  · ★★ 机主要求：runner 默认 macos-15 → macos-26（15 已开始排队），已改 3 处。\n  · ★ 498 = CI 499，已挂后台（task FP1nEj）。"
  ],
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
@@ -1225,5 +1226,36 @@
    "  · 若 fwd= 全 0 ⇒ 固件那里本来就是空的 ⇒ 假设不成立，下一步改走米10 的『自己的列表』方案",
    "  · p4 应为 phys+32"
   ]
+ ],
+ "★★★ 497 判决：门铃写仍挂死；★★ 498 试米10 指明的 slot 8 + runner 改 macos-26": [
+  "★★ 照片逐行（16:38 真机，CI 498 / 代码 round 497）：",
+  "  12| nio: ufs H0c vs=00000000 00000000 clk=00000000 fh=00000000   0517",
+  "  13| nio: ufs H0d clr=00000000 rsr=00000001 db=00000000            0518",
+  "  14| nio: ufs H dw0=11000000 dw2=0000000f prdt=01000000           0519",
+  "  15| nio: ufs H4 bad=00000000                                      0520",
+  "  16| nio: ufs H4b pbad=00000000 p0=11000000 p4=9b245020 p7=01000000 0521",
+  "  17| nio: ufs H5 db0=00000000                                      0522",
+  "  （无 I1 written ⇒ 门铃写仍挂死，第七次确认）",
+  "★★★ 判读更正（重要）：",
+  "  · 右边 0503→0522 是 framebuffer 地址，连续 ⇒ 行 1..17 是【同一次启动】，不是两次叠加",
+  "  · 行 7..11 落在 UEFI 文本覆盖区 ⇒ 不可见；只看到 12..17 不代表中途重启",
+  "  · p4=9b245020 = phys(9b245000)+32 ⇒ 497 的 UCD@32 布局生效了",
+  "★★★ 497 的假设被证伪：",
+  "  · 497 认为【清零了固件留在 slots 1..7 的有效描述符】导致挂死 ⇒ 改为不动它们",
+  "  · 结果仍挂 ⇒ 固件那几组描述符不是根因（或不是唯一根因）",
+  "★★★★ 498 的依据（米10 注释的第三种读法，唯一没试过的位置）：",
+  "  · 原文：UTRLBA points at a single descriptor, with UFSDxe's command descriptor right behind it,",
+  "    【where slots 8.. would be】。一个 request descriptor = 32 字节 ⇒ slot 8 = 偏移 256",
+  "  · 之前试过的位置：128（480）、4096（494）、16384（495）、32（496/497）—— 全挂",
+  "  · ★ 256 是米10 明确指出的位置，也是唯一没试过的 ⇒ UCD 挪到 +256",
+  "  · 布局自洽已核算：UCD 区 256..1296 < 数据区 8192..16383 ≤ 映射末 16383",
+  "★★ 机主要求的 runner 改动（已落实）：",
+  "  · workflow_dispatch 的 runner default: macos-15 → macos-26",
+  "  · runs-on 的 fallback: 'macos-15' → 'macos-26'",
+  "  · concurrency group 的 fallback 同步改",
+  "  · 理由：机主说『15已经开始排队了』；flag 匹配步骤已能处理 macos-26 的 clang -Werror 差异",
+  "★ 498 判读表：",
+  "  · 出现 I1 written ⇒ slot 8 是根因 ⇒ 门铃通了，下一步把 root 路径也改成 +256 并按米10 顺序完整接管",
+  "  · 仍无 I1 ⇒ UCD 位置全排除（5 处）⇒ 下一步不再挪位置，改查 DMA 地址本身（固件 heap 在 ExitBootServices 后的有效性）"
  ]
 }
