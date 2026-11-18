@@ -577,6 +577,26 @@ void NioUfs::adoptAndRead (unsigned level)
   }
   IOMemoryDescriptor *region = IOMemoryDescriptor::withPhysicalAddress (fwList, 16384, kIODirectionInOut);
   OSSharedPtr<IOMemoryMap> regionMap;
+  /* nio run-488: a second view of the same pages, without the cache.
+   *
+   * The list is mapped cached, so a word read back from it is a word read
+   * back from the CPU's own cache: it is what was written, whatever was
+   * written.  The controller reads the list over the bus, so what matters
+   * is what is in memory, and the only way to see that is to read the
+   * pages without the cache.
+   *
+   * The driver that runs on this controller has no such problem -- its
+   * list lives in memory that is not cached -- and it checks the
+   * descriptor against what was put into it before it rings.  This one
+   * has to look twice: once at the cache, once at memory.
+   */
+  OSSharedPtr<IOMemoryMap> plainMap;
+  if (region) {
+    plainMap = OSSharedPtr<IOMemoryMap> (region->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
+  }
+  uint8_t *plain = plainMap
+    ? reinterpret_cast<uint8_t *> (plainMap->getVirtualAddress ())
+    : nullptr;
   if (region) {
     regionMap = OSSharedPtr<IOMemoryMap> (region->map (kIOMapAnywhere), OSNoRetain);
     region->release ();
@@ -699,6 +719,11 @@ void NioUfs::adoptAndRead (unsigned level)
     *reinterpret_cast<uint32_t *> (utrd + 20) = static_cast<uint32_t> (ucdPhys >> 32);
     *reinterpret_cast<uint32_t *> (utrd + 24) = (512U >> 2) | ((rspOffset >> 2) << 16);   // response length | offset (dwords)
     uint32_t prdEntries = length ? 1U : 0U;
+    /* The descriptor's last word names the PRD table's offset and how many
+     * entries it has.  The offset is written whether the command moves data
+     * or not, and the count alone says whether there is a table: this is
+     * what the driver that runs on this controller writes, and the two
+     * recipes this port was written from agree with it. */
     *reinterpret_cast<uint32_t *> (utrd + 28) = prdEntries | ((prdtOffset >> 2) << 16);
     if (length) {
       uint64_t dataPhys = phys + dataOffset;
@@ -720,23 +745,103 @@ void NioUfs::adoptAndRead (unsigned level)
      * and the fold overwrites the row above it, which is where round
      * 484's own first word went.  Every line from here on is short.
      *
-     * nio run-485: two questions are separated by writing the doorbell
+     * nio run-485: two questions were separated by writing the doorbell
      * register with a harmless value first.  A write of zero rings
      * nothing and asks the controller no fetch, so if that write comes
      * back the register and its bus are alive and the fault is in what
      * the doorbell makes the controller do; if it does not come back,
-     * the register's bus is dead and the descriptor is not the question.
+     * the bus is dead and the descriptor is not the question.
+     *
+     * nio run-487 answered it: the write of zero came back, so the
+     * register and its bus are alive and the fault is in the fetch the
+     * doorbell asks for.  The write is replaced by a read, which cannot
+     * ring anything and tells the same story about the register.
      */
     nioUfsSay ("nio: ufs H dw0=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 0));
     nioUfsSay ("nio: ufs H2 dw2=%08x ba=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 8),
                read32 (hc, 0x50));
-    nioUfsSay ("nio: ufs H3 hcs=%08x is=%08x\n",
+    /* nio run-488: the descriptor's last word, which names the PRD table's
+     * offset and how many entries it has.  The driver that runs on this
+     * controller writes the offset either way and lets the count say
+     * whether there is a table, and so does this one.  It is on the
+     * screen because the descriptor is the only thing between the
+     * controller and the fetch, and it has never been on the screen in
+     * one piece. */
+    nioUfsSay ("nio: ufs H3 prdt=%08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 28));
+    nioUfsSay ("nio: ufs H3b hcs=%08x is=%08x\n",
                read32 (hc, 0x30), read32 (hc, 0x20));
-    /* The harmless doorbell write. */
-    write32 (hc, 0x58, 0);
-    nioUfsSay ("nio: ufs H4 db0 ok db=%08x\n", read32 (hc, 0x58));
+    /* nio run-488: read the descriptor back before ringing.
+     *
+     * The driver that runs on this controller checks the descriptor
+     * against what was put into it before it rings, and refuses to ring
+     * when the two differ:
+     *
+     *   if (memcmp(back, c->upiu, sizeof(back)) != 0 || s->utrd[0] != c->dw0 ...)
+     *       ... "does not hold what was put in it: not rung"
+     *
+     * This port never read the descriptor back.  It wrote the words,
+     * cleaned the cache and rang, and the only thing that showed was
+     * that the ring did not come back -- which says nothing about
+     * whether the controller is fetching what was written or something
+     * else.  The words are read back here and compared, and each one
+     * that differs is named on the screen.
+     *
+     * The read has to see the cache, not memory: the controller reads
+     * the list through the bus, so the two are compared after the
+     * clean, and the clean is what puts the words there.
+     */
+    {
+      uint32_t words[8];
+      for (unsigned index = 0; index < 8; index++) {
+        words[index] = *reinterpret_cast<volatile uint32_t *> (utrd + index * 4);
+      }
+      uint32_t bad = 0;
+      for (unsigned index = 0; index < 8; index++) {
+        uint32_t want = 0;
+        switch (index) {
+          case 0: want = 0x10000000U | (direction << 25) | 0x01000000U; break;
+          case 1: want = 0; break;
+          case 2: want = 0x0fU; break;
+          case 3: want = 0; break;
+          case 4: want = static_cast<uint32_t> (ucdPhys); break;
+          case 5: want = static_cast<uint32_t> (ucdPhys >> 32); break;
+          case 6: want = (512U >> 2) | ((rspOffset >> 2) << 16); break;
+          default: want = prdEntries | ((prdtOffset >> 2) << 16); break;
+        }
+        if (words[index] != want) bad |= (1U << index);
+      }
+      /* The same words, read without the cache: this is what the
+       * controller is about to fetch. */
+      uint32_t plainBad = 0, plainWord0 = 0, plainWord4 = 0, plainWord7 = 0;
+      if (plain) {
+        for (unsigned index = 0; index < 8; index++) {
+          uint32_t got = *reinterpret_cast<volatile uint32_t *> (plain + index * 4);
+          if (got != words[index]) plainBad |= (1U << index);
+          if (index == 0) plainWord0 = got;
+          if (index == 4) plainWord4 = got;
+          if (index == 7) plainWord7 = got;
+        }
+        nioUfsSay ("nio: ufs H4 bad=%08x\n", bad);
+        nioUfsSay ("nio: ufs H4b pbad=%08x p0=%08x\n", plainBad, plainWord0);
+        nioUfsSay ("nio: ufs H4c p4=%08x p7=%08x\n", plainWord4, plainWord7);
+        if (plainBad != 0) {
+          nioUfsSay ("nio: ufs H4d memory differs from cache; not ringing\n");
+          return result;
+        }
+      } else {
+        nioUfsSay ("nio: ufs H4 bad=%08x no-plain-map\n", bad);
+      }
+      if (bad != 0) {
+        nioUfsSay ("nio: ufs H4e descriptor differs; not ringing\n");
+        return result;
+      }
+    }
+    /* The doorbell register, read before it is rung.  A read cannot ring
+     * anything, so this is safe to do where a write is not. */
+    nioUfsSay ("nio: ufs H5 db0=%08x\n", read32 (hc, 0x58));
     /* The real doorbell. */
     write32 (hc, 0x58, 1);          // ring slot 0
     nioUfsSay ("nio: ufs I db1 ok db=%08x\n", read32 (hc, 0x58));
