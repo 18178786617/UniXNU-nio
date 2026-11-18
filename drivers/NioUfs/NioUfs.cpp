@@ -656,7 +656,20 @@ void NioUfs::adoptAndRead (unsigned level)
     }
     uint64_t ucdPhys = phys + ucdOffset;
     uint32_t direction = length ? (toHost ? 2U : 1U) : 0U;
-    *reinterpret_cast<uint32_t *> (utrd + 0) = 0x10000000U | (direction << 25);
+    /* nio run-484: the request descriptor's first word.
+     *
+     * The reference implementation that runs on this controller (the iOS
+     * shim, whose UFS_BASE is the same 0x1d84000) writes
+     *
+     *   dw0 = (1u << 28) | ((len ? 2u : 0u) << 25) | (1u << 24);
+     *
+     * and calls the fields [31:28] CT, [26:25] DD and [24] I.  The two
+     * recipes this port was written from (the SM8550 one) leave bit 24
+     * clear, and they run on that controller; on this one the doorbell
+     * write does not come back and the descriptor is the only thing that
+     * differs before it.  Bit 24 is set here for the same reason.
+     */
+    *reinterpret_cast<uint32_t *> (utrd + 0) = 0x10000000U | (direction << 25) | 0x01000000U;
     *reinterpret_cast<uint32_t *> (utrd + 8) = 0x0fU;     // OCS: not completed
     *reinterpret_cast<uint32_t *> (utrd + 16) = static_cast<uint32_t> (ucdPhys);
     *reinterpret_cast<uint32_t *> (utrd + 20) = static_cast<uint32_t> (ucdPhys >> 32);
@@ -675,16 +688,14 @@ void NioUfs::adoptAndRead (unsigned level)
     /* nio run-483: the request descriptor is the last thing the CPU writes
      * before the doorbell, so its eight words are printed here.  If they
      * are wrong on the screen, the controller is fetching something else
-     * and the doorbell is only where that shows up. */
-    nioUfsSay ("nio: adopt cmd H utrd %08x %08x %08x %08x %08x %08x %08x %08x\n",
+     * and the doorbell is only where that shows up.
+     *
+     * nio run-484: the eight words are longer than the panel's line, and
+     * the tail of a long line scrolls off the top of the screen, so the
+     * word that matters (dw0) is printed on its own short line. */
+    nioUfsSay ("nio: adopt cmd H dw0=%08x dw2=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 0),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 4),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 8),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 12),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 16),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 20),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 24),
-               *reinterpret_cast<volatile uint32_t *> (utrd + 28));
+               *reinterpret_cast<volatile uint32_t *> (utrd + 8));
     nioUfsSay ("nio: adopt cmd H2 ucd %02x %02x %02x %02x  hcs=%08x is=%08x db=%08x rsr=%08x ba=%08x bau=%08x\n",
                ucd[0], ucd[1], ucd[2], ucd[3],
                read32 (hc, 0x30), read32 (hc, 0x20), read32 (hc, 0x58), read32 (hc, 0x60),

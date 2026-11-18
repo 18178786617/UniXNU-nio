@@ -87,7 +87,11 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   for (unsigned index = 0; index < 8; index++) {
     words[index] = 0;
   }
-  words[0] = 0x10000000U | (direction << 25);
+  /* nio run-484: bit 24 is set here for the reason given in NioUfs.cpp:
+   * the reference implementation that runs on this controller writes it,
+   * and the two recipes this one was written from do not.  Both paths
+   * build the same descriptor, so they get the same word. */
+  words[0] = 0x10000000U | (direction << 25) | 0x01000000U;
   words[2] = 0x0fU;
   words[4] = static_cast<uint32_t> (ucdPhys);
   words[5] = static_cast<uint32_t> (ucdPhys >> 32);
