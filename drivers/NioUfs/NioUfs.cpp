@@ -624,6 +624,47 @@ void NioUfs::adoptAndRead (unsigned level)
   const uint32_t ucdOffset = 128, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
+  /* nio run-491: what the controller says about itself, read before the
+   * doorbell is rung.
+   *
+   * The doorbell write does not come back, and by run 490 everything
+   * around it had been proved good: the descriptor's eight words were
+   * right, the cache and the memory held the same bytes, the doorbell
+   * register was clean and the controller was enabled and running the
+   * request list.  What was left was the controller itself, and two
+   * registers of it had never been read:
+   *
+   *   0x00  CAP      what the controller supports: the size of a
+   *                  request descriptor and how many command queues it
+   *                  has.  A controller in the multi-queue mode wants
+   *                  a different thing of the doorbell than one in the
+   *                  single-list mode, and this port never knew which
+   *                  one it was talking to.
+   *
+   *   0x64  UTRLCC   the list's own geometry: how many descriptors
+   *                  the list holds and how large each one is.  This
+   *                  port puts the command block 128 bytes into the
+   *                  list, and whether that is inside the descriptors
+   *                  or after them is exactly what this register says.
+   *
+   * And five registers that record what went wrong on the link, which
+   * this port had never read:
+   *
+   *   0x38  UIC error code, physical adapter layer
+   *   0x3c  UIC error code, data link layer
+   *   0x40  UIC error code, network layer
+   *   0x44  UIC error code, transport layer
+   *   0x48  UIC error code, DME
+   *
+   * They are read here because after the doorbell the controller may
+   * not answer a read at all.
+   */
+  nioUfsSay ("nio: adopt A1 cap=%08x urlcc=%08x\n",
+             read32 (hc, 0x00), read32 (hc, 0x64));
+  nioUfsSay ("nio: adopt A2 err=%08x %08x %08x\n",
+             read32 (hc, 0x38), read32 (hc, 0x3c), read32 (hc, 0x40));
+  nioUfsSay ("nio: adopt A3 err=%08x %08x\n",
+             read32 (hc, 0x44), read32 (hc, 0x48));
   if (doorbellBefore != 0 || read32 (hc, 0x78) != 0) {
     panic ("NATIVE_UFS adopt: firmware request outstanding doorbell=%08x hcs=%08x", doorbellBefore, hcsBefore);
   }
@@ -845,9 +886,19 @@ void NioUfs::adoptAndRead (unsigned level)
     /* The doorbell register, read before it is rung.  A read cannot ring
      * anything, so this is safe to do where a write is not. */
     nioUfsSay ("nio: ufs H5 db0=%08x\n", read32 (hc, 0x58));
-    /* The real doorbell. */
+    /* The real doorbell.
+     *
+     * nio run-491: the write and the read that follows it are put on
+     * separate lines.  The read was the argument of the report, so it
+     * was taken before the report was printed, and a report that did
+     * not appear said nothing about which of the two had stopped:
+     * the write that never came back and the read after it looked the
+     * same from the screen.  Two lines tell them apart.
+     */
     write32 (hc, 0x58, 1);          // ring slot 0
-    nioUfsSay ("nio: ufs I db1 ok db=%08x\n", read32 (hc, 0x58));
+    nioUfsSay ("nio: ufs I1 written\n");
+    uint32_t dbAfter = read32 (hc, 0x58);
+    nioUfsSay ("nio: ufs I2 db=%08x\n", dbAfter);
     bool done = false;
     for (unsigned loops = 0; loops < 100000; loops++) {
       if (!(read32 (hc, 0x58) & 1)) {
