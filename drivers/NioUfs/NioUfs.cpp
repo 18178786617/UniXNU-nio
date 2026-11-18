@@ -1059,22 +1059,27 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (2200, 0x00, 0xff, 0x00);   // green: reached the doorbell
     write32 (hc, 0x58, 1);          // ring slot 0
     fbMark (2240, 0x00, 0x00, 0xff);   // red: the write came back
-    /* nio run-502: round 500 carried green and red but no blue, even
-     * though the read of the doorbell had been removed.  What sat between
-     * red and blue was a report through nioUfsSay.  The write returns;
-     * the report takes the console's ticket lock and never comes back,
-     * so no code after it ever ran.  Eight rounds read that silence as a
-     * stuck doorbell.
+    /* nio run-503: round 502 still carried only green and red, with every
+     * console call already gone.  What sat between red and blue was
+     * nioUfsSpin(), whose isb waits for the posted doorbell write to be
+     * accepted by the device -- the same kind of wait that the MMIO read
+     * was doing.  A plain volatile loop counts time without any barrier
+     * and without the counter, so it cannot wait on the controller.
      *
-     * There is no console call at all now, from the write until the
-     * result is complete.  The five lock-free marks carry the state.
+     * The cache maintenance below ends in dsb sy, which is another wait
+     * on the same bus.  A yellow mark goes down after it, so one panel
+     * says whether the wait, the barrier, or the descriptor read is the
+     * one that stops.
      */
-    nioUfsSpin (200000);              // 200 ms, no controller read
-    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the wait finished
+    for (volatile unsigned delay = 0; delay < 4000000U; delay++) {
+      /* nothing: a volatile loop cannot be optimised away */
+    }
+    fbMark (2280, 0xff, 0x00, 0x00);   // blue: the delay finished
     cacheCleanInvalidate (virt, 8192);
+    fbMark (2300, 0xff, 0xff, 0x00);   // yellow: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
-      fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the controller completed the command
+      fbMark (2360, 0xff, 0x00, 0xff);  // magenta: the descriptor was read
     }
     if (result.ocs == 0xfU) {
       return result;
