@@ -44,6 +44,7 @@ extern const uint8_t verified_root_key[];
 #include <libkern/c++/OSIterator.h>
 #include <IOKit/IOBSD.h>
 #include <kern/thread.h>
+#include <machine/machine_routines.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <IOKit/IOMemoryDescriptor.h>
@@ -1238,13 +1239,16 @@ void NioUfs::adoptAndRead (unsigned level)
      *     decision: this port reads it and prints it, and rings the
      *     doorbell whatever it says.
      *
-     * The interrupts are masked with the arm64 DAIF register, which is
-     * what the kernel itself uses:
+     * The interrupts are masked with the kernel's own function, which
+     * is what the reference driver uses:
      *
-     *   msr DAIFSet, #(DAIFSC_FIQF | DAIFSC_IRQF)
+     *   istate = ml_set_interrupts_enabled (FALSE);
+     *   ...
+     *   ml_set_interrupts_enabled (istate);
      *
-     * and unmasked with DAIFClr.  The state is saved first, so the
-     * caller's own state is put back.
+     * It returns the state that was in force and takes it back, so an
+     * interrupt that was already masked stays masked, and one that was
+     * not comes back.
      */
     fbMark (1860, 32, 0x00, 0xff, 0x00);   // column 2: reached the doorbell
     __asm__ volatile ("dsb sy" ::: "memory");
@@ -1264,27 +1268,48 @@ void NioUfs::adoptAndRead (unsigned level)
     nioUfsSay ("nio: ufs H6 ba=%08x:%08x want=%08x:%08x rsr=%08x db=%08x\n",
                baHi, baLo, wantHi, wantLo, rsrNow, dbNow);
 
-    uint64_t daif = 0;
-    __asm__ volatile ("mrs %0, daif" : "=r" (daif));
-    __asm__ volatile ("msr daifset, #0x3" ::: "memory");
+    /* nio run-512: the interrupts are masked with the kernel's own
+     * function, and not with the DAIF register written by hand.
+     *
+     * Two versions of this were tried and both failed to build:
+     *
+     *   msr daifclr, %0 :: "r" ((uint32_t) (daif & 0x3))
+     *     error: value size does not match register size specified by
+     *     the constraint and modifier [-Werror,-Wasm-operand-widths]
+     *
+     *   msr daifclr, %0 :: "r" (daif)
+     *     error: immediate must be an integer in range [0, 15].
+     *
+     * The second one is the more interesting: "msr daifclr" does not
+     * take a register at all.  Its operand is a four-bit field that
+     * says which of the four masks to clear, and it is written as an
+     * immediate -- which is how the kernel writes it everywhere:
+     *
+     *   msr DAIFSet, #(DAIFSC_FIQF | DAIFSC_IRQF)   (cswitch.s)
+     *   msr DAIFClr, #DAIFSC_FIQF                      (locore.s)
+     *
+     * So there is no way to put back a saved state with one
+     * instruction, because the instruction only clears bits and the
+     * saved state says which bits were set.
+     *
+     * The kernel's own function does exactly what is wanted, and it is
+     * the function the reference driver on this chip uses:
+     *
+     *   istate = ml_set_interrupts_enabled (FALSE);
+     *   ...
+     *   ml_set_interrupts_enabled (istate);
+     *
+     * It returns the state that was in force and takes it back, so an
+     * interrupt that was already masked stays masked and one that was
+     * not comes back.  Nothing here writes the register by hand.
+     *
+     * (refs/xnu-src/osfmk/arm/machine_routines.h:79)
+     */
+    boolean_t interruptState = ml_set_interrupts_enabled (FALSE);
 
     write32 (hc, 0x58, 1);          // ring slot 0
 
-    /* nio run-512: the register is written back with the whole of the
-     * saved state, and the operand is 64 bits wide.
-     *
-     * DAIF is a 64-bit register on arm64 and "msr daifclr" takes it as
-     * one.  Round 511 passed the value as a 32-bit operand, and the
-     * compiler refused it:
-     *
-     *   error: value size does not match register size specified by the
-     *   constraint and modifier [-Werror,-Wasm-operand-widths]
-     *
-     * The state that is put back is the state that was read, with the
-     * two interrupt bits as they were: an interrupt that was already
-     * masked stays masked, and one that was not comes back.
-     */
-    __asm__ volatile ("msr daifclr, %0" :: "r" (daif) : "memory");
+    (void) ml_set_interrupts_enabled (interruptState);
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
