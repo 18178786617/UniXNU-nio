@@ -56,6 +56,7 @@ extern const uint8_t verified_root_key[];
 #include <pexpert/pexpert.h>
 #include <kern/debug.h>
 #include "GccUfs.h"
+#include "NioFont8x16.h"
 #include "RootDiagnostics.h"
 #include "TransferPoll.h"
 #include "SmmuTakeover.h"
@@ -617,6 +618,75 @@ void NioUfs::adoptAndRead (unsigned level)
    * for, and the run of them after the doorbell is where a console
    * print would not come back.
    */
+  /* nio run-514: the steps after the doorbell are reported in TEXT,
+   * written straight into the panel's own character cells.
+   *
+   * Two things were tried for this and neither could be read reliably
+   * out of a photograph of the phone:
+   *
+   *   - coloured squares.  The panel renders every pixel as three
+   *     stripes and the camera resamples them, so the colour of a
+   *     square is not what the picture shows.  The owner read the
+   *     marks by eye and could not tell a blue square from a white
+   *     one, and the pixels did not agree with the eye either.
+   *
+   *   - white squares of growing size.  Better, but still squares:
+   *     counting them needs the picture to hold them, and the ones at
+   *     the bottom of the panel are the ones the picture loses.
+   *
+   * Text survives all of that, because the console's text has been
+   * sharp in every photograph taken of this phone.  So the steps are
+   * written into the panel's own character cells, the way the console
+   * writes them, and the picture shows a row of characters that can be
+   * read like any other line on the screen.
+   *
+   * The characters are written by hand rather than through the console
+   * because the console cannot be used here: the first print after the
+   * doorbell does not come back (round 502), and an MMIO read is what
+   * could not be taken while the controller was fetching.  Writing the
+   * panel's own memory needs neither.
+   *
+   * A character cell is sixteen pixels tall and eight wide, and the
+   * cell at (row, column) starts at pixel row * 16 and pixel column
+   * * 8.  The glyphs are the ones the console uses, so that what the
+   * panel shows is what the console would have shown.
+   */
+  auto fbChar = [fbBytes] (unsigned row, unsigned column, char ch) {
+    if (!fbBytes) {
+      return;
+    }
+    unsigned char c = (unsigned char) ch;
+    if (c < 0x20 || c > 0x7f) {
+      c = '?';
+    }
+    const unsigned char *glyph = nioFont8x16[c - 0x20];
+    for (unsigned y = 0; y < 16; y++) {
+      for (unsigned x = 0; x < 8; x++) {
+        volatile uint8_t *pixel = fbBytes + (row * 16 + y) * 4320 + (column * 8 + x) * 4;
+        bool on = (glyph[y] >> (7 - x)) & 1;
+        pixel[0] = on ? 0xff : 0x00;
+        pixel[1] = on ? 0xff : 0x00;
+        pixel[2] = on ? 0xff : 0x00;
+      }
+    }
+  };
+  /* The row the steps are written in, cleared first so that a stale
+   * boot's characters cannot be read as this boot's, and then headed so
+   * that a picture of the row can be read without knowing what was
+   * expected in it.
+   *
+   * The row is one of the rows the console itself uses and it sits
+   * just below the text the console has written, so it is in the part
+   * of the panel a photograph of the phone holds. */
+  {
+    const char *heading = "UFS STEPS: 1234";
+    for (unsigned column = 0; column < 60; column++) {
+      fbChar (118, column, ' ');
+    }
+    for (unsigned column = 0; heading[column]; column++) {
+      fbChar (118, column, heading[column]);
+    }
+  }
   auto fbStep = [fbBytes] (unsigned index) {
     if (!fbBytes) {
       return;
@@ -1402,6 +1472,7 @@ void NioUfs::adoptAndRead (unsigned level)
 
     (void) ml_set_interrupts_enabled (interruptState);
     fbStep (0);                     // box 1: the doorbell write came back
+    fbChar (118, 11, '1');          // the same, as a character: the write came back
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
@@ -1452,13 +1523,16 @@ void NioUfs::adoptAndRead (unsigned level)
         : "x12", "cc", "memory"
     );
     fbStep (1);                     // box 2: the delay finished
+    fbChar (118, 12, '2');          // the same, as a character: the delay finished
     fbMark (1860, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 50176);
     fbStep (2);                     // box 3: the cache barrier finished
+    fbChar (118, 13, '3');          // the same, as a character: the barrier finished
     fbMark (1860, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
       fbStep (3);                   // box 4: the descriptor was read
+      fbChar (118, 14, '4');        // the same, as a character: it was read
       fbMark (1860, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
     }    if (result.ocs == 0xfU) {
       return result;
