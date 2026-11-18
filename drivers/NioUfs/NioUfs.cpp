@@ -734,6 +734,9 @@ void NioUfs::adoptAndRead (unsigned level)
     }
     cacheClean (virt, 16384);
     write32 (hc, 0x20, 0xffffffffU);
+    /* nio run-489: the result is declared here because the checks below
+     * return it when the descriptor does not hold what was put into it. */
+    UfsResult result = { 0xf, 0xff, 0xff, 0, 0, 0 };
     /* nio run-483: the request descriptor is the last thing the CPU writes
      * before the doorbell, so its words are printed here.  If they are
      * wrong on the screen, the controller is fetching something else and
@@ -845,7 +848,6 @@ void NioUfs::adoptAndRead (unsigned level)
     /* The real doorbell. */
     write32 (hc, 0x58, 1);          // ring slot 0
     nioUfsSay ("nio: ufs I db1 ok db=%08x\n", read32 (hc, 0x58));
-    UfsResult result = { 0xf, 0xff, 0xff, 0, 0, 0 };
     bool done = false;
     for (unsigned loops = 0; loops < 100000; loops++) {
       if (!(read32 (hc, 0x58) & 1)) {
