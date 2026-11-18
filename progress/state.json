@@ -870,5 +870,19 @@
    "cap 的 bit23:17 非零 ⇒ 控制器支持 MCQ ⇒ 门铃语义与我们假设的不同 ⇒ 需按 MCQ 走",
    "urlcc 的 UTRD 数量 > 4 ⇒ 我们的 UCD@128 落在 UTRD 数组里 ⇒ 把 UCD 移出该页"
   ]
- }
+ },
+ "★ 491 判读用的位定义（u-boot ufshci.h，与 Linux 同源）": [
+  "★ CAP (0x00) 的位域：",
+  "  · CAP[4:0]   传输请求槽位数：SDB 模式 0x1F；MCQ 模式 0xFF  ⇒ 读出 >0x1F 即【MCQ 模式】",
+  "  · CAP[30]    MASK_MCQ_SUPPORT (0x40000000) ⇒ 置位即控制器支持 MCQ",
+  "  · CAP[0x04]  REG_MCQCAP（MCQ 能力），也值得一读",
+  "  · CAP[24]    MASK_64_ADDRESSING_SUPPORT (0x01000000)",
+  "  · CAP[22]    MASK_UIC_DME_TEST_MODE_SUPPORT (0x04000000)",
+  "  · CAP[23]    MASK_OUT_OF_ORDER_DATA_DELIVERY_SUPPORT (0x02000000)",
+  "★ ★★ 【MCQ 模式的门铃语义与非 MCQ 完全不同】：非 MCQ 下 UTRLDBR(0x58) 的 bit0 就是唯一请求列表的门铃；",
+  "  MCQ 下 UTRLDBR 每个 bit 对应一个 MCQ，控制器用各自的 head pointer 决定取哪个描述符 ⇒ 若控制器是 MCQ 模式，",
+  "  我们『写 1 再轮询 bit0 清零』的做法从一开始就是错的 ⇒ 需按 MCQ 走（MCQxCFH / UTRLCCTCL 等）。",
+  "★ UTRLCC (0x64) 在 UFS 2.x 是 UTRD 列表的『Control Number』；在 MCQ 模式下相关寄存器是 MCQCFG/UTRIODLR 等。",
+  "★ ⇒ 491 的 cap 值是本轮最关键的一个数：它决定后面是继续按单列表走，还是必须改按 MCQ 走。"
+ ]
 }
