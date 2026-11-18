@@ -691,7 +691,7 @@ void NioUfs::adoptAndRead (unsigned level)
   // rest of the firmware's memory is left as it was found, because
   // this port has never read what is in it and has no reason to
   // destroy it.
-  const uint32_t ucdOffset = 32, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
+  const uint32_t ucdOffset = 256, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
   /* nio run-491: what the controller says about itself, read before the

@@ -78,7 +78,7 @@ on:
           (run-393: "The job was not acquired by Runner of type hosted even
           after multiple attempts").
         required: false
-        default: "macos-15"
+        default: "macos-26"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -174,7 +174,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
   cancel-in-progress: false
 
 env:
@@ -188,21 +188,12 @@ defaults:
 
 jobs:
   kernel:
-    # macos-15-intel is the arm64 image with the Xcode 26 line the build is developed
-    # against; upstream pins it and pins the Xcode version, and the reason it
-    # gives is that macos-15's clang rejects the warning options the build
-    # passes with -Werror. The Intel image stays available as a fallback for a
-    # machine that cannot reach the arm64 one, and the Xcode is pinned there
-    # too: "auto" picks whatever the image carries, and that is how this build
-    # ended up on a clang that its own tree does not compile with.
-    #
-    # macos-15 is the same architecture and the same build, so it is the second
-    # choice when the arm64 pool is too busy to hand out a runner. The two
-    # images sit in different capacity pools, which is the point: run-393
-    # waited for a macos-15 runner, was cancelled before its first step, and
-    # said so -- "The job was not acquired by Runner of type hosted even after
-    # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15' }}
+    # macos-26 is the arm64 image, the architecture UniXNU develops against,
+    # and the one the owner asked for on 2026-11-18: the macos-15 pool had
+    # begun to queue, so the default moved here. The flag-matching step below
+    # trims the -Wno-* options this image's clang does not know, which is what
+    # stopped the older macos-26 builds from producing a kernel.
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
