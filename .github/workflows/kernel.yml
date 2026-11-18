@@ -8,8 +8,13 @@ name: Build nio kernel
 # cross-compiles to arm64-apple-ios no matter whether it runs on x86_64 or
 # arm64.
 #
-# The runner is macos-15-intel (x86_64), and the Xcode is the newest the
-# image carries.  The product is the same either way.
+# The runner is macos-15, which is the arm64 image and the architecture
+# upstream develops against.  The owner asked for the arm64 pair on
+# 2026-11-18: macos-15 and macos-26 are the same arm64 pool and queue
+# together, and macos-26 is the image that failed before run 23, so
+# macos-15 is the one of the pair that has not been shown to fail.
+# macos-15-intel (x86_64) stays available by name for a machine that
+# cannot reach an arm64 runner.  The product is the same either way.
 #
 # Upstream develops against macos-26 (arm64) with the Xcode 26 line, and it
 # says so in its own workflow:
@@ -73,7 +78,7 @@ on:
           (run-393: "The job was not acquired by Runner of type hosted even
           after multiple attempts").
         required: false
-        default: "macos-15-intel"
+        default: "macos-15"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -169,7 +174,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15-intel' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15' }}
   cancel-in-progress: false
 
 env:
@@ -197,7 +202,7 @@ jobs:
     # waited for a macos-15 runner, was cancelled before its first step, and
     # said so -- "The job was not acquired by Runner of type hosted even after
     # multiple attempts" -- which reads like a broken tree and is not one.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device

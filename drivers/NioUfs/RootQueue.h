@@ -1,13 +1,37 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // Root queue takeover; shared with the host fault-injection harness.
+
+/* nio: the waits in this driver do not use the kernel's delay, and do not
+ * use its clock.
+ *
+ * IODelay() ends in machine_delay_until(), which spins on
+ * mach_absolute_time() and waits for an event with WFE.  This board's
+ * timebase is advanced by the timer interrupt, and the matching path runs
+ * with the interrupt off, so that wait does not end.  Run 469 stopped at a
+ * IODelay; run 476 stopped at another one, in the transfer poll's own
+ * pause -- the same fault in a second place.
+ *
+ * So the wait is a read of the controller's own status register.  The read
+ * is slow enough to be a pause, it needs no clock and no interrupt, and
+ * read32() is one of the primitives the host harness replaces, so the
+ * harness keeps working unchanged.
+ */
+static inline void ufsWaitTicks (unsigned reads)
+{
+  volatile uint32_t sink = 0;
+  for (unsigned index = 0; index < reads; ++index) sink += read32 (gHost.hc, 0x30);
+  (void) sink;
+}
+
 static bool hostWaitRegister (unsigned offset, uint32_t mask, uint32_t value)
 {
-  uint64_t deadline;
-  clock_interval_to_deadline (100, kMillisecondScale, &deadline);
-  do {
+  /* nio: counted, not timed, for the reason ufsWaitTicks() gives.  A
+   * hundred thousand reads is about a hundred milliseconds of wall time,
+   * which is what the timed version waited for. */
+  for (unsigned spins = 0; spins < 100000; ++spins) {
     if ((read32 (gHost.hc, offset) & mask) == value) return true;
-    IODelay (10);
-  } while (mach_absolute_time () < deadline);
+    ufsWaitTicks (10);
+  }
   return false;
 }
 

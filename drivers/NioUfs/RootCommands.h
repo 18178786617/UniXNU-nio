@@ -12,7 +12,9 @@ struct HardwareTransferPort {
     return *reinterpret_cast<volatile uint32_t *> (gHost.virt + 8) & 0xff;
   }
   bool expired () { return mach_absolute_time () >= deadline; }
-  void delay () { IODelay (2); }
+  /* nio: the poll's pause is a read of the controller's status, not a
+   * delay from the kernel -- ufsWaitTicks() in RootQueue.h says why. */
+  void delay () { ufsWaitTicks (2); }
 };
 
 static void putBe32 (uint8_t *at, uint32_t value)
@@ -311,7 +313,7 @@ static bool hostLock (void)
   }
   for (unsigned tries = 0; tries < 200000; tries++) {
     if (IOLockTryLock (gHost.lock)) return true;
-    IODelay (1);
+    ufsWaitTicks (1);
   }
   return false;
 }
