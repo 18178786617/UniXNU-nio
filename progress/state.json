@@ -261,7 +261,8 @@
   "★★★ 11-17 18:20 配置线程判决：configThread() 的三条失败路径（new / init / kernel_thread_start）全是 continue，且外层是 do/while(false) ⇒ 三种失败**全部无声**，面板上什么都看不到。这解释了 456 的'CFG enq 有、CFG wait 无'。",
   "★★ series 文件是 CRLF ⇒ shell 里读它必须剥掉行尾的 \\r（p=${p%$'\\r'}），否则路径拼错、全部补丁静默跳过。",
   "★ Python 脚本改 CRLF 源文件时：读用 newline=''，写时按行处理、只补 \\r（join 会补 \\n），多补一次行尾会写出 \\r\\r\\n，diff 里会变成一堆空行。",
-  "★★★★★ 2026-11-18 11:30 ★★★★★ **483 已推（7c7e5e7）**：CI 已启动，auto-loop 已重启（受管后台，40 轮/24 小时，从 482 起）。\n  · ★★ 481 真机快照（本轮读出，是至今最硬的一条证据）：\n      phys=9b248000 hcs=00000010->0000010f\n      is=00000000 db=00000000 rsr=00000001 ba=9b248000 bau=00000000 ie=00000000\n      ⇒ 接管段【全部通过】：UTRLRDY(bit1) 已置、请求列表在跑(RSR=1)、无错误状态(IS=0)、门铃干净(DB=0)。\n      ⇒ ★★ 481 的 panic 打在 waitSet 之后 ⇒ stop-queue / SMMU bypass / 写 UTRLBA / 清 IS / 起列表 / 等 UTRLRDY 这六条写都成功。\n  · ★★ 482（level 4，TEST UNIT READY + READ CAPACITY）停在同一位置之后且【无 panic】⇒ 卡在命令段；轮询有界却没走到 panic ⇒ 不是等待不结束，是总线读写被楔住。\n  · ★★★ 483 的改动（两件）：\n      ① adopt 路径每一步加带序号的帧缓冲直写探针（A enter / B stopped / C smmu / D ba / E status / F started / G ready，命令段 H utrd / H2 ucd / I doorbell written / J poll done）\n         ⇒ 一次启动即可把卡点定到具体那一条读写；且 request descriptor 的八个字原样打印，可在真机屏幕上核对物理地址。\n      ② UCD 从 4096 挪回 128（与请求描述符同一 4 KiB 页）⇒ 这一项在 480 只改在 root 路径，adopt 路径一直是 4096，两种排布从未在本板对比过。\n         偏移自洽已核：UCD@128 / rsp@640 / prdt@1152 仍在首页内，data@8192 在第二页。\n  · ★★ 另核出一条长期被当成本地事实的事：refs/ShengUfs 是【SM8550】驱动，nio 是【SM8250】⇒ “唯一硬件验证过的配方”实际来自另一颗 SoC。\n  · ★★ 行尾坑（第三次踩）：仓库 blob 存 CRLF 且 core.autocrlf=true ⇒ 任何提交都会变成全文件重写。\n      正确做法：git -c core.autocrlf=false -c core.safecrlf=false add/commit，diff 才收窄到真实改动（本次 48 增 8 删）。"
+  "★★★★★ 2026-11-18 11:30 ★★★★★ **483 已推（7c7e5e7）**：CI 已启动，auto-loop 已重启（受管后台，40 轮/24 小时，从 482 起）。\n  · ★★ 481 真机快照（本轮读出，是至今最硬的一条证据）：\n      phys=9b248000 hcs=00000010->0000010f\n      is=00000000 db=00000000 rsr=00000001 ba=9b248000 bau=00000000 ie=00000000\n      ⇒ 接管段【全部通过】：UTRLRDY(bit1) 已置、请求列表在跑(RSR=1)、无错误状态(IS=0)、门铃干净(DB=0)。\n      ⇒ ★★ 481 的 panic 打在 waitSet 之后 ⇒ stop-queue / SMMU bypass / 写 UTRLBA / 清 IS / 起列表 / 等 UTRLRDY 这六条写都成功。\n  · ★★ 482（level 4，TEST UNIT READY + READ CAPACITY）停在同一位置之后且【无 panic】⇒ 卡在命令段；轮询有界却没走到 panic ⇒ 不是等待不结束，是总线读写被楔住。\n  · ★★★ 483 的改动（两件）：\n      ① adopt 路径每一步加带序号的帧缓冲直写探针（A enter / B stopped / C smmu / D ba / E status / F started / G ready，命令段 H utrd / H2 ucd / I doorbell written / J poll done）\n         ⇒ 一次启动即可把卡点定到具体那一条读写；且 request descriptor 的八个字原样打印，可在真机屏幕上核对物理地址。\n      ② UCD 从 4096 挪回 128（与请求描述符同一 4 KiB 页）⇒ 这一项在 480 只改在 root 路径，adopt 路径一直是 4096，两种排布从未在本板对比过。\n         偏移自洽已核：UCD@128 / rsp@640 / prdt@1152 仍在首页内，data@8192 在第二页。\n  · ★★ 另核出一条长期被当成本地事实的事：refs/ShengUfs 是【SM8550】驱动，nio 是【SM8250】⇒ “唯一硬件验证过的配方”实际来自另一颗 SoC。\n  · ★★ 行尾坑（第三次踩）：仓库 blob 存 CRLF 且 core.autocrlf=true ⇒ 任何提交都会变成全文件重写。\n      正确做法：git -c core.autocrlf=false -c core.safecrlf=false add/commit，diff 才收窄到真实改动（本次 48 增 8 删）。",
+  "★★★★★ 2026-11-18 11:59 ★★★★★ **483 判读完毕 + 484 已推（918923c / 4133dc4）**：\n  · ★★★ 483 首次把卡点定位到一条写：A→G 七个探针全过，门铃前状态全健康（hcs=0000010f is=0 db=0 rsr=1 ba 读回正确），\n    但 【I doorbell written 与 J poll done 都没出现】⇒ 卡在 write32(hc,0x58,1) 这条写本身（fabric 死锁，不是等待不结束）。\n  · ★★ 找到同一控制器上跑通的参照：refs/ios-v60/shim/ufs.c（UFS_BASE=0x01d84000，与 nio 相同）。逐项对比唯一实质差异 =\n    dw0 缺 bit 24（Apple: [31:28] CT, [26:25] DD, [24] I；我们与两份 SM8550 配方都缺）⇒ 484 补上，两条路径都补。\n  · ★ 探针行过长会被行宽截断、尾部滚到屏幕上方 ⇒ 关键字段改打短行。\n  · ★ phys 每次启动不同（481=9b248000, 483=9b244000）⇒ 固件基址会变，映射跟着固件走是对的。\n  · ★ 行尾坑第二个受害者：RootCommands.h 原为 LF，被 918923c 存成 CRLF ⇒ 4133dc4 单独修回。"
  ],
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
@@ -658,5 +659,40 @@
   "CI 出 483 → auto-loop 自动打包刷机 → 读面板 → 按上表下结论。",
   "若结论是「卡在 write32(0x58,1)」：下一步应查 UFS HBA 的 UTRLCLR/UTRLDB 语义与 mcq 模式（SM8250 HBA 与 SM8550 可能不同），以及 0x5c(UTRLCLR) 是否要先清。",
   "若结论是「门铃通了」：立刻把 root 路径（hostBringUp）改成与 adopt 相同的接管顺序，root 路径的问题就是它独有的 bring-up。"
- ]
+ ],
+ "★ 483 判读结果（真机照片）": {
+  "★★ 探针全部按预期打印（这是本项目第一次把卡点定位到一条写）": [
+   "1| adopt A enter phys=9b244000 hcs=0000010f",
+   "2| adopt B stopped rsr=00000000",
+   "nio: SMMU sCR0=270406 globally bypassed, stream 60 needs no entry",
+   "3| adopt C smmu",
+   "4| adopt D ba written ba=9b244000 bau=00000000",
+   "5| adopt E status cleared",
+   "6| adopt F list started rsr=00000001 hcs=0000010f",
+   "7| adopt G list ready hcs=0000010f",
+   "9| adopt cmd H2 ucd 01 00 00 00 hcs=0000010f is=00000000 db=00000000 rsr=00000001 ba=9b244000 bau=00000000",
+   "（8| 的长行换行后滚到屏幕上方，其内容是 00 rsr=00000001 ba=9b244000 bau=00000000）"
+  ],
+  "★★ 判决": [
+   "★ 接管段【全部通过】：A→G 七个探针齐全 ⇒ 映射/停列表/SMMU/写 UTRLBA/清 IS/起列表/等 UTRLRDY 都成功",
+   "★ 门铃前状态全健康：hcs=0000010f（DP=1、UTRLRDY=1）、is=00000000（无错误）、db=00000000（门铃干净）、rsr=00000001（列表在跑）、ba 读回 = 写的值",
+   "★★★ 【I doorbell written 与 J poll done 都没出现】⇒ 卡在 write32(hc, 0x58, 1) 这一条写本身",
+   "★ 注意：门铃写是无返回的 store，它不返回 = fabric 已经在里面死锁；不是等待不结束"
+  ],
+  "★★ 另一条事实": [
+   "★ phys 从 481 的 9b248000 变成 483 的 9b244000 ⇒ 固件的请求列表基址每次启动不同 ⇒ 我们的 16 KiB 映射跟着固件走是对的",
+   "★★ 长探针行会被屏幕行宽截断，尾部滚到屏幕上方 ⇒ 关键字段必须单独打短行"
+  ],
+  "★ 484 依据与改动": {
+   "★★ 找到在【同一控制器】上跑通的参照实现": "refs/ios-v60/shim/ufs.c：UFS_BASE = 0x01d84000（与 nio 的 UFS_HC_BASE 完全相同，注释写 sweet live FDT）",
+   "★★ 逐项对比后唯一的实质差异": "dw0：Apple 写 (1<<28) | ((len?2:0)<<25) | (1<<24)；我们与两份 SM8550 配方都写 0x10000000 | (dir<<25)，缺 bit 24。Apple 的字段名：[31:28] CT, [26:25] DD, [24] I",
+   "★ 484 改动": "① 两条路径的 dw0 都补 bit 24（NioUfs.cpp 的 adopt 路径 + RootCommands.h 的 root 路径）② dw0 单独打一行短行（8| 的长行读不到）",
+   "★ 顺带修掉行尾坑的第二个受害者": "RootCommands.h 在 HEAD 原本是 LF，被上一个提交存成 CRLF ⇒ 单独提交修回（4133dc4）"
+  },
+  "★ 484 判读表": [
+   "有 I 无 J  ⇒ 补 bit24 无效 ⇒ 门铃写挂死与描述符内容无关 ⇒ 下一步查 UTRLCLR(0x5c) 是否要先清、以及 MCQ 模式",
+   "有 I 有 J 且 done=1 ⇒ ★★★ 门铃与控制器应答都通 ⇒ root 路径照抄 adopt 的接管顺序",
+   "dw0 行显示 15000000（不是 11000000）⇒ bit24 已进描述符 ⇒ 若仍卡，则 bit24 不是根因"
+  ]
+ }
 }
