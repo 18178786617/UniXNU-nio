@@ -2650,6 +2650,13 @@ static void mediaReportThread (void *, wait_result_t)
 bool NioUfs::start (IOService *provider)
 {
   printf ("nio: ufs driver start enter\n");
+  // The board's round number, so that a screen says which revision of this
+  // driver produced it.  Two rounds once built the same code under two
+  // different numbers -- the build numbers its rounds on GitHub's run
+  // counter, which counts every workflow on the repository and not only
+  // the ones that changed the driver -- and the two were told apart by
+  // the shape of the probe lines instead of by anything that said so.
+  printf ("nio: ufs driver round %d\n", NIO_UFS_ROUND);
   unsigned probe = 0, rootMode = 0;
   PE_parse_boot_argn ("native-ufs-probe", &probe, sizeof (probe));
   PE_parse_boot_argn ("native-ufs-root", &rootMode, sizeof (rootMode));

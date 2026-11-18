@@ -20,6 +20,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = [
     "drivers/NioUfs/NioUfs.cpp",
+    "drivers/NioUfs/GccUfs.h",
     "drivers/NioUfs/RootQueue.h",
     "drivers/NioUfs/RootCommands.h",
 ]

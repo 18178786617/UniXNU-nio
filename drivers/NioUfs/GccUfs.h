@@ -9,6 +9,18 @@
 #ifndef NIO_UFS_GCC_UFS_H
 #define NIO_UFS_GCC_UFS_H
 
+// The board's round number: this driver's own count of the revisions that
+// changed it.  The driver prints it when it starts, so a screen says which
+// revision produced it.
+//
+// The build numbers its rounds on GitHub's run counter, and that counter
+// counts every workflow on the repository, not only the ones that changed
+// this driver.  Two rounds once carried the same code under two different
+// numbers, and the two were told apart by the shape of their probe lines
+// rather than by anything on the screen that said so.  The number here
+// belongs to the driver, so it moves only when the driver does.
+#define NIO_UFS_ROUND                  488
+
 // Physical windows from the kona device tree
 // (clock-controller@100000, ufshc@1d84000). The UFS host controller and the
 // GCC sit at the same addresses they do on SM8550 -- only the register
