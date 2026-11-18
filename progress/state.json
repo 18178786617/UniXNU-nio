@@ -627,5 +627,36 @@
   "★ 设计": "★ **在 probe=12 分支里先跑唯一验证过的配方 adoptAndRead(4)（TEST UNIT READY + READ CAPACITY），再跑 startRoot** ⇒ 一轮两信息",
   "★ 481（8db3d69，已在跑）": "level 3 = '检测请求列表被替换' ⇒ 会 panic，但 ★ **panic 消息带控制器寄存器快照**（phys / hcs→hcs / is / db / rsr / ba / bau / ie）⇒ ★ **免费的状态信息**",
   "★ 482（ceed559）": "level 4 = 真正发读命令 ⇒ ★ 若它完成 ⇒ **门铃在这块板子上能响 ⇒ 根因是 root 的 bringup（SMMU bypass 等）**；★ 若它也 panic 'first command did not complete' ⇒ ⇒ **写挂与驱动无关 ⇒ 墙在驱动之下**"
- }
+ },
+ "★ 483 判读表（一次启动定位卡点）": [
+  "探针全部走 nioUfsSay → 帧缓冲直写，不经 console 环；所以面板上出现哪一行 = 卡点就在那行之后。",
+  "",
+  "A enter            → 映射成功，进入 adopt",
+  "B stopped          → 请求列表已停（RSR 打印值）",
+  "C smmu             → SMMU 已处理",
+  "D ba written       → UTRLBA/UTRLBAU 已写入并读回（ba/bau 必须 = 9b248000 / 0）",
+  "E status cleared   → IS 已清",
+  "F list started     → RSR=1，HCS 打印值",
+  "G list ready       → UTRLRDY 已置（HCS bit1）",
+  "H utrd / H2 ucd    → 门铃前的最后状态：UTRD 八个字 + UCD 头四字节 + hcs/is/db/rsr/ba/bau",
+  "I doorbell written → ★ 门铃写**返回了**（写本身没问题）",
+  "J poll done        → ★ 轮询结束（done=1 表示控制器应答了）",
+  "",
+  "★★ 判读规则：",
+  "  · 只到 G 就没了      → 卡在起列表之后、门铃之前（查 H 行的 UTRD 内容有没有被写坏）",
+  "  · 有 H 无 I          → ★★ 卡在 write32(0x58,1) 这一条写上（门铃写挂死 fabric，与 root 路径同症）",
+  "  · 有 I 无 J          → ★★ 门铃写返回了，但随后的 read32(0x58) 挂住（读挂死）",
+  "  · 有 I 有 J，done=1 → ★★★ 门铃与轮询都通！控制器应答了 ⇒ 门铃可用，问题在命令/响应内容",
+  "  · 有 I 有 J，done=0 → 门铃可写可读但控制器不置位（超时），查 is 里的错误位",
+  "",
+  "★ H 行的 UTRD 八个字要核对：",
+  "  w0=0x10000000|dir<<25（方向）w2=0x0f（OCS 未完成）w4/w5=UCD 物理地址 w6=响应长度|偏移 w7=PRD 数量|偏移",
+  "  w4/w5 高 32 位必须是 0（9b248000 在 4 GiB 以下）；若出现非 0 说明写歪了。",
+  "  ★ 481 快照里 UCD 物理地址应是 9b249080（9b248000+128）；若显示 9b249000 说明还是旧的 4096 排布。"
+ ],
+ "★ 483 待办": [
+  "CI 出 483 → auto-loop 自动打包刷机 → 读面板 → 按上表下结论。",
+  "若结论是「卡在 write32(0x58,1)」：下一步应查 UFS HBA 的 UTRLCLR/UTRLDB 语义与 mcq 模式（SM8250 HBA 与 SM8550 可能不同），以及 0x5c(UTRLCLR) 是否要先清。",
+  "若结论是「门铃通了」：立刻把 root 路径（hostBringUp）改成与 adopt 相同的接管顺序，root 路径的问题就是它独有的 bring-up。"
+ ]
 }
