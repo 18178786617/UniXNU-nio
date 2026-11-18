@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 09:15 ★★★★★ **run-479 定位到一条指令**（c907f94 修）：\n  · ★ NOP OUT 跳过成功（8| skipped）⇒ 越过 run 65/66/467 的老卡点\n  · ★ 走到 power query（9|）⇒ ★★ 首次越过历史卡点\n  · ★★★ **探针：'doorbell about to ring' 有、'doorbell rang' 无** ⇒ ★★ **卡在 hostWrite(0x58,1)**\n  · ★★★ 这就是 run-65/66 的老血案（'ringing the first doorbell hung the fabric, twice'）\n  · ★★ 480：kUcdOffset 128 → 4096（★ 唯一差别：UCD 在请求列表页 vs 下一页；两条路径的 UTRD 字段一字不差；验证过的 adoptAndRead 用 4096）\n  · ★★★ 全自动已通：auto-loop 自动打包+自动刷机（479 于 09:03 自动刷上）；**唯一边界：设备跑着我们自己的内核时 adb/fastboot 都不可达 ⇒ 需长按电源键重启一次**",
     "★★★★★ 2026-11-18 08:20 ★★★★★ run-476 里程碑 + 478 根治（9a3dfba）：\n  · ★ 476 过了 469 的卡点（poll 0 got 出现）⇒ 470 的修复生效\n  · ★ 时钟是活的（clock hw=19008 kernel=19003）⇒ 更正：根因不是时基冻结，是 WFE 在关中断上下文睡死\n  · ★ 卡在 nop-out begin 之后 ⇒ RootCommands.h:15 的 IODelay(2)（poll 的 pause）—— 我上次漏了共享头\n  · ★ 478 根治：等待改读控制器寄存器 + 计数式等待 + 轮询上限兜底 ⇒ NOP OUT 必定超时返回并走 UIC 恢复\n  · ★ 477 在真机上（已刷）；QEMU 的 ramoops 仍全零 ⇒ QEMU 放弃\n  · ★ CI 默认 runner 改回 macos-15（arm64）（机主要求；15 与 26 同池，26 有失败史）",
     "★★★★★ 2026-11-18 02:50 ★★★★ **QEMU 画面全白的原因找到并已修（477 / 427d608）**：\n  · ★ QEMU 用 board.toml 的 kernel_args，**真机用 unixnu.toml 的 args（合并后）** ⇒ ★ **合并后那份含 rd=md0（根卷），board.toml 那份不含** ⇒ QEMU 里内核无根可挂 ⇒ 画面全白\n  · ★ 477 起 QEMU 用与真机完全同一份 cmdline ⇒ **QEMU 的结论可直接外推到真机**\n  · merge-kernel-args.py 进仓 + --print 模式 ⇒ **命令行只有一处定义**",
     "★★★★★ 2026-11-18 02:40 ★★★★★ 机主睡觉 ⇒ 挂机自主推进：tools/auto-loop.sh 后台跑（12 轮/8 小时，从 476 起）",
@@ -582,5 +583,26 @@
       "★ 选 macos-15": "arm64 里未被证明失败的那个；macos-15-intel 仍可按名字指定"
     },
     "改动": "9a3dfba：default / group / runs-on 三处都改成 macos-15"
+  },
+  "★ 里程碑_run-479_定位到doorbell": {
+    "★ 面板": [
+      "7| ufs bu poll 0 got dp=1 hcs=0000010f        0514",
+      "8| ufs bu nop-out skipped dp=1 hcs=0000010f   0515  ← ★ 跳过成功",
+      "9| ufs bu power-query dp=1 hcs=0000010f      0516  ← ★★ 越过历史卡点",
+      "10| ufs bu doorbell about to ring              0520  ← ★★ 探针：ring 之前"
+    ],
+    "★★ 三个判读": [
+      "① ★★ NOP OUT 跳过成功 ⇒ 越过了 run 65/66/467 的老卡点",
+      "② ★★★ **有 about to ring、没有 rang** ⇒ ★★ **卡在 hostWrite(0x58,1) 这一条写指令里** ⇒ 不是读不回来、不是等待不结束 ⇒ **是写下去就不回来**",
+      "③ ★★★ 这正是 run-65/66 的老血案（注释白纸黑字：'ringing the first doorbell hung the fabric, twice'）⇒ ★★ **同一处，四百轮没解决**"
+    ],
+    "★ 480 的假设（高置信度）": {
+      "对照": "两条会 ring doorbell 的配方：adoptAndRead（run-280 硬件验证过）与 root 路径（hostSubmit）",
+      "★ 字段一字不差": "words[0]↔utrd+0、words[2]↔+8、words[4/5]↔+16/20(ucdPhys)、words[6]↔+24、words[7]↔+28 ⇒ cacheClean/doorbell 写/轮询也都一样",
+      "★ 唯一差别": "★ **UCD（命令块）的位置**：root 路径 kUcdOffset=**128**（与请求列表同页，run-281 改的，理由是'DMA 只在列表那一页被证明可达'，但**从未在 root 路径上验证**）vs adoptAndRead 的 **4096**（列表下一页）",
+      "★ 改动": "kUcdOffset 128 → 4096（UCD 区 [4096,5664) 与数据区 [8192,…) 不冲突，窗口仍 16 KiB）",
+      "★ 若 480 过了": "⇒ 根因锁定 ⇒ 直接走向读根卷布局（P1 的第 5 步）",
+      "★ 若 480 仍挂": "⇒ ⇒ 连验证过的配方也会挂 ⇒ **是映射/硬件层**（SMMU / 时钟 / 电源 / fabric）"
+    }
   }
 }
