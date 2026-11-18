@@ -269,7 +269,8 @@
   "★★★★★ 2026-11-18 13:52 ★★★★★ **489 失败已定位修复（339713b）+ 490 已挂后台 + 工作方式纠正**：\n  · ★★★ 489 失败原因：488 的改动在 UfsResult result 声明之前就 return result（832/839 行 vs 声明 848 行）⇒ 编译错误。已修并验证。\n  · ★★ 本机没有能编 XNU 的编译器；两次尝试写本地检查器都误报，已全部删除（半可靠的检查器比没有更危险）。\n  · ★★★ 工作方式（机主要求，最高优先级）：一次只推一个 CI；每个 CI 一个后台；成功→刷机→结束，失败→拉日志→结束；不常驻后台。\n  · ★ 490 已挂后台（task UoM6kp），成功则自动打包刷机。",
   "★★★★★ 2026-11-18 14:02 ★★★★★ **490 判决 + 491 已推（4230da5）**：\n  · ★★★ 490：描述符八字全对（bad=0）、缓存与内存一致（pbad=0）⇒ 排除描述符与 cacheClean 两个方向；门铃写仍挂死 ⇒ 卡点在控制器内部。\n  · ★★ 排除清单：SMMU（全局 bypass）、HCE（一直置位）、总线死（写 0 成功）、门铃前状态（全健康）。\n  · ★★★ 491：读 EDK2（真机跑过的 UfsDxe.h）发现 0x64/UTRLCC 与五个 UIC 错误码寄存器（0x38..0x48）我们从没读过 ⇒ 在门铃前读出；\n    并把门铃写与随后的读拆成两行，以区分『写挂死』与『读挂死』。\n  · ★ 491 已挂后台（task Y80wgk，CI 编号 491）。",
   "★★★★★ 2026-11-18 14:24 ★★★★★ **491 判决 + 492 已推（be176ee）**：\n  · ★★★ 491 判决一：【门铃写本身挂死】—— 拆成两行后没有 I1 written ⇒ write32(0x58,1) 不返回（首次与『读挂死』分开）。\n  · ★★★ 491 判决二：【探针位置错了】—— 行号 1,2,3（CAP/错误码）不在屏幕内 ⇒ 屏幕约 20 行，recipe 开头的行会被 bootloader 盖住。\n  · ★★ 492：把 CAP/MCQCAP/UTRLCC/五个 UIC 错误码【移到门铃前】，轮次号打进 H0 行，删两行腾位置。\n  · ★ 492 已挂后台（task Vt4YPg，CI 编号 492）。",
-  "★★★★★ 2026-11-18 14:51 ★★★★★ **492 判决 + 493 已推（1ff6209）**：\n  · ★★★ 492：cap=1587031f ⇒ 不支持 MCQ（bit30=0、slots=0x1F、mcq=0）⇒ MCQ 路排除；urlcc=1 ⇒ 列表只有一个 UTRD ⇒ UCD 不压数组；err 全 0 ⇒ link 层无错。\n  · ★★★★★ 【找到根因方向】：EDK2 在写门铃前写 VS_UTRL_NEXUS_TYPE（COMMAND ⇒ 0xFFFFFFFF），我们从没写过 ⇒ 控制器按『查询』解析 UTRD。\n    VS 窗口 = UFS_BASE + 0x1100 ⇒ VS_UTRL_NEXUS_TYPE @ 0x1d85140，落在已映射的 0x3000 内。\n  · ★★ 493 的写是【自适应】的：读到的值 ∈ {0, 0xFFFFFFFF} 才写，否则不动 ⇒ 地址不对也不会破坏东西。\n  · ★ 493 已挂后台（task SfY9zY，CI 编号 493）。"
+  "★★★★★ 2026-11-18 14:51 ★★★★★ **492 判决 + 493 已推（1ff6209）**：\n  · ★★★ 492：cap=1587031f ⇒ 不支持 MCQ（bit30=0、slots=0x1F、mcq=0）⇒ MCQ 路排除；urlcc=1 ⇒ 列表只有一个 UTRD ⇒ UCD 不压数组；err 全 0 ⇒ link 层无错。\n  · ★★★★★ 【找到根因方向】：EDK2 在写门铃前写 VS_UTRL_NEXUS_TYPE（COMMAND ⇒ 0xFFFFFFFF），我们从没写过 ⇒ 控制器按『查询』解析 UTRD。\n    VS 窗口 = UFS_BASE + 0x1100 ⇒ VS_UTRL_NEXUS_TYPE @ 0x1d85140，落在已映射的 0x3000 内。\n  · ★★ 493 的写是【自适应】的：读到的值 ∈ {0, 0xFFFFFFFF} 才写，否则不动 ⇒ 地址不对也不会破坏东西。\n  · ★ 493 已挂后台（task SfY9zY，CI 编号 493）。",
+  "★★★★★ 2026-11-18 15:14 ★★★★★ **493 判决 + 494 已推（00d6db8）**：\n  · ★★★ 493：写 VS_UTRL_NEXUS_TYPE 后读回仍是 0 ⇒ 该地址写不进去；DT 说 SM8250 的 UFS HBA 只有一个 12 KiB 窗口；米10（同 SoC，真机跑通）完全不碰 VS 寄存器 ⇒ nexus type 路断。\n  · ★★★★★ 【真正的根因方向】：米10 驱动注释说 UEFI 的 command descriptor 就在 UTRD 后面，且【控制器一次取 32 个】⇒ 我们把 UCD 放在 UTRLBA+128 正好落在那个区域 ⇒ 控制器把 command descriptor 当 UTRD 解析 ⇒ 去抓垃圾地址 ⇒ 挂死。\n  · ★★ 494：UCD 挪到 4096 + 打印 slot 0..7 的首字作证据。已挂后台（task xQlkiE，CI 编号 494）。"
  ],
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
@@ -1020,5 +1021,41 @@
   "★ 顺带读到的 clk= 是 VS_CLKSTOP_CTRL(0x11b0)，fh= 是 VS_FORCE_HCS(0x11b4)",
   "  · EDK2 初始化时写 VS_CLKSTOP_CTRL &= ~(1<<4) 解除时钟门控、VS_FORCE_HCS = 0x0DE0",
   "  · ★ 这两个值若与 EDK2 期望的不同，就是下一步的直接目标"
+ ],
+ "★★★★ 493 判决：VS 寄存器写不进去 ⇒ nexus type 路断；★ 494 找到真正的根因方向": [
+  "★★ 照片逐行（15:09 真机，CI 493）：",
+  "  10| nio: ufs H0c vs=00000000 00000000 clk=00000000 fh=00000000   0517",
+  "  11| nio: ufs H0d nexus set=00000000                                0518",
+  "  12| nio: ufs H dw0=11000000 dw2=0000000f prdt=01000000           0519",
+  "  13| nio: ufs H4 bad=00000000                                      0520",
+  "  14| nio: ufs H4b pbad=00000000 p0=11000000 p4=9b241080 p7=01000000  0521",
+  "  15| nio: ufs H5 db0=00000000                                      0522",
+  "  （无 I1 written ⇒ 门铃写仍挂死，第三次确认）",
+  "★★★ 判决一：VS_UTRL_NEXUS_TYPE 写不进去：",
+  "  · 我们写了 0xFFFFFFFF 到 0x1140，【读回仍是 0x00000000】",
+  "  · ⇒ 该地址在 nio 上要么只读、要么根本不存在 ⇒ 【VS 基址假设不成立】",
+  "  · ★ 设备树：SM8250 的 UFS HBA 只有【一个】窗口 reg = <0 0x01d84000 0 0x3000>，没有独立 VS 窗口",
+  "  · ★★ 米10 的驱动（同一颗 SM8250、真机跑通）完全不碰任何 VS 寄存器 ⇒ SM8250 上不需要 nexus type",
+  "  · ⇒ 【nexus type 这条路断了】，且 493 的自适应保护没造成任何破坏（写不进去=没副作用）",
+  "★★★★★ 判决二：★ 找到真正的根因方向（米10 驱动的文件头注释）：",
+  "  ★★★ 原文：",
+  "    Qualcomm's UFSDxe reads synchronously on core 0, and its transfer request list has room for",
+  "     one request only (UTRLBA points at a single descriptor, with UFSDxe's command descriptor",
+  "     right behind it, where slots 8.. would be).  The controller takes 32 at once.",
+  "  · ★★ 两个关键事实：① UEFI 的 command descriptor 就在 UTRD【后面】；② 【控制器一次取 32 个】",
+  "  · ★★★ 而我们把 UCD 放在 UTRLBA + 128 字节 ⇒ 【正好落在那个区域里】",
+  "  · ★★★ 后果推演：控制器按 UTRD 格式解析我们的 command descriptor ⇒",
+  "    它的首字是 command type（0x01）、第 4/5 字是地址 ⇒ 控制器被指向一个【从未被设计为可抓取】的地址 ⇒",
+  "    抓取挂死 ⇒ ★★★ 这与全部现象一致：描述符本身正确、cache 正确、link 无错、门铃写不返回",
+  "  · ★★★ 这也解释了 480 轮『UCD 挪到 4096 没解决』为何不矛盾：480 当时其它条件都还没对",
+  "★★★★★ 494 的改动（00d6db8）：",
+  "  ① UCD 从 128 挪到 4096（rsp@4608 prdt@5120 data@8192，自洽已核：UCD 区结束 5136 < 8192）",
+  "  ② 新增两行证据探针：打印 slot 0..7 的首字（H0d/H0e slots=）⇒ 若某个 slot 的首字不是我们的描述符，那里就有东西",
+  "  ③ 撤掉 493 的 VS 写（已证明该地址写不进去，且米10 不需要它）",
+  "★ 494 判读表：",
+  "  ★★★ 【出现 I1 written】⇒ UCD 位置就是根因 ⇒ 门铃通了！接下来：把 root 路径的 UCD 也挪到同一处 + 按米10 的顺序完整接管",
+  "  · H0d/H0e 的 slots= 里若 slot1..7 非零 ⇒ 那里是 UEFI 留下的 command descriptor（证实假设）",
+  "  · 若 slots 除 slot0 外全 0 ⇒ UEFI 那块已被我们清零（zero32 清了 16 KiB）⇒ 假设需再修正",
+  "  · 仍无 I1 ⇒ UCD 位置不是根因，下一步：按米10 的完整接管顺序走（它写自己的列表 + loader 交还机制）"
  ]
 }
