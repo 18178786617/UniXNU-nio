@@ -2661,6 +2661,28 @@ bool NioUfs::start (IOService *provider)
     return true;
   }
   if (probe == 12) {
+    /* nio run-481: the recipe that was validated on hardware runs first.
+     *
+     * Runs 476 to 480 all stopped in the same write, the one that starts
+     * the request list, and the report before it was written while the
+     * report after it was not.  The command block's page was moved back to
+     * where the validated recipe keeps it and the stop did not move, so
+     * the two recipes are now alike in every way that can be compared
+     * from here: the request descriptor, the cache handling, the doorbell
+     * write, the mapping of the sixteen kilobytes.
+     *
+     * What is left to differ is the root path's own bring-up, which the
+     * validated recipe does not do: it takes the controller over as the
+     * firmware left it.  So the validated recipe is run first here, and
+     * the panel says whether the doorbell can be rung at all on this
+     * board.  If it can, the root path's bring-up is what broke it; if it
+     * cannot, then the write hangs whatever the driver does with it, and
+     * the wall is below the driver.
+     *
+     * It may also read: that is the first command this board has been
+     * asked to answer since the port began.
+     */
+    adoptAndRead (3);
     bool published = startRoot (provider);
     if (!published) {
       panic ("NATIVE_UFS media report: root start failed (%s; stage=%s, blocks=%u)",
