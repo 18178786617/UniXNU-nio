@@ -264,7 +264,8 @@
   "★★★★★ 2026-11-18 11:30 ★★★★★ **483 已推（7c7e5e7）**：CI 已启动，auto-loop 已重启（受管后台，40 轮/24 小时，从 482 起）。\n  · ★★ 481 真机快照（本轮读出，是至今最硬的一条证据）：\n      phys=9b248000 hcs=00000010->0000010f\n      is=00000000 db=00000000 rsr=00000001 ba=9b248000 bau=00000000 ie=00000000\n      ⇒ 接管段【全部通过】：UTRLRDY(bit1) 已置、请求列表在跑(RSR=1)、无错误状态(IS=0)、门铃干净(DB=0)。\n      ⇒ ★★ 481 的 panic 打在 waitSet 之后 ⇒ stop-queue / SMMU bypass / 写 UTRLBA / 清 IS / 起列表 / 等 UTRLRDY 这六条写都成功。\n  · ★★ 482（level 4，TEST UNIT READY + READ CAPACITY）停在同一位置之后且【无 panic】⇒ 卡在命令段；轮询有界却没走到 panic ⇒ 不是等待不结束，是总线读写被楔住。\n  · ★★★ 483 的改动（两件）：\n      ① adopt 路径每一步加带序号的帧缓冲直写探针（A enter / B stopped / C smmu / D ba / E status / F started / G ready，命令段 H utrd / H2 ucd / I doorbell written / J poll done）\n         ⇒ 一次启动即可把卡点定到具体那一条读写；且 request descriptor 的八个字原样打印，可在真机屏幕上核对物理地址。\n      ② UCD 从 4096 挪回 128（与请求描述符同一 4 KiB 页）⇒ 这一项在 480 只改在 root 路径，adopt 路径一直是 4096，两种排布从未在本板对比过。\n         偏移自洽已核：UCD@128 / rsp@640 / prdt@1152 仍在首页内，data@8192 在第二页。\n  · ★★ 另核出一条长期被当成本地事实的事：refs/ShengUfs 是【SM8550】驱动，nio 是【SM8250】⇒ “唯一硬件验证过的配方”实际来自另一颗 SoC。\n  · ★★ 行尾坑（第三次踩）：仓库 blob 存 CRLF 且 core.autocrlf=true ⇒ 任何提交都会变成全文件重写。\n      正确做法：git -c core.autocrlf=false -c core.safecrlf=false add/commit，diff 才收窄到真实改动（本次 48 增 8 删）。",
   "★★★★★ 2026-11-18 11:59 ★★★★★ **483 判读完毕 + 484 已推（918923c / 4133dc4）**：\n  · ★★★ 483 首次把卡点定位到一条写：A→G 七个探针全过，门铃前状态全健康（hcs=0000010f is=0 db=0 rsr=1 ba 读回正确），\n    但 【I doorbell written 与 J poll done 都没出现】⇒ 卡在 write32(hc,0x58,1) 这条写本身（fabric 死锁，不是等待不结束）。\n  · ★★ 找到同一控制器上跑通的参照：refs/ios-v60/shim/ufs.c（UFS_BASE=0x01d84000，与 nio 相同）。逐项对比唯一实质差异 =\n    dw0 缺 bit 24（Apple: [31:28] CT, [26:25] DD, [24] I；我们与两份 SM8550 配方都缺）⇒ 484 补上，两条路径都补。\n  · ★ 探针行过长会被行宽截断、尾部滚到屏幕上方 ⇒ 关键字段改打短行。\n  · ★ phys 每次启动不同（481=9b248000, 483=9b244000）⇒ 固件基址会变，映射跟着固件走是对的。\n  · ★ 行尾坑第二个受害者：RootCommands.h 原为 LF，被 918923c 存成 CRLF ⇒ 4133dc4 单独修回。",
   "★★★★★ 2026-11-18 12:27 ★★★★★ **484 判决 + 485/486 已推（e7abde9 / 6c46ead）**：\n  · ★★★ 484：补 dw0 的 bit 24 【没有用】，I/J 仍然缺失 ⇒ 卡点不变，门铃前状态全健康。\n  · ★★ 照片读法坑：长探针行折行会覆盖上一行 ⇒ 484 的 8| dw0 行是被自己的下一行覆盖的（不是没打印）。485 起全部短行。\n  · ★★★ 486 的依据：Apple（同一控制器跑通）明确要求 hce&1 才继续；而我们【从没写过 0x34】。\n    UEFI 退出前会 Disable 控制器 ⇒ 交接时 HCE 很可能为 0 ⇒ 门铃响时控制器不去抓描述符 ⇒ 写不回来。\n  · ★★ 485 的依据：门铃写前先写 0（不响、不要求抓取）再读回 ⇒ 二分『总线死』与『抓取坏』。\n  · ★★ 新事实：ba 落在 UEFI 的 DXE Heap(0x98900000+0x3300000) 且每次启动都变（9b248000/9b244000/9b243000）；\n    DT 的 reserved-memory 只有 splash_region，没保留这块 ⇒ 内核理论上可分配它。物理地址本身没错。\n  · ★ 新增 tools/fix-eol.py：把三个驱动文件的行尾恢复成 HEAD 的状态（NioUfs.cpp=CRLF、RootQueue.h=LF、RootCommands.h=LF），根治反复出现的全文件 diff。",
-  "★★★★★ 2026-11-18 12:50 ★★★★★ **轮次号错位已根治（494b4f0）+ 487 已刷上机**：\n  · ★★★ 本轮关键发现：照片显示的探针格式是 484 的；在 CI 产物二进制里验证，run-484 与 run-485 的 kernel.macho 【完全相同】。\n    原因：ci-kernel/run-<n> 用的是 GITHUB_RUN_NUMBER（数仓库上所有 workflow），≠ 我们的轮次号 ⇒ auto-loop 取编号最大分支 = 拿旧代码当新轮次。\n  · ★★ 真凶是 run-487（同时含 485 的 db0 二分 + 486 的 HCE 置位），已于 12:46:28 刷上手机。\n  · ★★★ 根治：驱动自带 NIO_UFS_ROUND=488 并打印 'nio: ufs driver round N'；auto-loop 改为按内核里的这行内容选轮次。\n  · ★★ 纪律：以后看照片先找 'nio: ufs driver round N'，不要靠探针形状反推版本。"
+  "★★★★★ 2026-11-18 12:50 ★★★★★ **轮次号错位已根治（494b4f0）+ 487 已刷上机**：\n  · ★★★ 本轮关键发现：照片显示的探针格式是 484 的；在 CI 产物二进制里验证，run-484 与 run-485 的 kernel.macho 【完全相同】。\n    原因：ci-kernel/run-<n> 用的是 GITHUB_RUN_NUMBER（数仓库上所有 workflow），≠ 我们的轮次号 ⇒ auto-loop 取编号最大分支 = 拿旧代码当新轮次。\n  · ★★ 真凶是 run-487（同时含 485 的 db0 二分 + 486 的 HCE 置位），已于 12:46:28 刷上手机。\n  · ★★★ 根治：驱动自带 NIO_UFS_ROUND=488 并打印 'nio: ufs driver round N'；auto-loop 改为按内核里的这行内容选轮次。\n  · ★★ 纪律：以后看照片先找 'nio: ufs driver round N'，不要靠探针形状反推版本。",
+  "★★★★★ 2026-11-18 13:05 ★★★★★ **487 判决（二分成功）+ 488 已推（f3d9909）**：\n  · ★★★ 487：写 0 到门铃【成功返回】⇒ 总线是活的 ⇒ 挂死在门铃触发的【抓取】上。486 的 HCE 假设【被证伪】（hce=00000001）。\n  · ★★ 与 Apple 逐字段机械比对：只有 prdt 不同；但【米10 hakios（同 SM8250，真机跑通）写法与我们一致】⇒ prdt 不是根因，已回退。\n  · ★★★ 488 的依据：米10 敲门铃前【回读描述符比对】，而它的列表是非缓存内存；我们的是缓存内存 ⇒ 必须【再映射一份 uncached】才看得到控制器会抓到的东西。\n  · ★★ 488 改动：非缓存映射 + 双读比对 + 八字逐位校验 + 探针全短行 + 写 0 改读。"
  ],
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
@@ -748,6 +749,54 @@
   "★★ 以后的判读方法（重要）": [
    "★★ 以后看真机照片，第一件事是找 'nio: ufs driver round N' 这一行 ⇒ 直接知道跑的是哪一版代码",
    "★★ 不要再靠探针字符串的形状反推版本 —— 那正是本轮浪费两轮的原因"
+  ]
+ },
+ "★★★ 487 判读（判决轮：二分成功）": {
+  "★★ 照片逐行（12:54 真机，run-487，含 485+486 代码）": [
+   "1| nio: adopt A enter phys=9b243000 hcs=0000010f",
+   "2| nio: adopt A2 hce=00000001      ★★★ HCE bit0 本来就置位",
+   "3| nio: adopt B stopped rsr=00000000",
+   "4| nio: adopt C smmu",
+   "5| nio: adopt D ba written ba=9b243000 bau=00000000",
+   "6| nio: adopt E status cleared",
+   "7| nio: adopt F list started rsr=00000001 hcs=0000010f",
+   "8| nio: adopt G list ready hcs=0000010f",
+   "9| nio: ufs H dw0=11000000          ★ bit24 已进描述符",
+   "10| nio: ufs H2 dw2=00000000 ba=9b243000",
+   "12| nio: ufs H4 db0 ok db=00000000   ★★★ 写 0 到门铃【成功返回】",
+   "（无 I db1 ok / 无 J done ⇒ 写 1 挂死）"
+  ],
+  "★★★ 判决": [
+   "★★ 485 的二分给出干净答案：写 0 返回 ⇒ 门铃寄存器与其总线【是活的】⇒ 挂死不是'总线死'",
+   "★★ 写 1 挂死 ⇒ 挂死发生在【门铃触发的抓取】上 ⇒ 描述符/内存内容成为唯一嫌疑",
+   "★★★ 486 的假设【被证伪】：hce=00000001，HCE bit0 一直是置位的（UEFI 没有清它）⇒ 486 的改动是安全的空操作",
+   "★★ dw0=11000000 ⇒ bit24 确实已进描述符，与 Apple 的写法逐位一致"
+  ],
+  "★★★ 487 之后的参照对齐（重要）": {
+   "★★ Apple shim（refs/ios-v60/shim/ufs.c，同一控制器）与我们的 UTRD 逐字段【机械比对】": [
+    "无数据命令：dw0/dw1/dw2/dw3/ucdba/ucdbau/resp 全部一致；prdt 不同（Apple 无数据时留 0，我们写偏移）",
+    "★ 但【米10 hakios 驱动（refs/umi/drivers/storage/hakios.ufshc.c，同一颗 SM8250，真机跑通）】写法与我们的【一致】⇒ prdt 不是根因，已回退该改动",
+    "★ 米10 的 dw0 = UTRD_CT_UFS|DD_NONE = 0x10000000，【不设 bit24】；Apple 设 bit24 ⇒ 两者在各自硬件上都能工作"
+   ],
+   "★★★ 米10 驱动有而我们【没有】的一步（这是 488 的依据）": [
+    "★ 米10：'s->utrd[0] does not hold what was put in it: not rung' —— 敲门铃前【回读描述符并比对】",
+    "★ 米10 的列表在【非缓存】内存里（注释：the loader's memory, not cached here），所以它读一次就够",
+    "★★★ 我们的列表是【缓存】内存 ⇒ 回读只能看到 CPU 自己的副本 ⇒ 说了什么也没说什么 ⇒ 必须【再映射一份非缓存的】看真实内存",
+    "★ 米10 的门铃写前置条件：UTRLBA/UTRLBAU 读回一致 && (UTRLRSR&1)!=0 && (UTRLDBR&bit)==0 ⇒ 我们全部满足（db=0）"
+   ]
+  },
+  "★★★ 488 改了什么（f3d9909）": [
+   "① 把 16 KiB 请求列表区【再映射一份 uncached】（kIOMapInhibitCache），plainMap",
+   "② 门铃响之前，把描述符的八个字从【缓存】和【内存】各读一遍并互相比对：不同则逐位报出并【不敲门铃】",
+   "③ 八个字各自与应有值比对（bad 位图）",
+   "④ 485 的『写 0 门铃』改为『读门铃』（写 0 已证明无害无价值）",
+   "⑤ 新增短探针 H3 prdt=（描述符第八个字，第一次完整上屏）"
+  ],
+  "★★ 488 判读表": [
+   "H4 bad=00000000 且 H4b pbad=00000000 ⇒ 描述符与内存一致 ⇒ 若仍无 I，则是控制器抓到了正确内容却仍挂死 ⇒ 下一步查 SMMU/IOMMU 对 UFS 流的重定向（stream id）、以及 UCD 的 128 字节对齐是否被满足",
+   "H4b pbad≠00000000 ⇒ cacheClean 没刷出去 ⇒ 根因找到 ⇒ 改用非缓存映射做 UTRD/UCD",
+   "H4 bad≠00000000 ⇒ 有字被写歪 ⇒ p0/p4/p7 直接指出是哪一个",
+   "有 I 无 J ⇒ 门铃写返回了、但后续读挂死"
   ]
  }
 }
