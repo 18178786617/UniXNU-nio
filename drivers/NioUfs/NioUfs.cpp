@@ -590,7 +590,18 @@ void NioUfs::adoptAndRead (unsigned level)
   cacheClean (virt, 16384);
   // Layout: [0,4096) request list (slot 0 used), [4096,5120) command + response UPIU +
   // PRDT, [8192,16384) data.
-  const uint32_t ucdOffset = 4096, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
+  //
+  // nio run-483: the UCD moved from offset 128 to offset 4096 in run 480 on the
+  // theory that the command block wants a page of its own.  That was never
+  // tested on this path: run 480 changed the shared layout and stopped at the
+  // same place, and run 481/482 ran the recipe below, which has always used
+  // 4096.  So the two ideas have never been compared.  Offset 128 puts the
+  // command block back inside the page the controller is already reading the
+  // request descriptor from, which is the one address the firmware has
+  // proven the controller can fetch from; the page above it is only as good
+  // as the memory there, and this board's request list is one page of
+  // request descriptors with nothing of ours above it.
+  const uint32_t ucdOffset = 128, rspOffset = 512, prdtOffset = 1024, dataOffset = 8192;
   uint32_t hcsBefore = read32 (hc, 0x30);
   uint32_t doorbellBefore = read32 (hc, 0x58);
   if (doorbellBefore != 0 || read32 (hc, 0x78) != 0) {
@@ -598,20 +609,29 @@ void NioUfs::adoptAndRead (unsigned level)
   }
   OSSharedPtr<IOMemoryMap> smmuMap;
   uint32_t smmuReport[3] = { 0, 0, 0 };
+  nioUfsSay ("nio: adopt A enter phys=%llx hcs=%08x\n", phys, hcsBefore);
   write32 (hc, 0x24, 0);            // mask interrupts
   write32 (hc, 0x60, 0);            // stop the firmware's request list
   __asm__ volatile ("dsb sy" ::: "memory");
   unsigned stopLoops = 10000;
   while ((read32 (hc, 0x60) & 1) && stopLoops--) nioUfsSpin (10);
   if (read32 (hc, 0x60) & 1) panic ("NATIVE_UFS adopt: request list did not stop");
+  nioUfsSay ("nio: adopt B stopped rsr=%08x\n", read32 (hc, 0x60));
   smmuBypassStream (0x60, smmuMap, smmuReport, phys, 16384);
+  nioUfsSay ("nio: adopt C smmu\n");
   write32 (hc, 0x50, static_cast<uint32_t> (phys));
   write32 (hc, 0x54, static_cast<uint32_t> (phys >> 32));
+  nioUfsSay ("nio: adopt D ba written ba=%08x bau=%08x\n",
+             read32 (hc, 0x50), read32 (hc, 0x54));
   write32 (hc, 0x20, 0xffffffffU);  // clear stale status
+  nioUfsSay ("nio: adopt E status cleared\n");
   write32 (hc, 0x60, 1);
+  nioUfsSay ("nio: adopt F list started rsr=%08x hcs=%08x\n",
+             read32 (hc, 0x60), read32 (hc, 0x30));
   if (!waitSet (hc, 0x30, 0x2, 100000)) {
     panic ("NATIVE_UFS adopt: request list not ready hcs=%08x", read32 (hc, 0x30));
   }
+  nioUfsSay ("nio: adopt G list ready hcs=%08x\n", read32 (hc, 0x30));
   if (level == 3) {
     panic ("NATIVE_UFS adopt: list replaced\n"
            "phys=%llx hcs=%08x->%08x\n"
@@ -652,7 +672,25 @@ void NioUfs::adoptAndRead (unsigned level)
     }
     cacheClean (virt, 16384);
     write32 (hc, 0x20, 0xffffffffU);
+    /* nio run-483: the request descriptor is the last thing the CPU writes
+     * before the doorbell, so its eight words are printed here.  If they
+     * are wrong on the screen, the controller is fetching something else
+     * and the doorbell is only where that shows up. */
+    nioUfsSay ("nio: adopt cmd H utrd %08x %08x %08x %08x %08x %08x %08x %08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 0),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 4),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 8),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 12),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 16),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 20),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 24),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 28));
+    nioUfsSay ("nio: adopt cmd H2 ucd %02x %02x %02x %02x  hcs=%08x is=%08x db=%08x rsr=%08x ba=%08x bau=%08x\n",
+               ucd[0], ucd[1], ucd[2], ucd[3],
+               read32 (hc, 0x30), read32 (hc, 0x20), read32 (hc, 0x58), read32 (hc, 0x60),
+               read32 (hc, 0x50), read32 (hc, 0x54));
     write32 (hc, 0x58, 1);          // ring slot 0
+    nioUfsSay ("nio: adopt cmd I doorbell written\n");
     UfsResult result = { 0xf, 0xff, 0xff, 0, 0, 0 };
     bool done = false;
     for (unsigned loops = 0; loops < 100000; loops++) {
@@ -662,6 +700,8 @@ void NioUfs::adoptAndRead (unsigned level)
       }
       nioUfsSpin (1);
     }
+    nioUfsSay ("nio: adopt cmd J poll done done=%d db=%08x hcs=%08x is=%08x\n",
+               (int) done, read32 (hc, 0x58), read32 (hc, 0x30), read32 (hc, 0x20));
     cacheCleanInvalidate (virt, 16384);
     if (!done) {
       return result;
@@ -2682,11 +2722,11 @@ bool NioUfs::start (IOService *provider)
      * It may also read: that is the first command this board has been
      * asked to answer since the port began.
      */
-    /* Level 4 is the one that reads: a TEST UNIT READY and then a READ
-     * CAPACITY, which is the smallest thing that puts a command on the
-     * wire and reads a length back.  Level 3 is the check for a list that
-     * was replaced, and this port replaces the list, so that one would
-     * stop before it said anything. */
+    /* Level 4 is the one that reads: a TEST UNIT READY and then a READ
+     * CAPACITY, which is the smallest thing that puts a command on the
+     * wire and reads a length back.  Level 3 is the check for a list that
+     * was replaced, and this port replaces the list, so that one would
+     * stop before it said anything. */
     adoptAndRead (4);
     bool published = startRoot (provider);
     if (!published) {
