@@ -606,8 +606,25 @@ void NioUfs::adoptAndRead (unsigned level)
   }
   uint8_t *virt = reinterpret_cast<uint8_t *> (regionMap->getVirtualAddress ());
   uint64_t phys = fwList;
-  zero32 (virt, 8192);
-  cacheClean (virt, 8192);
+  /* nio run-497: the firmware's own descriptors are left alone.
+   *
+   * The controller takes thirty-two request descriptors at once, so it
+   * reads 32 * 8 * 32 = 8192 bytes from the base of the list in one
+   * go.  This port cleared all of them:
+   *
+   *   zero32 (virt, 8192);
+   *
+   * Every descriptor behind the first one went to zero, and a
+   * descriptor whose fourth and fifth words are zero is a descriptor
+   * that points at physical address zero.  The controller fetches
+   * thirty-two of them, and one of them points at nothing.
+   *
+   * Nothing here ever read what was in those words, so nothing here
+   * knows what the firmware left there.  They are left as they were
+   * found now, and only the words this port writes -- its own
+   * descriptor and its own command block -- are cleared.
+   */
+  cacheClean (virt, 16384);
   // Layout: [0,4096) request list (slot 0 used), [4096,5120) command + response UPIU +
   // PRDT, [8192,16384) data.
   //
@@ -786,6 +803,20 @@ void NioUfs::adoptAndRead (unsigned level)
   auto command = [&] (uint8_t lun, const uint8_t *cdb, unsigned cdbLength, bool toHost, uint32_t length) -> UfsResult {
     uint8_t *utrd = virt;
     uint8_t *ucd = virt + ucdOffset;
+    /* nio run-497: what the firmware left in the descriptors behind the
+     * first one, read before anything of this port's is written over
+     * it.  Every round until now cleared them before they were read,
+     * so this is the first look at them.
+     */
+    nioUfsSay ("nio: ufs H0f fwd=%08x %08x %08x %08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 1 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 2 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 3 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 4 * 32));
+    nioUfsSay ("nio: ufs H0g fwd=%08x %08x %08x\n",
+               *reinterpret_cast<volatile uint32_t *> (utrd + 5 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 6 * 32),
+               *reinterpret_cast<volatile uint32_t *> (utrd + 7 * 32));
     zero32 (utrd, 32);
     zero32 (ucd, 1024 + 16);
     zero32 (virt + dataOffset, 8192);
