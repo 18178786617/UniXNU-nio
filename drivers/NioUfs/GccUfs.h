@@ -19,7 +19,7 @@
 // numbers, and the two were told apart by the shape of their probe lines
 // rather than by anything on the screen that said so.  The number here
 // belongs to the driver, so it moves only when the driver does.
-#define NIO_UFS_ROUND                  492
+#define NIO_UFS_ROUND                  493
 
 // Physical windows from the kona device tree
 // (clock-controller@100000, ufshc@1d84000). The UFS host controller and the
@@ -28,6 +28,36 @@
 #define GCC_BASE                      0x00100000ULL
 #define UFS_HC_BASE                   0x01d84000ULL
 #define UFS_HC_SIZE                   0x3000ULL
+
+// The vendor-specific window of the host controller.
+//
+// The EDK2 driver that runs on this board family puts it at the base of
+// the controller plus 0x1100 (Samsung's own package writes
+// EXYNOS9810_UFS_VS_BASE = EXYNOS9810_UFS_BASE + 0x1100), and its
+// register offsets inside it run from 0x000 to 0x108 -- which is why
+// they cannot be inside the controller's own 0x000..0x100 window.
+//
+// The window is inside the 0x3000 bytes this driver maps, so the
+// offsets below are offsets into the mapping.
+//
+// Two of them matter to a command:
+//
+//   VS_UTRL_NEXUS_TYPE   what the controller is told the descriptors in
+//                        the request list are.  EDK2 writes 0xffffffff
+//                        before it sends a command and 0 before it sends
+//                        a NOP OUT or a query -- the two are not the same
+//                        thing to the controller, and this port never
+//                        wrote it at all.
+//
+//   VS_CLKSTOP_CTRL      bit 4 stops the controller's clock.  EDK2 clears
+//                        that bit while it brings the controller up.
+#define UFS_HC_VS_BASE                 (UFS_HC_BASE + 0x1100ULL)
+#define UFS_HC_VS_IS                   (UFS_HC_VS_BASE + 0x038)
+#define UFS_HC_VS_UTRL_NEXUS_TYPE      (UFS_HC_VS_BASE + 0x040)
+#define UFS_HC_VS_UMTRL_NEXUS_TYPE     (UFS_HC_VS_BASE + 0x044)
+#define UFS_HC_VS_SW_RST               (UFS_HC_VS_BASE + 0x050)
+#define UFS_HC_VS_CLKSTOP_CTRL         (UFS_HC_VS_BASE + 0x0b0)
+#define UFS_HC_VS_FORCE_HCS            (UFS_HC_VS_BASE + 0x0b4)
 
 // The LUN that carries nio's userdata partition.
 //

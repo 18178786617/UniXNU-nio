@@ -817,11 +817,47 @@ void NioUfs::adoptAndRead (unsigned level)
      */
     nioUfsSay ("nio: ufs H0 r=%d cap=%08x mcq=%08x\n",
                NIO_UFS_ROUND, read32 (hc, 0x00), read32 (hc, 0x04));
-    nioUfsSay ("nio: ufs H0b urlcc=%08x\n", read32 (hc, 0x64));
-    nioUfsSay ("nio: ufs H0c err=%08x %08x %08x\n",
-               read32 (hc, 0x38), read32 (hc, 0x3c), read32 (hc, 0x40));
-    nioUfsSay ("nio: ufs H0d err=%08x %08x\n",
+    nioUfsSay ("nio: ufs H0b urlcc=%08x err=%08x %08x %08x %08x %08x\n",
+               read32 (hc, 0x64),
+               read32 (hc, 0x38), read32 (hc, 0x3c), read32 (hc, 0x40),
                read32 (hc, 0x44), read32 (hc, 0x48));
+    /* nio run-493: the vendor-specific window, and the one register in
+     * it that a command needs.
+     *
+     * The EDK2 driver that runs on this board family tells the
+     * controller what kind of request its list holds before it rings
+     * the doorbell:
+     *
+     *   case UPIU_TRANSACTION_COMMAND:
+     *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0xFFFFFFFF); break;
+     *   case UPIU_TRANSACTION_NOP_OUT:
+     *   case UPIU_TRANSACTION_QUERY_REQ:
+     *     MmioWrite32 (VsAddr + VS_UTRL_NEXUS_TYPE, 0x0); break;
+     *   ...
+     *   MmioWrite32 (IoAddr + REG_UTP_TRANSFER_REQ_DOOR_BELL, 1);
+     *
+     * A command and a query are not the same thing to the controller,
+     * and this port never wrote the register at all: the value the
+     * firmware left behind was whatever the firmware last needed, and
+     * the firmware's last need was not a command.
+     *
+     * The write is guarded.  The register is only written when what it
+     * holds reads as one of the two values EDK2 writes there -- zero or
+     * all ones -- so a window at the wrong address is left alone and
+     * the run says so instead of writing to whatever is really there.
+     */
+    {
+      uint32_t nexus = read32 (hc, 0x1140);
+      uint32_t umtrl = read32 (hc, 0x1144);
+      nioUfsSay ("nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x\n",
+                 nexus, umtrl, read32 (hc, 0x11b0), read32 (hc, 0x11b4));
+      if (nexus == 0 || nexus == 0xffffffffU) {
+        write32 (hc, 0x1140, 0xffffffffU);
+        nioUfsSay ("nio: ufs H0d nexus set=%08x\n", read32 (hc, 0x1140));
+      } else {
+        nioUfsSay ("nio: ufs H0d nexus left=%08x\n", nexus);
+      }
+    }
     nioUfsSay ("nio: ufs H dw0=%08x dw2=%08x prdt=%08x\n",
                *reinterpret_cast<volatile uint32_t *> (utrd + 0),
                *reinterpret_cast<volatile uint32_t *> (utrd + 8),
@@ -878,17 +914,17 @@ void NioUfs::adoptAndRead (unsigned level)
           if (index == 7) plainWord7 = got;
         }
         nioUfsSay ("nio: ufs H4 bad=%08x\n", bad);
-        nioUfsSay ("nio: ufs H4b pbad=%08x p0=%08x\n", plainBad, plainWord0);
-        nioUfsSay ("nio: ufs H4c p4=%08x p7=%08x\n", plainWord4, plainWord7);
+        nioUfsSay ("nio: ufs H4b pbad=%08x p0=%08x p4=%08x p7=%08x\n",
+                   plainBad, plainWord0, plainWord4, plainWord7);
         if (plainBad != 0) {
-          nioUfsSay ("nio: ufs H4d memory differs from cache; not ringing\n");
+          nioUfsSay ("nio: ufs H4c memory differs; not ringing\n");
           return result;
         }
       } else {
         nioUfsSay ("nio: ufs H4 bad=%08x no-plain-map\n", bad);
       }
       if (bad != 0) {
-        nioUfsSay ("nio: ufs H4e descriptor differs; not ringing\n");
+        nioUfsSay ("nio: ufs H4d descriptor differs; not ringing\n");
         return result;
       }
     }
