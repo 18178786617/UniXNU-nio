@@ -1057,5 +1057,25 @@
   "  · H0d/H0e 的 slots= 里若 slot1..7 非零 ⇒ 那里是 UEFI 留下的 command descriptor（证实假设）",
   "  · 若 slots 除 slot0 外全 0 ⇒ UEFI 那块已被我们清零（zero32 清了 16 KiB）⇒ 假设需再修正",
   "  · 仍无 I1 ⇒ UCD 位置不是根因，下一步：按米10 的完整接管顺序走（它写自己的列表 + loader 交还机制）"
+ ],
+ "★ 494 已刷上机（15:30:17）—— 判读表": [
+  "★ 494 已刷上机（15:30:17）—— 判读表",
+  "★★ 面板上要找的三行：",
+  "  · 'H0d slots=XXXXXXXX XXXXXXXX XXXXXXXX XXXXXXXX'   ← slot 0..3 的首字",
+  "  · 'H0e slots=XXXXXXXX XXXXXXXX XXXXXXXX XXXXXXXX'   ← slot 4..7 的首字",
+  "  · 'I1 written'   ← 有没有这一行，本轮唯一要回答的问题",
+  "★ 判读一：UCD 位置是不是根因",
+  "  · 【出现 I1 written】⇒ 门铃写返回了 ⇒ 【UCD 位置就是根因】",
+  "    ⇒ 下一步：把 root 路径（RootCommands.h / RootTransportLayout.h）的 UCD 也挪到同一处，",
+  "      并按米10 的顺序做完整接管（停列表→写自己的列表→起列表→回读校验→敲门铃）",
+  "  · 【仍无 I1 written】⇒ UCD 位置不是根因 ⇒ 下一步按米10 的完整接管顺序走",
+  "★ 判读二：slots 里有什么",
+  "  · slot0 应该是 11000000（我们的描述符首字，CT=1、I=1）",
+  "  · ★ 若 slot1..7 里【有非零】⇒ 那里是 UEFI 留下的东西（米10 注释说的 command descriptor 就在 UTRD 后面）",
+  "  · ★ 若 slot1..7 【全是 0】⇒ 说明我们 zero32 清掉的 16 KiB 里本来就没有它们（固件的 command descriptor 不在这个列表里）",
+  "    ⇒ 那就说明米10 注释里说的『32 个一次取』在 nio 上不是这个意思，需要换方向",
+  "★ 判读三：UCD 的物理地址",
+  "  · 'H4c' 里的 p4 应该是 phys+4096（不是 +128）⇒ 确认新布局生效",
+  "  · p4 形如 9b241000 或 9b24e000 ⇒ +4096 后的物理地址"
  ]
 }
