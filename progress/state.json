@@ -159,6 +159,7 @@
     "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
   ],
   "notes": [
+    "★★★★★ 2026-11-18 08:20 ★★★★★ run-476 里程碑 + 478 根治（9a3dfba）：\n  · ★ 476 过了 469 的卡点（poll 0 got 出现）⇒ 470 的修复生效\n  · ★ 时钟是活的（clock hw=19008 kernel=19003）⇒ 更正：根因不是时基冻结，是 WFE 在关中断上下文睡死\n  · ★ 卡在 nop-out begin 之后 ⇒ RootCommands.h:15 的 IODelay(2)（poll 的 pause）—— 我上次漏了共享头\n  · ★ 478 根治：等待改读控制器寄存器 + 计数式等待 + 轮询上限兜底 ⇒ NOP OUT 必定超时返回并走 UIC 恢复\n  · ★ 477 在真机上（已刷）；QEMU 的 ramoops 仍全零 ⇒ QEMU 放弃\n  · ★ CI 默认 runner 改回 macos-15（arm64）（机主要求；15 与 26 同池，26 有失败史）",
     "★★★★★ 2026-11-18 02:50 ★★★★ **QEMU 画面全白的原因找到并已修（477 / 427d608）**：\n  · ★ QEMU 用 board.toml 的 kernel_args，**真机用 unixnu.toml 的 args（合并后）** ⇒ ★ **合并后那份含 rd=md0（根卷），board.toml 那份不含** ⇒ QEMU 里内核无根可挂 ⇒ 画面全白\n  · ★ 477 起 QEMU 用与真机完全同一份 cmdline ⇒ **QEMU 的结论可直接外推到真机**\n  · merge-kernel-args.py 进仓 + --print 模式 ⇒ **命令行只有一处定义**",
     "★★★★★ 2026-11-18 02:40 ★★★★★ 机主睡觉 ⇒ 挂机自主推进：tools/auto-loop.sh 后台跑（12 轮/8 小时，从 476 起）",
     "★★★★★ 2026-11-18 02:40 ★★★★★ **机主睡觉 ⇒ 进入挂机自主推进**。tools/auto-loop.sh 在后台跑（12 轮/8 小时，从 476 起）：自动取内核→打包→刷机→读控制台文本→通知 agent；agent 判读后推下一轮。\n  · 474/475 已上机（sha 5057cc61… / 992b7396…），但**看门狗复位没拍到照片**（已知现象，非新问题）\n  · 476 带 ramoops ⇒ 起就有文本，**不需要照片**\n  · ★ QEMU 里内核没崩但没画（fb.png 恒为 10,656=全白）⇒ 图无用，文本才是眼睛\n  · ★ 真机与 QEMU 的 ramoops 同址 0xAF040000 ⇒ 将来可自动化（fastboot 无读内存命令 ⇒ 暂缺）",
@@ -542,5 +543,44 @@
       "★ 附带收益": "★ **判读 QEMU 的结果就能直接用到真机**（此前两边 cmdline 漂移，QEMU 的结论不可直接外推）",
       "工具": "scripts/merge-kernel-args.py 进仓 + 新增 --print 模式（打印而不写文件）⇒ **命令行只有一处定义**，打包与 QEMU 都问它"
     }
+  },
+  "★ 里程碑_run-476": {
+    "★ 面板（带序号的第一次实战）": [
+      "1| nio: ufs step 1 bringup",
+      "2| nio: ufs bu stop-queue",
+      "3| nio: ufs bu smmu",
+      "4| nio: ufs bu queue-up dp=1 hcs=0000010f",
+      "5| nio: ufs bu clock hw=19008 kernel=19003",
+      "6| nio: ufs bu poll 0 read",
+      "7| nio: ufs bu poll 0 got dp=1 hcs=0000010f",
+      "8| nio: ufs bu nop-out begin dp=1 hcs=0000010f"
+    ],
+    "★★ 三个判读": [
+      "① ★★ 过了 469 卡的那个点（poll 0 got 出现）⇒ 470/473 的延时改用硬件计数器修复在真机上生效",
+      "② ★★ 时钟是活的（clock hw=19008 kernel=19003，两个时钟同步）⇒ 更正：根因不是时基冻结",
+      "③ ★★ 卡在 nop-out begin 之后 ⇒ 进了 NOP OUT（传输层）= 历史卡点（ring doorbell 后 fabric 挂死）的位置"
+    ],
+    "★★ 根因的最终形态": "**IODelay → machine_delay_until → { WFE + mach_absolute_time }** ⇒ 关中断上下文里 WFE 等不到中断 ⇒ **时基在走但等待睡死** ⇒ 永久卡住。\n★ 469 卡在 NioUfs.cpp 的 IODelay(1000)；★ 476 卡在 **RootCommands.h:15 的 IODelay(2)**（poll 的 pause）⇒ ★★ 同一个病根的第二处（我上次的替换漏了共享头文件）",
+    "★ 478 的根治": {
+      "等待": "**读控制器状态寄存器**（read32(gHost.hc,0x30)）⇒ 不依赖时钟、不依赖中断；且 read32 是 harness 替换的原语之一 ⇒ harness 零风险",
+      "寄存器等待": "hostWaitRegister 改成计数式（10 万次读 ≈ 100 ms，与原来的 100 ms 同量级）",
+      "★ 兜底": "pollUfsTransfer 加 state.polls >= kUfsMaxPolls(400000) ⇒ ★ 时钟冻结时也一定会超时返回 ⇒ NOP OUT 会走 UIC 恢复路径（DME_RESET/DME_ENABLE/DME_LINK_STARTUP）而不是永久卡死",
+      "提交": "9a3dfba（同时把 CI 的默认 runner 改成 macos-15）"
+    }
+  },
+  "★ 里程碑_run-477": {
+    "内容": "QEMU 的 cmdline 改用与真机一致的那份（含 rd=md0）⇒ 477 已在真机上机（02:56:33，sha 9dba87f3…）；08:13 再次刷上（sha 232d737b…）",
+    "★ QEMU 仍然全零": "ramoops 258060 字节全零（无 DBGC 签名）⇒ ★ 即使加了 rd=md0，QEMU 里内核仍在极早期就停 ⇒ ★ QEMU 这条路放弃（不能当开发环境）；主路（真机）仍是唯一信息源",
+    "★ 结论": "文本眼睛在 QEMU 上无效（内核根本没写）⇒ 但 真机照片有效 ⇒ ★ 序号 + 照片 是当前唯一可用的判读手段"
+  },
+  "★ CI_runner_改回arm64": {
+    "机主要求": "2026-11-18 08:13 机主要求用 macos-15 或 macos-26（arm64）",
+    "★ 关键事实": {
+      "macos-15-intel": "x86_64（workflow 第 11 行明说），一直是备用机",
+      "macos-15": "arm64，与 macos-26 同一个池（机主 11-17 实测两个都要排队）",
+      "macos-26": "arm64，run 23 之前从未产出内核（Xcode 26 的 clang 更严 + 日志截断）",
+      "★ 选 macos-15": "arm64 里未被证明失败的那个；macos-15-intel 仍可按名字指定"
+    },
+    "改动": "9a3dfba：default / group / runs-on 三处都改成 macos-15"
   }
 }
