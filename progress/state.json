@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 17:55（★★★★★ **546 的照片给出判决：候选相位完整走完（`nio: cand done AppleARMPU` 出现、D5/D6 都在）⇒ 我上轮怀疑的 detach() 自死锁【不是元凶】；但面板上一个 `nio: bsd_init:` 都没有 ⇒ bsd_init 的阶段标记卡在控制台环形缓冲里。548 把它们和 init 轨迹全改成直写。CI 548 构建中。**）",
- "headline": "★★★★★ **546（round 521）的照片：匹配【走完了】。** `nio: cand done AppleARMPU` 出现、D1-D6 全部到位、start 相位起了 20 个服务（V1..V20）⇒ **我上轮怀疑的 `inst->detach()` 自死锁不是元凶**。★ 但面板上**一个 `nio: bsd_init:` 都没有** —— bsd_init 有 ~30 个阶段标记（`calling setconf` / `vfs_mountroot` / `calling VFS_ROOT`），它们走 printf（环形缓冲），**而环形缓冲正是卡住的地方** ⇒ 写进去了出不来。⇒ **548 把 bsd_init 的阶段标记和 init 轨迹全改成直写**（CI 548 构建中）。",
+ "updated": "2026-11-19 18:20（★★★★★★ **找到卡死的根因：平台专家的 start() 在无限等待 BSD 资源**（`checkResource()` → `waitForService(table)` 无超时）。我们的存储驱动只做观测不发布 IOBSD ⇒ 永远等不到。549 给这个等待加了 2 秒上界 + 直接标记资源名。CI 549 构建中。**）",
+ "headline": "★★★★★★ **根因找到了：不是 UFS、不是控制台、不是探针 —— 是 IOKit 在等一个永远不会来的资源。** 548 的照片：`S1` 有、`S2` 无 ⇒ 卡在 `startCandidate()` ⇒ `checkResources()` ⇒ `checkResource()` ⇒ **`waitForService(table)`（无超时 ⇒ 无限等）**。★ 平台专家等的是 **BSD 资源**（由存储驱动发布），而我们的存储驱动**只做观测、从不发布它** ⇒ 死等。★ **用户层不需要 BSD 资源** —— 内核的根卷是 RAM 里的 mockfs 镜像，mockfs 就是那个挂根的文件系统。⇒ **549 给这个等待加 2 秒上界**（并直接标记是哪个资源）⇒ 启动就能继续走下去。",
  "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
@@ -26,7 +26,7 @@
    "status": "★ 已就位（mockfs 那条）",
    "criteria": "/flash 挂上 DSU 里的 APFS + switch_root 成功",
    "evidence": "· 根设备：设备树 `/chosen/memory-map` 的 `RAMDisk` 属性（loader 放 rootfs.img 进去）⇒ 与 UFS 无关\n· 根文件系统：`bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**\n· `rootfs/rootfs.img`（N4KROOT 格式）：slot A = **真 launchd（525088B）**，slot B = **真 dyld（922912B）**（`tools/check-mockfs-paths.py` 确认）\n· mockfs 提供 `/sbin/launchd`、`/usr/lib/dyld`、`/probe.bin`\n· 内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`",
-   "next": "★★★ **现在就走这条**（mockfs 已就位）。★ **548 的面板是决定性的**：\n  · 出现 `nio: bsd_init: calling setconf` ⇒ bsd_init 走到了根卷这一步\n  · 出现 `nio: bsd_init: vfs_mountroot` ⇒ 在挂根卷（mockfs）\n  · 出现 `nio: exec: load_init_program enter` ⇒ **内核到了用户层的门口**\n  · 出现 `nio: exec: load_init_program_at_path /sbin/launchd` ⇒ **正在 exec launchd**\n★ 这四个标记现在走【直写】(不走控制台环形缓冲)，所以不会再被环形缓冲吞掉。"
+   "next": "★★★ **离用户层只差一个等待的上界**（549 在构建）。\n★ 548 的判决：`S1`（开始启动 personality）有、`S2`（启动完了）无 ⇒ 卡在 `startCandidate()` 的 `checkResources()` → `waitForService(table)`（无超时）。\n★ 下一张面板看：\n  · `nio: WAIT <资源名>` ⇒ 就是它等的是哪个资源（应该是 IOBSD）\n  · `nio: WAITED` ⇒ 等待有界了、继续往下走\n  · `nio: bsd_init: calling setconf` / `vfs_mountroot` ⇒ 进 bsd_init 了\n  · `nio: exec: load_init_program enter` ⇒ **内核到了用户层的门口**\n  · `nio: exec: exec_mach_imgact enter` ⇒ **已经在跑用户态代码**"
   },
   {
    "id": "P3",
@@ -34,7 +34,7 @@
    "status": "★ 现在的主线",
    "criteria": "看到 launchd / 用户态进程在跑",
    "evidence": "boot-args 已备好 launchd_unsecure_cache=1、wdt=-1、wdt_test=no_user_checkin、-wdt_no_pmu",
-   "next": "主线。等 `nio: exec: load_init_program enter`；出现之后下一轮看 launchd 自己的第一行输出，再按 ios-sweet 的墙序：AMFI（`launchd_unsecure_cache` 可绕）→ watchdogd（要 IOWatchDog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface。"
+   "next": "主线。★ 549 之后如果能看到 `nio: exec: load_init_program enter` / `exec_mach_imgact enter`，就是真的到用户层了；下一轮看 launchd 自己的输出，再按 ios-sweet 的墙序：AMFI（`launchd_unsecure_cache` 可绕）→ watchdogd（要 IOWatchDog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface"
   },
   {
    "id": "P3+",
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 549,
+   "time": "18:20",
+   "marker": "nio: WAIT IOBSD / nio: WAITED",
+   "qemu": "macos-26",
+   "result": "★★★★★★ **给资源等待加上界**：548 的两张照片（相隔几分钟）完全一样（只有 V 信标从 671 走到 7157）⇒ **卡死不是慢**。`S1` 有、`S2` 无 ⇒ 卡在 `startCandidate()` → `checkResources()` → `checkResource()` → **`waitForService(table)`（无超时）**。★ 平台专家等的是 **BSD 资源**（存储驱动发布），我们的存储驱动只做观测从不发布 ⇒ 死等。★ **用户层不需要它**：根卷是 RAM 里的 mockfs 镜像。⇒ 等待 2 秒上界 + 直写标记资源名"
+  },
   {
    "run": 546,
    "time": "17:22",
@@ -251,6 +258,7 @@
   "★ **别再为 UFS 的门铃加新探针** —— 先把用户层打通，回头再收拾它。"
  ],
  "notes": [
+  "★★★★★★ **★ 卡死根因（2026-11-19 18:20 查明）**\n  · **判据**：`S1`（personality 开始启动）出现而 **`S2`（启动完了）不出现** ⇒ 卡在 `startCandidate()`。\n  · `IOService::startCandidate()`（IOService.cpp:5150）里有：\n    ```c\n    if ((this != gIOResources) && (this != gIOUserResources)) {\n        checkResources();            // 等这个 nub 的资源\n        service->checkResources();   // 等驱动的资源\n    }\n    ```\n  · `checkResources()` → `checkResource()`（IOService.cpp:5440）→ **`waitForService(table)`（无 timeout ⇒ 无限等）**。\n  · **平台专家等的资源是 BSD 资源**，由存储驱动发布；**我们的存储驱动匹配后只 return false（观测模式），从不发布 IOBSD** ⇒ 这个等待永远不结束 ⇒ **启动卡死**。\n  · ★ **用户层不需要 BSD 资源**：内核的根卷是 loader 放进设备树的 RAM 盘（rootfs.img），根文件系统是 mockfs（`vfstbllist` 里唯一有 `vfc_mountroot` 的）。\n  · ⇒ **549：把 `waitForService` 的等待加上界（2 秒）+ 直写标记资源名**。\n  · ★★ 这也解释了之前一系列怪事：为什么改 UFS 探针、命令行、GPU 都不影响卡点 —— **卡点在 personality 的 start() 里，与它们无关**。",
   "★★★★★ **★ 生成补丁的正确流程（★ 今天踩了四遍，记死）**\n  ① **先把自己的补丁从 series 里移除**（否则基线里已经带上了我的改动 ⇒ diff 为空 / 反向）\n  ② 干净树 + **CI 同样的 `patch -p1 --no-backup-if-mismatch --forward`** 全 series ⇒ 得到基线树\n  ③ **在这棵树上做修改**（★ 基线副本要在修改【之前】复制！）\n  ④ `diff -u --label a/<path> --label b/<path> 基线 改后 > 补丁`\n  ⑤ 把补丁放回 series 末尾，再验一次（★ 检查器会重建 series-check 树，别在那棵树上改）\n  ★ **`diff` 退出码是 1（文件有差异）⇒ `&&` 链会断** —— 用 `;` 或 `|| true`\n  ★ **树是 LF**（`refs/` 里的原始树）⇒ 读写前先探测行尾\n  ★ **series 里有重复的补丁名** ⇒ 第二遍报 'already applied'，看起来像『补丁已在树里』，很误导 ⇒ 检查器现在查重复\n  ★ **C 文件里不能嵌套定义函数**（C++ 可以）⇒ 助手函数要放【文件作用域】；检查器现在查这条\n  ★ **检查器有两份同名文件会跑错**（外层 `tools/` 与仓库里的 `device/UniXNU-nio/tools/`）⇒ 只用仓库那份",
   "★★★★★ **用户层路线（★ 最重要的一份）**\n  · **为什么不需要 UFS**：根设备 = 设备树 `/chosen/memory-map` 的 `RAMDisk`（loader 放 rootfs.img 进去）⇒ 与 UFS 无关；\n    根文件系统 = `bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**；\n    rootfs.img（N4KROOT）slot A = 真 launchd(525088B)、slot B = 真 dyld(922912B)；\n    内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`。\n    ⇒ **命令行去掉 `native-ufs-root=1` / `native-ufs-probe=12` 即可**（`NioUfs::start()` 里 `if ((!probe && !rootMode) || ...) return false;` ⇒ 不碰控制器）。\n  · **命令行有三处，真机生效的是第一处**：① `board.toml` 的 `payload.kernel_args` ← **loader 真正用的**（照片里 `KERNEL ONLINE:` 打印的就是它）；② `package/unixnu.toml` 的 `args` ← QEMU；③ `patches/xnu-8796/nio-boot-args-fallback.patch` 的 `nio_port_cmdline[]` ← 内核 fallback（`PE_boot_args()`）；④（先前已改）`nio-port-command-line.patch` 的 arm_init.c strlcpy。★ 543 的 QEMU 日志确认 cmdline 里已无 UFS 参数 ⇒ 三处一致。\n  · **判读表（四个探针都在 series 里）**：`mx<n>` = 候选循环退出（匹配走完）；`nio: exec: load_init_program enter` = **进用户层**；panic `nio: the matching path stalled (rounds=N)` = 匹配卡死（但内核活着）；V 信标 = 内核还活着（`nio-busy-beacon.patch`，每 200 万次自旋写一个 V）。\n  · **UFS 想恢复**：board.toml 的 `payload.kernel_args` 加回 `native-ufs-root=1`（或 `native-ufs-probe=12`）。",
   "★★★★★ 539（round 517）已上机 —— 判读 `UFS STEPS: 6123457`\n★★ **找到了最直接的参照：`refs/ios-v60/shim/ufs.c`（Apple 自家 UFS 驱动，UFS_BASE 与 nio 同为 0x1d84000）**。\n  逐字段核对结果：**我们的描述符是对的**（dw0=0x11000000、dw2(OCS)=0x0f、dw6/dw7、寄存器偏移 0x50/0x54/0x58/0x5c/0x60/0x20/0x30/0x34 全对）。\n  ★ **shim 做了、我们没做的两件事**：\n  ① **等门铃位清零**：`ufs_wr(REG_UTRLDBR,1); while (ufs_rd(REG_UTRLDBR)&1) { if(timeout){ufs_wr(REG_UTRLCLR,~1u); return 1;} }`\n     —— 控制器取走请求时会清掉该位；**我们敲了门铃就走，从不知道控制器取没取走**，且没取走的槽会留在列表里给下一条命令踩。\n  ② **前置检查 HCE**：`if (!(hce&1) || !(hcs&HCS_DP) || !(hcs&HCS_UTRLRDY)) stop;`\n     —— **HCE(0x34) bit0 = 主机控制器使能，为 0 时门铃写会被忽略**；我们写了 HCE=1 但**从不读回**。\n  ★ MI10 的完成判据也查实了（`hakios.ufshc.c:616-622`）：**判据是门铃寄存器本身**（`done = waiting & ~db`），不是 UTRLCNR。\n★ **判读**：`'2'`=控制器取走了；`'T'`=没取走（超时清槽）；col18-19=门铃寄存器值（bit0 仍为 1 ⇒ 没取走）。\n★ 环境备忘：本机**无 ffmpeg**；`Add-Type`/Reflection/WSL **被安全策略拦**；GitHub releases 下载不通（代理只转 git）；`api.github.com` 不通 ⇒ 取消 CI 只能机主在网页上做。视频判读走 pip 装 PyAV。",
