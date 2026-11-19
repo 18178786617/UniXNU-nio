@@ -1,40 +1,40 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 14:55（★★★★★★ 决定：用户层优先，UFS 暂停。机主要求『修复CI 然后推送 让我进入用户层』。已查明**进用户层不需要 UFS**：根设备是设备树 /chosen/memory-map 的 RAMDisk（= rootfs.img），根文件系统是 mockfs（vfstbllist 里唯一有 mountroot 的），rootfs.img 里已有真 launchd(525KB)+真 dyld(922KB)，内核 load_init_program 加载 /sbin/launchd。**只要把内核命令行里的 native-ufs-root=1 native-ufs-probe=12 去掉**，UFS 驱动就完全不碰控制器，bsd_init 就能走到 init_task ⇒ mockfs 挂成根 ⇒ exec launchd ⇒ 用户层。已推 d4b5085，CI 542 构建中）",
- "headline": "★★★★★ **517（round 510）判决：nexus type 是照抄了别的芯片 —— 这条线关闭；改用 MI10 的门铃前提。**照片证据：`13i nio: ufs H0e nexus set vs=00000000` ⇒ **我们写了 `0xFFFFFFFF`，读回是 0**，那个寄存器**在这块板上不存在**。★ **原因已查实**：`SamsungPkg/Drivers/UfsDxe/UfsDxe.c` 是 **Exynos 9810** 平台（`EXYNOS9810_UFS_BASE = 0x11120000`，VS 窗口 = BASE + 0x1100），而 nio 是 **SM8250**（UFS 在 `0x1d84000`，DT `reg = <0 0x1d84000 0 0x3000>`）；**MI10（同 SM8250、真机跑通）从头到尾不碰 nexus type / VS 窗口**（grep 为空）—— 它没有 vendor window。⇒ 我们照抄了一颗不同芯片的寄存器，**510 还往那个地址写了全 1**（风险已撤销）。★★ **round 493 / 495 / 510 三轮都栽在这条线上，全部作废。**⇒ **511（0070032）**：① 撤销 nexus 写入（只读不写）；② **门铃按 MI10 的做法来** —— 它敲门铃前查五件事并**关中断**：`istate = ml_set_interrupts_enabled(FALSE); ok = ... && hc_read(UTRLBA)==list_lo && hc_read(UTRLBAU)==list_hi && (hc_read(UTRLRSR)&1)!=0 && (hc_read(UTRLDBR)&bit)==0; if (ok) hc_write(UTRLDBR, bit);` —— **我们漏了三件：没关中断、列表基址没读回比对、门铃状态读归读但没进决策**。关中断用 arm64 的 `msr daifset/#0x3`（XNU 自己就是这么用的），**报告在关中断之前打印**（console 的锁要靠中断释放，关中断时打印会死等）。★★ **为什么关中断重要**：门铃一响控制器就去抓描述符，**抓取占着总线**；这期间来的中断若 handler 碰总线，就等一条被控制器占着的总线 ⇒ 死锁。★★★ **518 编译失败（我引入的，已修）**：`msr daifclr, %0` 的操作数我给了 `(uint32_t)(daif & 0x3)`，而 **DAIF 在 arm64 上是 64 位寄存器** ⇒ clang 报 `error: value size does not match register size specified by the constraint and modifier [-Werror,-Wasm-operand-widths]`。⇒ 512 已改为把**整个保存的状态**写回（64 位），这同时也是对的行为：原本就关着的中断保持关着。★★ **顺带补强了提交前检查器**：`tools/check-driver.py` 原先只查「汇编限值宽度 vs 寄存器宽度」，**不懂「系统寄存器指令所带值的宽度」** ⇒ 511 的这个错它没抓到。已补上该规则，**并用真实失败版验证**：失败版报 `the operand of \"msr\" is 32-bit and the register it names is 64-bit`、修好版零误报。★ 另：517 的 `adopt D ba written ba=04c9d000` = `own=04c9d000` ✓、`rsr=00000001 db=00000000` ✓、仍无 `H4 bad=`/`not ringing`/panic ⇒ 描述符校验继续通过。",
- "distance": "距用户层还剩 3 个阶段：P1 UFS/根卷（进行中：卡在门铃写） → P2 存储层（DSU 只读系统盘 / RAM 镜像根卷） → P3 launchd 起用户态。P1 内部硬闸门：① NioUfs personality 匹配并 attach（**已过**）② 供电/时钟（**已过**：DP=1、时钟在走）③ 接管请求列表（**已过**：探针 A→G 全过）④ **门铃写可返回**（当前卡点 —— 514/515 判决：不是硬件，是我们自己的读回校验误报，509 已修）⑤ 控制器应答命令 ⑥ LUN/GPT 枚举 ⑦ APFS 根卷只读挂载。",
+ "updated": "2026-11-19 15:25（★★★★★★ **用户层路线打通：三处命令行一致 ⇒ UFS 不碰控制器；542 的照片证明启动已越过 UFS 卡点，IOKit 匹配链活着（平台专家匹配上、kext start、lock 成功、匹配走进 ArmCpu → NidUfs → AppleARMPU）。CI 543 构建中。**）",
+ "headline": "★★★★★★ **现在走的是进用户层这条路，不再纠结 UFS。** ★ 进用户层**根本不需要 UFS**：根设备是 loader 放进设备树的内存盘（rootfs.img），根文件系统是 **mockfs**，而 rootfs.img 里**已经有真的 launchd（525KB）和真的 dyld（922KB）**。★ 挡路的只有内核命令行里的 `native-ufs-root=1 native-ufs-probe=12` —— **loader 那份（board.toml）才是真机生效的**，已连同内核的两份副本一共三处一起改（14d834b）。★ 542 的照片：启动走到 **0673**（历史最多 0627）⇒ **越过 UFS 卡点**；平台专家匹配上、kext start ret=0x0、lock ret=0x0，匹配一路进 ArmCpu → NidUfs(#25/#26) → AppleARMPU。",
+ "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**。\n· **P0 IOKit 匹配关：已通**（542 照片：平台专家匹配上、kext 起、lock 拿到、匹配继续推进）。\n· **P1 UFS：⏸ 暂停**（机主要先进用户层；驱动仍认那两个参数，命令行加回一个词就恢复）。\n· **P2 存储层：**mockfs 那条**已经就位**（rootfs.img 里有真 launchd+dyld），只差内核把它挂成根并 exec 进去。\n· **P3 launchd：**现在的主线。\n★ **判据：屏幕上出现 `nio: exec: load_init_program enter`** ⇒ 就是进用户层的那一步。",
  "phases": [
   {
    "id": "P0",
    "name": "IOKit 匹配关",
-   "status": "done",
+   "status": "✅ 已通",
    "criteria": "面板出现 SM unlocked 之后的新行",
-   "evidence": "run-380/381：SM enter → SM locked → b4busy cfg=1 → busy ok → SM unlocked，随后 nio: IOKit match ret=1。★ 修正（11-17 查实）：SM unlocked 只说明 startMatching 返回了，**不等于匹配跑过** —— 根 nub 的匹配被交给配置线程异步执行，面板上的 'DSM enter' 只在同步分支打印，所以异步路径一直是无声的。453 面板零 M 行正是这一点造成的。",
-   "next": "—"
+   "evidence": "542 的照片（15:17 真机）：`nio: start> com.apple.driver.AppleARMIPlatform` / `nio: kext start ret=0x0 id=[com.apple.driver.AppleARMIPlatform]` / `nio: lock com.apple.driver.AppleARMIPlatform ret=0x0`（0658-0660），随后匹配继续：`nio: C ArmCpu` / `nio: P ArmCpu r=0`（0662-0664）、`nio: C NidUfs` + `nio: ufs probe #25/#26 provider=<pcu7 compatible=\"qcom,kryo\">`（0665-0670）、`nio: C AppleARMPU` / `nio: P AppleARMPU r=0xdffffffffd8ff8600`（0671-0673）。",
+   "next": "**已通，不用再管**（用户层一旦跑起来，缺驱动会一条条报出来，到时候按报错补）。"
   },
   {
    "id": "P1",
    "name": "UFS 起来 + 挂上 APFS 根卷",
-   "status": "current",
+   "status": "⏸ 暂停（用户层优先）",
    "criteria": "根卷挂载成功的日志",
    "evidence": "★★★★★ run-508/509 判决（22:43 真机照片，514 与 515）：**卡点从硬件收回到我们自己的代码里** —— `H4 bad=00000080`（只有 word[7] 一位不符）+ `H4c descriptor differs; not ringing` + 末尾 `ocs=f resp=ff scsi=ff`（result 初值）⇒ **门铃根本没敲**。根因：507/508 的读回校验里**写入公式与比对公式是两套**（PRD 偏移总在 vs 无数据时期望 0），而第一条命令 TEST UNIT READY 恰是无数据命令 ⇒ 永久误报。MI10 `s->utrd[7]=((UCD_PRDT/4)<<16)|n` 证实偏移总在。⇒ 509 已修：八个字只建一次。★ 此前 490 已排除描述符内容、cacheClean、门铃前状态、SMMU、HCE、总线死；499–506 已用 framebuffer 方块证明门铃写**确实返回**（十轮误判的根源是 console 打印会永久卡住）。",
-   "next": "**⏸ 暂停（用户层优先）**。UFS 的门铃战不再是主线：机主要先进用户层。驱动仍认 native-ufs-probe / native-ufs-root，**把命令行加回一个词就恢复**（一行）。\n★ 教训：这二十轮『门铃写没返回』的判决，根因是**我们自己的探针**（门铃写后第一次 framebuffer 写要等控制器占着的总线）。真要继续做 UFS，探针必须放在**确认读之后**。"
+   "next": "**⏸ 暂停。** 驱动仍认 `native-ufs-probe` / `native-ufs-root`，**把命令行加回一个词就恢复**（board.toml 一行）。\n★ 教训（这二十轮的真相）：照片上『门铃写没返回』的判决，根因是**我们自己的探针** —— 门铃写之后第一次 framebuffer 写要等**控制器占着的总线**。真要继续做 UFS，探针必须放在**确认读之后**（518/519 已经这么改了）。"
   },
   {
    "id": "P2",
    "name": "存储层（DSU 只读系统盘 / RAM 镜像根卷）",
-   "status": "todo",
+   "status": "★ 已就位（mockfs 那条）",
    "criteria": "/flash 挂上 DSU 里的 APFS + switch_root 成功",
-   "evidence": "DSU 只当存储容器，不当引导方式：System 装进 userdata 的 4 GiB 只读槽，boot 镜像维持二十几 MB，不刷 super、不改分区，卸载即回退。两条线必须先锁死一条：（1）我们定的目标——DSU 只读 System 当根卷；（2）haotian 范本的实际做法——root.apfs 走 fastboot oem ramdisk，DSU 只放 data（system_staged_over_usb=false）。容量：system 4 GiB 只读；data 32 GiB 起、64 GiB 上限备选；内存窗口按 6 GiB。硬前提：UFS 链路在内核入口时是关的（HCS=0x8、DP=0），DSU 里的分区同样读不到。",
-   "next": "★★★ **现在就走这条**：RAM 镜像根卷 = **mockfs**。\n· 根设备：设备树 /chosen/memory-map 的 RAMDisk 属性（loader 把 rootfs.img 放进去）⇒ 与 UFS 无关\n· 根文件系统：bsd/vfs/vfs_conf.c 的 vfstbllist 里**只有 mockfs 有 vfc_mountroot**\n· rootfs/rootfs.img（N4KROOT 格式）：slot A = 真 launchd(525088B)，slot B = 真 dyld(922912B)\n· mockfs 提供 /sbin/launchd、/usr/lib/dyld、/probe.bin\n· 内核 load_init_program() → exec /sbin/launchd ⇒ **用户层**\n★ 判据：屏幕上出现 **nio: exec: load_init_program enter**（nio-bsd-init-trace.patch）= 进用户层了"
+   "evidence": "· 根设备：设备树 `/chosen/memory-map` 的 `RAMDisk` 属性（loader 放 rootfs.img 进去）⇒ 与 UFS 无关\n· 根文件系统：`bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**\n· `rootfs/rootfs.img`（N4KROOT 格式）：slot A = **真 launchd（525088B）**，slot B = **真 dyld（922912B）**（`tools/check-mockfs-paths.py` 确认）\n· mockfs 提供 `/sbin/launchd`、`/usr/lib/dyld`、`/probe.bin`\n· 内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`",
+   "next": "★ **现在就走这条**。543 已经把三处命令行都改一致（loader 那份生效），⇒ UFS 驱动不碰控制器 ⇒ bsd_init 走到 init_task ⇒ mockfs 挂成根 ⇒ exec launchd。\n★ 判据：屏幕上出现 **`nio: exec: load_init_program enter`**。"
   },
   {
    "id": "P3",
    "name": "launchd 起用户态",
-   "status": "todo",
+   "status": "★ 现在的主线",
    "criteria": "看到 launchd / 用户态进程在跑",
    "evidence": "boot-args 已备好 launchd_unsecure_cache=1、wdt=-1、wdt_test=no_user_checkin、-wdt_no_pmu",
-   "next": "按 ios-sweet 的墙序准备：AMFI（可用 launchd_unsecure_cache 绕过）→ watchdogd（需要 IOWatchdog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface"
+   "next": "等 `nio: exec: load_init_program enter` 出现。若出现，下一轮看 launchd 自己的第一行输出，再按 ios-sweet 的墙序：AMFI（`launchd_unsecure_cache` 可绕）→ watchdogd（要 IOWatchDog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface。"
   },
   {
    "id": "P3+",
@@ -46,6 +46,20 @@
   }
  ],
  "rounds": [
+  {
+   "run": 542,
+   "time": "15:16",
+   "marker": "nio: lock com.apple.driver.AppleARMIPlatform ret=0x0",
+   "qemu": "macos-26",
+   "result": "★★★★★★ **启动越过 UFS 卡点**：照片走到 **0673**（历史最多 0627）⇒ 平台专家匹配上、`kext start ret=0x0`、`lock ret=0x0`，匹配继续进 ArmCpu → NidUfs(#25/#26, provider=`<pcu7 compatible=\"qcom,kryo\">` ⇒ 不是平台专家 ⇒ 驱动直接返回不碰控制器) → AppleARMPU。★ 顺带查明：**真机生效的命令行是 loader 那份**（board.toml），内核里的两份副本只在loader 的行不可用时才生效 ⇒ 542 仍带 UFS 参数。已推 14d834b 一次改齐"
+  },
+  {
+   "run": 543,
+   "time": "15:21",
+   "marker": "nio: exec: load_init_program enter",
+   "qemu": "macos-26",
+   "result": "★★★★★★ **三处命令行一致**：① `board.toml` 的 `payload.kernel_args`（**loader 真正用的，照片里的 `KERNEL ONLINE:` 行证明是它**）② `package/unixnu.toml` 的 QEMU 命令行 ③ `patches/xnu-8796/nio-boot-args-fallback.patch` 的 `nio_port_cmdline[]`（内核 fallback）④（先前已改）`nio-port-command-line.patch` 的 arm_init.c strlcpy。全部去掉 `native-ufs-root=1 native-ufs-probe=12`，保留 `rd=md0`。★ 两个补丁都用原始 `refs/xnu-xnu-8796.121.2` 树 `git apply` 验证过（offset、无 fuzz）。已推 14d834b"
+  },
   {
    "run": 515,
    "time": "14:55",
@@ -209,10 +223,11 @@
   }
  ],
  "next_actions": [
-  "★ 只等 469：它一次分辨两个候选卡点（读挂住 vs console 环），且进度行改直写保证看得见。",
-  "★ 469 判读：'poll N read' 有 / 'poll N got' 无 ⇒ 读 HC 寄存器挂住（fabric 侧）；两条都有 ⇒ 是 console 环（已被 469 的补丁根治，应当不再发生）。",
-  "★ 进用户层后单独一轮做清理（46 个零引用补丁文件 + E 盘待删目录）。",
-  "P2 的 DSU 只在 P1 根卷挂上之后再动；DSU 不解决 UFS 离线。"
+  "★ **543 构建完自动打包刷机**（后台 watch-round.sh 543）—— 开机后找 **`nio: exec: load_init_program enter`**。",
+  "★ 若出现 ⇒ 下一轮目标变成 launchd 自己的第一行输出；把用户层真正跑起来的证据拍下来。",
+  "★ 若没出现 ⇒ 看屏幕上**最后一行**是哪一行，判读表在 `nio-bsd-init-trace.patch` 的打印里。",
+  "★ UFS 想恢复：board.toml 的 `payload.kernel_args` 加回 `native-ufs-root=1`（或 `native-ufs-probe=12`）。",
+  "★ **别再为 UFS 的门铃加新探针** —— 先把用户层打通，回头再收拾它。"
  ],
  "notes": [
   "★★★★★ 539（round 517）已上机 —— 判读 `UFS STEPS: 6123457`\n★★ **找到了最直接的参照：`refs/ios-v60/shim/ufs.c`（Apple 自家 UFS 驱动，UFS_BASE 与 nio 同为 0x1d84000）**。\n  逐字段核对结果：**我们的描述符是对的**（dw0=0x11000000、dw2(OCS)=0x0f、dw6/dw7、寄存器偏移 0x50/0x54/0x58/0x5c/0x60/0x20/0x30/0x34 全对）。\n  ★ **shim 做了、我们没做的两件事**：\n  ① **等门铃位清零**：`ufs_wr(REG_UTRLDBR,1); while (ufs_rd(REG_UTRLDBR)&1) { if(timeout){ufs_wr(REG_UTRLCLR,~1u); return 1;} }`\n     —— 控制器取走请求时会清掉该位；**我们敲了门铃就走，从不知道控制器取没取走**，且没取走的槽会留在列表里给下一条命令踩。\n  ② **前置检查 HCE**：`if (!(hce&1) || !(hcs&HCS_DP) || !(hcs&HCS_UTRLRDY)) stop;`\n     —— **HCE(0x34) bit0 = 主机控制器使能，为 0 时门铃写会被忽略**；我们写了 HCE=1 但**从不读回**。\n  ★ MI10 的完成判据也查实了（`hakios.ufshc.c:616-622`）：**判据是门铃寄存器本身**（`done = waiting & ~db`），不是 UTRLCNR。\n★ **判读**：`'2'`=控制器取走了；`'T'`=没取走（超时清槽）；col18-19=门铃寄存器值（bit0 仍为 1 ⇒ 没取走）。\n★ 环境备忘：本机**无 ffmpeg**；`Add-Type`/Reflection/WSL **被安全策略拦**；GitHub releases 下载不通（代理只转 git）；`api.github.com` 不通 ⇒ 取消 CI 只能机主在网页上做。视频判读走 pip 装 PyAV。",
@@ -354,8 +369,8 @@
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
   "P1_UFS_起来_挂APFS根卷": {
-   "status": "进行中（bring-up 的等待处；473 已推待验证）",
-   "done": "匹配链通(461) → 驱动启动(468) → 控制器看见设备 DP=1(468/469)",
+   "status": "⏸ 暂停（用户层优先）",
+   "done": "匹配链通(461) → 驱动启动(468) → 控制器看见设备 DP=1 → ★★ **542 照片：启动越过 UFS 卡点（0673 行），匹配链活着** ⇒ UFS 本身不再是拦路虎，但硬件路径仍卡在门铃（探针的错，已定位）",
    "remaining_6_steps": [
     "1. NOP OUT —— 证明传输层（hostNop）",
     "2. power mode query（hostQueryRead 0x03/0x02）",
@@ -404,19 +419,20 @@
    }
   },
   "P2_存储层_DSU只读系统盘": {
-   "status": "未开始",
+   "status": "★ 现在走这条（mockfs 已就位）",
    "remaining": "4GB 读出做成 rootfs.img + boot 镜像换掉十几 MB",
    "estimate": "构建侧为主，1-3 天",
-   "hardest": "DSU 分区边界与 system staged over ufs=false 的容量布局"
+   "hardest": "DSU 分区边界与 system staged over ufs=false 的容量布局",
+   "done": "rootfs.img 里有真 launchd(525KB)+真 dyld(922KB)；mockfs 是唯一有 mountroot 的 fs；根设备来自设备树 RAMDisk ⇒ **与 UFS 无关**"
   },
   "P3_launchd起用户态": {
-   "status": "未开始，但★准备已就位",
+   "status": "★ 现在的主线",
    "ready": "boot-args 全套齐了：unentitled_ios_sim_launch / launchd_unsecure_cache / wdt=-1 / wdt_test=no_user_checkin / amfi_get_out_of_my_way / amfi_allow_any_signature / nio_skip_security_extensions；rootfs.img 在（1.45 MB）",
    "estimate": "半天到 1 天",
    "hardest": "不是配置，是内核能否挂上根卷并把控制交给 launchd —— 那正是 P1 的第 6 步"
   },
   "P3plus_拨号_GPU_WiFi_BT_modem_audio": {
-   "status": "未开始；★ 2026-11-18 00:55 更正：umi 带的是完整高通驱动套件，不是基础驱动",
+   "status": "★ 现在的主线",
    "umi_带的高通驱动": {
     "wifi": "6852 行：wifi.c 193 KB（完整 WLAN 栈）+ apple80211 29 KB + wlfw.c 23 KB（WCNSS 固件加载）+ sta/lx/wlan",
     "modem": "8781 行：mpss.c 250 KB（完整 Qualcomm MPS 栈）+ ipa 34 KB + cell/nas/qmi",
