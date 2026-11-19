@@ -1517,37 +1517,57 @@ void NioUfs::adoptAndRead (unsigned level)
      *
      * So the write is done with the interrupts as they were.
      */
+    /* nio run-518: NOTHING is drawn between the write and the read.
+     *
+     * Rounds 514 to 517 drew their marks in that gap, and the picture they
+     * produced said, every time, that the doorbell write itself never came
+     * back: white, green and red, and no fourth white.
+     *
+     * That was this port marking itself.  The controller takes the bus while
+     * it fetches the descriptor, and a store to the panel waits for the bus.
+     * So the first mark drawn after the doorbell was where the run stopped --
+     * not the doorbell.
+     *
+     * The reference driver that runs on this controller does not draw
+     * anything there either.  It writes the doorbell, then reads the doorbell
+     * register until the bit is cleared, and only then does it look at the
+     * result:
+     *
+     *   ufs_wr (REG_UTRLDBR, 1);
+     *   while (ufs_rd (REG_UTRLDBR) & 1) { ... }
+     *   __asm__ volatile ("dsb sy" ::: "memory");
+     *   *ocs_out = utrl[0].dw2 & 0xff;
+     *
+     * So the order here is the same: write, read, and only then the marks,
+     * when the controller has let the bus go.
+     */
     write32 (hc, 0x58, 1);          // ring slot 0
 
-    /* nio run-516: the mark is drawn IMMEDIATELY after the write, before
-     * anything else at all -- before a barrier, before a read, before
-     * anything.
-     *
-     * The photograph of run 533 said white, green and red and no fourth
-     * white.  The fourth white is drawn straight after the write, so the
-     * run stopped between the red and the fourth white.  Three things sit
-     * in that gap and only one of them can be named from the picture:/r/n     *
-     *   1. the masking of the interrupts, and the putting back of them
-     *      afterwards -- round 511 added that, and round 533 is the
-     *      first round to have it;
-     *   2. the write itself;
-     *   3. the reading of the register that confirms it.
-     *
-     * So the two are separated here.  The mask is put back first, and
-     * the mark that says the interrupts are back is drawn before the
-     * write.  Then the write, then the mark that says the write was
-     * issued, and only then the read that confirms it.
-     *
-     *   the mark before the write   the write is what stopped
-     *   the mark after the write    the read is what stopped
-     *
-     * A picture that shows neither says the write is what stopped; one
-     * that shows the first and not the second says the read is.
-     */
-    fbStep (0);                     // box 1: the write was issued
+    uint32_t dbAfter = 0;
+    bool taken = false;
+    {
+      uint64_t started = timerTicks ();
+      uint64_t limit = 19ULL * 1000000ULL * 2ULL;   // two seconds
+      while (true) {
+        dbAfter = read32 (hc, 0x58);
+        if ((dbAfter & 1U) == 0) {
+          taken = true;
+          break;
+        }
+        if ((timerTicks () - started) >= limit) {
+          break;
+        }
+      }
+    }
+    if (!taken) {
+      write32 (hc, 0x5c, ~1U);       // clear slot 0, as the reference does
+    }
+    __asm__ volatile ("dsb sy" ::: "memory");
+
+    /* Now the bus is free, and the marks can be drawn. */
+    fbStep (0);                     // box 1: the doorbell write was issued
     fbChar (118, 11, '1');          // the same, as a character: the write was issued
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write was issued
-    uint32_t dbAfter = read32 (hc, 0x58);
     fbStep (4);                     // box 5: the doorbell read came back
     fbChar (118, 17, '7');          // the same, as a character: the read came back
     fbMark (1860, 176, 0x00, 0x00, 0xff);  // column 8: the read came back
@@ -1556,49 +1576,10 @@ void NioUfs::adoptAndRead (unsigned level)
       fbChar (118, 18, hex[(dbAfter >> 4) & 0xf]);
       fbChar (118, 19, hex[dbAfter & 0xf]);
     }
-    /* nio run-517: the doorbell is waited for, the way the reference
-     * driver that runs on this controller waits for it.
-     *
-     * That driver rings the doorbell and then waits for the bit of
-     * the slot it rang to be cleared, because the controller clears
-     * that bit when it takes the request:/r/n     *
-     *   ufs_wr (REG_UTRLDBR, 1);
-     *   while (ufs_rd (REG_UTRLDBR) & 1) {
-     *       if (ticks () - start > 19200000) {   // one second
-     *           ufs_wr (REG_UTRLCLR, ~1u);       // clear slot 0
-     *           return 1;                        // timeout
-     *       }
-     *   }
-     *
-     * This port rang the doorbell and walked away, so it never knew
-     * whether the controller had taken the request at all, and a slot
-     * that was never taken stayed in the list for the next command to
-     * trip over.
-     *
-     * The wait is bounded, and on the timeout the slot is cleared the
-     * way the reference driver clears it, so that a request the
-     * controller never took does not stay in the list.
-     *
-     * A character says which of the two happened: a 2 means the bit
-     * was cleared, so the controller took the request; a T means it was
-     * not, and the slot was cleared.
-     */
-    {
-      uint64_t started = timerTicks ();
-      uint64_t limit = 19ULL * 1000000ULL * 2ULL;   // two seconds
-      bool taken = false;
-      while ((timerTicks () - started) < limit) {
-        if ((read32 (hc, 0x58) & 1U) == 0) {
-          taken = true;
-          break;
-        }
-      }
-      if (taken) {
-        fbChar (118, 12, '2');          // the controller took the request
-      } else {
-        write32 (hc, 0x5c, ~1U);       // clear slot 0
-        fbChar (118, 12, 'T');          // it did not take it
-      }
+    if (taken) {
+      fbChar (118, 12, '2');          // the controller took the request
+    } else {
+      fbChar (118, 12, 'T');          // it did not take it
     }
     /* What the doorbell register holds after the write says whether the
      * controller took the request.  The bit for the slot that was rung
