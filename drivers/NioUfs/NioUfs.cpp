@@ -679,7 +679,7 @@ void NioUfs::adoptAndRead (unsigned level)
    * just below the text the console has written, so it is in the part
    * of the panel a photograph of the phone holds. */
   {
-    const char *heading = "UFS STEPS: 1234";
+    const char *heading = "UFS STEPS: 12345";
     for (unsigned column = 0; column < 60; column++) {
       fbChar (118, column, ' ');
     }
@@ -691,8 +691,8 @@ void NioUfs::adoptAndRead (unsigned level)
     if (!fbBytes) {
       return;
     }
-    static const unsigned widths[4] = { 16, 24, 32, 40 };
-    unsigned size = widths[index < 4 ? index : 3];
+    static const unsigned widths[5] = { 16, 24, 32, 40, 48 };
+    unsigned size = widths[index < 5 ? index : 4];
     unsigned row = 1900, col = 8 + index * 56;
     for (unsigned y = row; y < row + 32; y++) {
       for (unsigned x = col; x < col + size; x++) {
@@ -740,7 +740,7 @@ void NioUfs::adoptAndRead (unsigned level)
    * of the console is lit and unlit pixels side by side, so a run of
    * equal pixels does not survive in text.
    */
-  for (unsigned col = 0; col < 176; col += 16) {
+  for (unsigned col = 0; col < 192; col += 16) {
     fbMark (1860, col, 0x00, 0x00, 0x00);
   }
   fbMark (1860, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
@@ -1466,14 +1466,43 @@ void NioUfs::adoptAndRead (unsigned level)
      * be the thing that stops.
      */
     nioUfsSay ("nio: ufs I1 doorbell\n");
-    boolean_t interruptState = ml_set_interrupts_enabled (FALSE);
-
+    /* nio run-515: the doorbell is written with the interrupts as they
+     * were, and not with them masked.
+     *
+     * Round 511 masked them, on the strength of the reference driver on
+     * this chip, which does the same.  The photograph of run 533 shows
+     * what that cost: the marks said white, green and red and no
+     * fourth white, which is the doorbell write not coming back.
+     *
+     * Masking the interrupts does not stop the controller's fetch; it
+     * stops this processor from taking an interrupt while the fetch
+     * holds the bus.  So it changes the arbitration on the bus that the
+     * fetch needs, and the fetch is what the write is waiting for.  The
+     * reference driver gets away with it because it takes the controller
+     * over from the loader in a handshake, and rings a controller that
+     * is idle; this port rings a controller that is already running.
+     *
+     * So the write is done with the interrupts as they were.
+     */
     write32 (hc, 0x58, 1);          // ring slot 0
 
-    (void) ml_set_interrupts_enabled (interruptState);
-    fbStep (0);                     // box 1: the doorbell write came back
-    fbChar (118, 11, '1');          // the same, as a character: the write came back
-    fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write came back
+    /* The write is a posted write: it goes into the store buffer and the
+     * processor carries on.  What says the write reached the controller
+     * is a read of the register, and a read waits for the bus.  The
+     * reference driver reads the doorbell register right after writing
+     * it, and that read is what tells it the write landed.
+     *
+     * The mark is drawn BEFORE the read, so that a picture says which of
+     * the two stopped: the write, or the read that confirms it.
+     */
+    fbStep (0);                     // box 1: the doorbell write was issued
+    fbChar (118, 11, '1');          // the same, as a character: the write was issued
+    fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write was issued
+    uint32_t dbAfter = read32 (hc, 0x58);
+    fbStep (4);                     // box 5: the doorbell read came back
+    fbChar (118, 15, '5');          // the same, as a character: the read came back
+    fbMark (1860, 176, 0x00, 0x00, 0xff);  // column 8: the read came back
+    __asm__ volatile ("dsb sy" ::: "memory");
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
      * the next store did not land; red and white together but no blue
