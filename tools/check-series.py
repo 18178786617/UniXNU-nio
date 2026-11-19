@@ -158,8 +158,21 @@ def main(argv):
             print("[missing] %s" % name)
             failures += 1
             continue
+        # The CI applies the series with `git apply` (scripts/unixnu/patches.py),
+        # so the checker does the same.  `patch` was used here until run 554,
+        # and the two tools place a hunk differently when the context can be
+        # found at more than one offset: `patch` takes the first match it
+        # finds, `git apply` takes the one at the recorded position.  That is
+        # not cosmetic -- the bsd_init phase marks landed inside bsd_init()
+        # under `patch` and at file scope under `git apply`, and under
+        # `git apply` they come *before* XNU's own definition of
+        # bsd_init_kprintf, which then overrides them.  A tree that does not
+        # match the CI's tree cannot tell a patch that works from one that
+        # lands somewhere else.
         r = subprocess.run(
-            ["patch", "-p1", "--no-backup-if-mismatch", "--forward", "-i", str(p.resolve()).replace("\\", "/")],
+            ["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+             "apply", "--verbose", "--whitespace=nowarn", "-p1",
+             str(p.resolve()).replace("\\", "/")],
             cwd=str(SCRATCH), capture_output=True, text=True,
         )
         if r.returncode == 0:

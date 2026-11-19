@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 20:50（★★★★★★★ **路线定稿，不再改方向。** 目标只有一个：手机内核 exec `/sbin/launchd`（用户层）。卡点只有一个：**IOKit 匹配里没有任何候选走到 `inst->probe()`**（552 照片：有 `Q2..Q6`，没有 `P1`）⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ `bsd_init` 等不到根设备 ⇒ 到不了 `load_init_program`。本条及下面 phases/next_actions 就是全部计划，一轮一个 CI。**）",
- "headline": "★★★★★★★ **路线（定稿）：S1 让 bsd/iokit 的改动进内核 → S2 让候选走到 probe() → S3 拿到 IOBSD、挂 mockfs 根、exec `/sbin/launchd`。**\n· **为什么S1是前提**：内核里 `nio: MT thread`（osfmk，本轮新补丁）=1 ⇒ osfmk 的改动进内核；而 `nio: bsd_init: `=0、`cand done`=0 ⇒ bsd/iokit 的改动**停在源码层**，我们写在这两个组件里的探针从来没进过手机。\n· **S1的做法**（554，commit `edcb94a`，正在构建）：两个对象根 `build/xnu/obj` 与 `build/xnu/ios-obj` 一起清空，连 `*.filelist`/`*.a` 一起删；指纹步骤打印三个组件 `.filelist` 的前几条路径、对象目录 `.o/.cpo/.filelist/.a` 总数、`bsd_init.o`/`IOService.cpo`/`startup.o` 各自带不带本轮标记。**判据：发布内核里出现 `nio: bsd_init: `。**\n· **S2**（554 通过后下一轮）：在 `iokit/Kernel/IOService.cpp` 打印每个候选的 personality 匹配结果与 `probe()` 返回值，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的每一次重试与超时；**判据：屏幕上出现 `P1`。**\n· **S3**：IOBSD 出现后 `bsd_init` 走 `vfs_mountroot()`（mockfs/N4KROOT 挂成根）→ `load_init_program()` → exec `/sbin/launchd`；**判据：屏幕出现 launchd 启动痕迹。**\n· **纪律**：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不用我的推断当刷机闸。",
+ "updated": "2026-11-19 22:05（★★★★★★ **真因抓到了，而且不是组件问题。** 554 证明三个组件每次都重编（bsd_init.o 13:02:57、IOService.cpo 13:00:09，都比源码新）。真正的原因是**我们的探针写进了编译器根本不走的分支**：① `bsd_init.c`：我们的 `#define bsd_init_kprintf` 被插在 `#if DEBUG_BSDINIT` 的 **#else 分支**里，而同系列的另一个补丁把 `DEBUG_BSDINIT` 设成 1 ⇒ 那段是死代码 ⇒ 内核里只有 XNU 自己的 `bsd_init: `（43 次）、`nio: bsd_init: `（0 次）⇒ **相位标记从来没编译过**。② iokit：丢弃候选的原因只走 `printf`（console 环，满了就丢）⇒ 永远看不到。★ 555：把相位标记挪到 `#endif` 之后（必赢）、把丢弃原因直接画到屏上（R=原因/K=类别）、指纹打印内核里**全部 nio 标记清单**。★ 同时修三处工程卫生：本地检查器改用 `git apply`（与 CI 同法）、本地基线树归一化为 LF（CRLF 让补丁乱跳）、10 个 CRLF 补丁文件归一化。**）",
+ "headline": "★★★★★★ **路线（不变，但 S1 的内容改了）：S1 让探针真的会打印 → S2 按丢弃原因修匹配 → S3 拿到 IOBSD、挂 mockfs 根、exec `/sbin/launchd`。**\n· **S1（555，正在推送）**：bsd 相位标记移出死分支；候选丢弃原因（R/K）画到屏上；指纹打印发布内核里全部 `nio:` 标记清单。\n· **S2**：按 S1 拍到的原因修匹配。**最可能是 reason 6**——personality 所在的 kext 不在内核里，匹配就一直等一个不会来的模块（`NIO_DROP(6)` 那条注释就是这么写的）。\n· **S3**：IOBSD 出现 → `vfs_mountroot()`（mockfs/N4KROOT）→ `load_init_program()` → exec `/sbin/launchd`。\n· **纪律**：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不拿推断当刷机闸。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
   {
@@ -14,11 +14,11 @@
   },
   {
    "id": "S1",
-   "name": "让 bsd/iokit 组件的改动进内核",
+   "name": "让探针真的会打印（bsd 相位标记 + 候选丢弃原因）",
    "status": "current",
-   "criteria": "发布内核里 `grep -aF \"nio: bsd_init: \"` 有结果",
-   "evidence": "552 内核：`nio: MT thread`=1（osfmk 进了）、`nio: bsd_init: `=0、`cand done`=0、旧的 `nio_match_progress`/`nio_probe_cand`=1 ⇒ 这两个组件的对象是更早一次编译留下的；构建有两个对象根，链接读的 `.filelist` 写在对象旁边",
-   "next": "554：两个对象根一起清空（`.o`/`.cpo`/`.a`/`*.filelist`/核心/`.LDFLAGS`/`justlto*`，保留 `EXPORT_HDRS`），并打印清单前几条路径与各对象是否带标记"
+   "criteria": "发布内核里出现 `nio: bsd_init: `；屏幕出现 `R`/`K` 标记（丢弃原因与 personality 类别）",
+   "evidence": "554：三个组件都重编了（bsd_init.o 13:02:57、IOService.cpo 13:00:09、startup.o 13:01:47，都比源码 12:59:16 新）⇒ **组件不是问题**。内核里 `bsd_init: `=43、`nio: bsd_init: `=0 ⇒ 我们的 `#define` 在 `#if DEBUG_BSDINIT` 的 #else 死分支里（DEBUG_BSDINIT 被别的补丁设成 1）⇒ 从未编译。丢弃原因只走 printf（console 环）⇒ 看不见。",
+   "next": "555：`#undef` + 重新定义放在 `#endif` 之后（必赢）；`NIO_DROP` 每次丢弃画 `R<原因>`/`K<类别>`；汇总也画到屏上；指纹新增「发布内核里全部 nio 标记清单」+ 探测 kern_exec.o。"
   },
   {
    "id": "S2",
@@ -26,7 +26,7 @@
    "status": "blocked",
    "criteria": "屏幕出现 `P1`（`nio-probe-entry-marks.patch`：Q=通过 personality/模块检查，P1=即将 `inst->probe()`）",
    "evidence": "552 照片最后一行是 `Q6`，之后什么都没有，`P1` 一次都没出现",
-   "next": "S1 通了以后，在 IOService.cpp 打印每个候选的 personality 匹配结果、模块加载结果与 probe() 返回值；再决定是补 personality、跳过坏候选、还是延长等待"
+   "next": "按 S1 拍到的原因修匹配；reason 6 = personality 所在的 kext 没加载（匹配等一个不会来的模块）"
   },
   {
    "id": "S3",
@@ -286,15 +286,16 @@
   }
  ],
  "next_actions": [
-  "★ **当前唯一在走的路**（旧 roadmap 的 P3 = launchd 主线，现在拆成 S1–S3 三步）：",
-  "S1 **当前（554，commit edcb94a，正在构建）**：两个对象根一起清空 + 打印链接清单与对象标记。判据：内核里出现 `nio: bsd_init: `。",
-  "S2 **554 通过后下一轮**：在 `iokit/Kernel/IOService.cpp` 逐候选打印 personality/模块/probe 结果，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的重试与超时。判据：屏幕出现 `P1`。",
-  "S3 **再下一轮**：按 S2 的结论修（补 personality / 跳过坏候选 / 放宽等待），目标让 IOBSD 出现；随后 mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
-  "★ 存储层已定，不再回头：mockfs RAMDisk（rootfs.img / N4KROOT）。**不用 DSU、不用本机 APFS/UFS**（旧 P2 已就位，旧 P1 已作废）。",
-  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不拿我的推断当刷机闸；照片没看懂之前不换方向。",
-  "★ 判读表（下一张照片只看这些）：`P1` 出现 ⇒ 候选开始 probe；`nio: bsd_init: ` 出现 ⇒ bsd 探针可见；`nio: exec: load_init_program enter` 出现 ⇒ **进用户层**。"
+  "★ **当前唯一在走的路**（旧 roadmap 的 P3 = launchd 主线，现在拆成 S1–S3）：",
+  "S1 **当前（555）**：bsd 相位标记移出死分支 + 候选丢弃原因上屏 + 内核标记清单。判据：内核里出现 `nio: bsd_init: `，屏幕出现 `R`/`K`。",
+  "S2 **554/555 之后**：按丢弃原因修匹配。判据：屏幕出现 `P1`（候选真的走到 probe）。",
+  "S3 **再下一轮**：IOBSD 出现 → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
+  "★ 存储层已定：mockfs RAMDisk（rootfs.img / N4KROOT），不用 DSU、不用本机 APFS/UFS。",
+  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；照片没看懂之前不换方向。",
+  "★ 本地检查必须与 CI 同法：`git apply` + LF。CRLF 会让补丁落到别处，这已经骗过好几轮。"
  ],
  "notes": [
+  "★★★★★★ **真因（2026-11-19 22:05）：探针写进了编译器不走的分支 / 走的是会丢的通道**\n· 554 的硬数据：`bsd/DEVELOPMENT/bsd_init.o` mtime 13:02:57、`iokit/DEVELOPMENT/IOService.cpo` 13:00:09、`osfmk/.../startup.o` 13:01:47，源码 12:59:16 ⇒ **三个组件每轮都重编**，S1 旧前提（组件不进内核）是错的，已作废。\n· bsd 的相位标记：`nio-bsd-init-phases-direct.patch` 把 `#define bsd_init_kprintf` 插进 `#if DEBUG_BSDINIT` 的 **#else 分支**；而 `nio-bsdinit-narrates.patch` 把 `DEBUG_BSDINIT` 从 0 改成 1 ⇒ #else 是死分支 ⇒ 我们的定义从未编译。内核证据：`bsd_init: ` ×43（XNU 自己的）、`nio: bsd_init: ` ×0。\n· iokit 的丢弃原因：`NIO_DROP` 记了原因，但汇总只走 `printf` → console 环 → 环满即丢（546 面板就是证据：只有 iokit 的标记、没有 bsd_init 的相位）。\n· 555 的做法：相位标记 `#undef` 后放在 `#endif` 之后（必赢）；丢弃原因改用 `nio_u_mark` 直接上屏（R=原因、K=personality 类别）；指纹打印发布内核里全部 `nio:` 标记清单（一眼看清什么真的进去了）。\n\n★★★★★★ **工程卫生三修（否则补丁永远写不对）**\n· 本地 `tools/check-series.py` 改用 `git apply`（与 CI 的 patches.py 同法）。`patch` 会把 hunk 落到第一个匹配的偏移，CI 不会。\n· 本地基线树 `.tmp/xnu-8796.101.5` 之前是 CRLF（Windows 检出），CI 是 LF ⇒ 补丁上下文对不上、落点乱跳。已 `core.autocrlf=false` 重新检出为 LF。\n· 仓库里 10 个 `.patch` 文件在工作树中是 CRLF，已归一化为 LF（.gitattributes 早已声明 `*.patch text eol=lf`）。\n· 另：本地基线树里混进了 3 个 CI 没有的文件（source_pthread_bootstrap.c / kpc.c / boot_progress.h），已删除。",
   "★★★★★★ **定稿路线（2026-11-19 20:50）：只做这 3 步，不再换方向。**\n· 目标：手机内核 exec `/sbin/launchd`（用户层）。判据：屏幕出现 launchd 痕迹。\n· 卡点（唯一）：552 照片有 `Q2..Q6` 没有 `P1` ⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ bsd_init 卡在等根设备。\n· 前置（唯一）：bsd/iokit 的改动必须进内核，否则探针不可见、代码改不动。\n\n★★★★★★ **已排除的假设（不要再试，也不要据此改方向）**\n① 「核心没重编」——已被 552 证伪：`nio: MT thread`（本轮新补丁）在屏上，核心确实是新编的。\n② 「D/S/WAIT 判读卡点」——无效。那些探针（`nio-matching-step-marks` / `nio-bound-the-resource-wait` / `nio-bsd-init-phases-direct`）从未进内核，屏幕上的 `D1 D2 D3 D5`/`cand done`/`S1` 是更早那版内核里的旧探针。\n③ 「删掉 .o 就够」——550 证伪（删 977 个对象，链接照样用旧代码）。\n④ 「给源码盖新时间就够」——551 证伪（115 个源文件盖成现在，出来的内核仍无本轮标记）。\n⑤ 「QEMU 能判断」——无效，不拿它当依据。\n⑥ 「UFS 门铃是主线」——已让开（543 起命令行不再带 UFS 参数），用户层不依赖 UFS。\n⑦ 「用 DSU / 手机本机只读系统盘当根」——**已退出主线，不在当前三步里**。根设备来自设备树 /chosen/memory-map 的 RAMDisk，rootfs/rootfs.img 是 N4KROOT，bsd/vfs/vfs_conf.c 里 mockfs 是唯一有 vfc_mountroot 的文件系统；内核命令行不带 native-ufs-root=1，所以用户层不需要 UFS，也就不需要 DSU。工程里现在没有任何 DSU 代码（board.toml / patches / drivers 全部搜不到 DSU，只有工作区里下载的 iOS OTA 资产 DSU.zip 与旧笔记提到过它）。\n\n★★★★★★ **两个对象根（本次的真正机关）**\n· `build/xnu/obj/DEVELOPMENT_ARM64_BCM2837` ← bootstrap 那轮编译的\n· `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837` ← 最终那轮编译的\n· 链接读的 `<component>.filelist` 写在对象旁边（`MakeInc.kernel:147`），清一个根不够。",
   "★★★★★★ **编号对照（防止再被误读成「回头」，2026-11-19 20:55）**\n· 旧看板第①项「IOBSD 匹配关」判据=「面板出现 SM unlocked 之后的新行」⇒ 证明**匹配锁没死锁** ⇒ **已完成，不回头**（并入现在的 S0）。\n· 现在的 **S1「让 bsd/iokit 的改动进内核」不是第①项**，是这轮才出现的一步。原因：写在这两个组件里的探针从来没进过手机，所以「匹配走到哪一步」既看不见也改不了；先把探针送进内核，才谈得上定位与修复。\n· 旧①与 S1/S2 的关系：旧①是**较弱的判据**（锁没死），S2 是**更严的判据**（候选真的走到 `inst->probe()` ⇒ personality 装载 ⇒ IOBSD 出现）。旧①通过不等于 personality 装载过——这一点直到 552 的照片才被验证（`Q2..Q6` 之后没有 `P1`）。\n· 旧 P1（UFS 挂 APFS 根卷）作废；旧 P2（存储层 DSU→mockfs）已定型；旧 P3（launchd）= 现在的 S1–S3。",
   "★★★★★★ **为什么路线看起来变过（诚实记录，2026-11-19 20:50）**\n· 前十几轮我改方向，每一次当时都有理由，但**理由建立在坏数据上**：bsd 与 iokit 两个组件的改动从没进过内核，所以屏幕上的 `D1 D2 D3 D5` / `cand done` / `S1` 全是更早那版内核里的旧探针，我拿它们当成了当前进度。\n· 真正的转折点是 552 的照片 + 内核字节：`nio: MT thread`（本轮新补丁，osfmk）在屏上，而 `nio: bsd_init: `=0、`cand done`=0。\n· 从 552 起：先让探针进内核（①），再修匹配（②），最后起用户层（③）。**这三步之外不再开新方向。**\n· 纪律：每一轮只允许改一个组件、只允许有一个判据；照片没读懂之前不改代码。",

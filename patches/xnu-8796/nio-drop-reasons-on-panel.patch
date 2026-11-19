@@ -1,0 +1,68 @@
+Why no candidate ever reaches its personality's probe()
+
+The panel of run 552 ends with Q2, Q3, Q4, Q5, Q6 and nothing after it.
+Q is written once per entry into probeCandidates, so the matching entered it
+six times.  P1, which is written right before inst->probe(), never appears:
+no candidate was ever probed, so no personality was loaded, so IOBSD never
+appeared, and bsd_init waits for a root device that will not come.
+
+The reasons are already recorded -- NIO_DROP writes down why each candidate
+was turned away, and the summary at the end of probeCandidates prints them.
+But that summary goes through printf, into the console ring, and the ring is
+where the boot went silent: the run 546 panel showed the matching's marks
+and none of bsd_init's phases for exactly that reason.  So the reasons are
+written to the panel as well, where they cannot be lost.
+
+The numbers are the reasons, in the order the candidates were offered:
+
+  1  the candidate is a dext and dexts are off
+  2  a dext relaunch is needed and the budget is spent
+  3  the match category was consumed by another client
+  4  the properties could not be copied
+  5  the nub does not match the personality
+  6  the kext that holds the personality is not loaded
+  7  the client is being terminated for replacement
+  8  the match category was consumed
+  9  the personality is not the one being rematched
+
+Reason 6 is the one that matters: the kext is not in the kernel, so the
+matching waits for a module that will never be loaded, and every candidate
+that needs it is turned away.  K says which class was asked for.
+
+R is the reason, K the class of the personality, and the summary at the end
+repeats them as "nio: S <provider> r=<reasons> n=<class>".
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 23b8d83..bd01596 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4058,6 +4058,16 @@ nio_reason_rank(int reason)
+ 			nio_class_name(match, nio_best_name, 24); \
+ 		} \
+ 		nio_nreasons++; \
++		/* nio: the same reason on the panel.  The console is where the boot \
++		 * went silent, so the summary below never arrived on the screen; \
++		 * the reasons are what say which door the candidates were turned \
++		 * away at.  R is the reason, K the class of the personality. */ \
++		char nio_drop_name[24]; \
++		nio_class_name(match, nio_drop_name, 24); \
++		nio_u_mark("\nR"); \
++		nio_uhex((unsigned long)(n)); \
++		nio_u_mark("\nK"); \
++		nio_u_mark(nio_drop_name); \
+ 	} \
+ } while (0)
+ 
+@@ -4462,6 +4472,12 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 		}
+ 		printf("\nnio: S %s r=%s n=%s", getName() ? getName() : "?", nio_buf,
+ 		    nio_best_name[0] ? nio_best_name : "?");
++		nio_u_mark("\nnio: S ");
++		nio_u_mark(getName() ? getName() : "?");
++		nio_u_mark("\nr=");
++		nio_u_mark(nio_buf);
++		nio_u_mark("\nn=");
++		nio_u_mark(nio_best_name[0] ? nio_best_name : "?");
+ 	}
+ 
+ 	OSSafeReleaseNULL(matches);

@@ -64,11 +64,13 @@ compares what it finds with what the tree the series started from had.
  __attribute__((noinline)) void
  native_apfs_probe_checkpoint(void)
  {
-@@ -582,7 +602,22 @@
+@@ -582,7 +602,30 @@
  #if DEBUG_BSDINIT
  #define bsd_init_kprintf(x, ...) kprintf("bsd_init: " x, ## __VA_ARGS__)
  #else
 -#define bsd_init_kprintf(x, ...) printf("nio: bsd_init: " x, ## __VA_ARGS__)
++#define bsd_init_kprintf(x, ...)
+ #endif
 +
 +/* nio: the phase on the panel and the phase in the console.  The one on the
 + * panel carries the text as it was written, so a message with a number in it
@@ -80,12 +82,18 @@ compares what it finds with what the tree the series started from had.
 + * two were writing to the same place at the same time: the direct marks went
 + * to the framebuffer and these went into the console's ring, and the ring is
 + * where the boot stopped.  So the phases say themselves on the panel now, and
-+ * they say whether this thread got as far as the root volume. */
++ * they say whether this thread got as far as the root volume.
++ *
++ * This definition has to sit after the #endif.  It used to sit in the #else
++ * branch, and another patch of this series sets DEBUG_BSDINIT to 1, so the
++ * branch was dead: the core of run 554 carries "bsd_init: " 43 times, which
++ * is XNU's own definition, and "nio: bsd_init: " not at all, so no phase
++ * mark of this series ever reached the kernel. */
++#undef bsd_init_kprintf
 +#define bsd_init_kprintf(x, ...) do { \
 +	nio_bmark("\nnio: bsd_init: " x); \
 +	printf("nio: bsd_init: " x, ## __VA_ARGS__); \
 +} while (0)
- #endif
  
  	throttle_init();
 --- a/bsd/kern/kern_exec.c

@@ -764,12 +764,25 @@ jobs:
               print(f'{label}: {os.path.getsize(path)} bytes, mtime {stamp}, {hits}')
 
           probe('kernel.macho (published)', os.popen("ls out/nio/*/nio/kernel/kernel.macho 2>/dev/null | head -1").read().strip())
+          # The whole inventory of this series' marks in the published kernel.
+          # Probing one string at a time has cost rounds: a mark that is not
+          # there can mean the object is stale, that the patch landed in a
+          # branch the compiler never took, or that the mark was written to a
+          # place nobody reads.  The list answers all three at once.
+          published = os.popen("ls out/nio/*/nio/kernel/kernel.macho 2>/dev/null | head -1").read().strip()
+          if published and os.path.isfile(published):
+              import re as _re
+              raw = open(published, 'rb').read()
+              lits = sorted(set(m.decode('latin1') for m in _re.findall(rb'nio:[ -~]{0,44}', raw)))
+              print('nio literals in the published kernel (%d):' % len(lits))
+              for lit in lits:
+                  print('   ', lit)
           probe('native (prelink input)', native)
           # C++ objects are built as .cpo, not .o: probing IOService.o said
           # MISSING for rounds and read like the compile had been skipped, when
           # the file that class is compiled into has always been IOService.cpo.
           for rel in ('osfmk/DEVELOPMENT/startup.o', 'bsd/DEVELOPMENT/bsd_init.o',
-                      'iokit/DEVELOPMENT/IOService.cpo'):
+                      'bsd/DEVELOPMENT/kern_exec.o', 'iokit/DEVELOPMENT/IOService.cpo'):
               probe(rel, os.path.join(obj, rel) if obj else '')
           if obj and os.path.isdir(obj):
               def count(suffix):
