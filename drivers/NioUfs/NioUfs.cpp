@@ -670,6 +670,49 @@ void NioUfs::adoptAndRead (unsigned level)
       }
     }
   };
+  /* nio run-519: the same character, drawn big.
+   *
+   * A character in the panel's own font is eight pixels wide and sixteen
+   * tall, which is a hair in a photograph of the phone.  The owner said
+   * the text could not be made out.
+   *
+   * This draws the same glyph four times as wide and four times as tall,
+   * so that it is a shape rather than a hair: thirty-two pixels across,
+   * sixty-four down.  The row it is drawn on is a row of its own, below
+   * the console's text and clear of every other mark, and the steps are
+   * spread along it so that one cannot be mistaken for another.
+   *
+   * The row it is drawn on is cleared first, so that a stale boot's
+   * figures cannot be read as this boot's.
+   */
+  auto fbCharBig = [fbBytes] (unsigned row, unsigned column, char ch) {
+    if (!fbBytes) {
+      return;
+    }
+    unsigned char c = (unsigned char) ch;
+    if (c < 0x20 || c > 0x7f) {
+      c = '?';
+    }
+    const unsigned char *glyph = nioFont8x16[c - 0x20];
+    for (unsigned y = 0; y < 64; y++) {
+      for (unsigned x = 0; x < 32; x++) {
+        volatile uint8_t *pixel = fbBytes + (row * 16 + y) * 4320 + (column * 8 + x) * 4;
+        bool on = (glyph[y / 4] >> (7 - x / 4)) & 1;
+        pixel[0] = on ? 0xff : 0x00;
+        pixel[1] = on ? 0xff : 0x00;
+        pixel[2] = on ? 0xff : 0x00;
+      }
+    }
+  };
+  /* Clear the row the big figures are drawn on. */
+  for (unsigned column = 0; column < 160; column++) {
+    for (unsigned y = 0; y < 64; y++) {
+      volatile uint8_t *pixel = fbBytes + (112 * 16 + y) * 4320 + column * 8 * 4;
+      pixel[0] = 0x00;
+      pixel[1] = 0x00;
+      pixel[2] = 0x00;
+    }
+  }
   /* The row the steps are written in, cleared first so that a stale
    * boot's characters cannot be read as this boot's, and then headed so
    * that a picture of the row can be read without knowing what was
@@ -1564,7 +1607,47 @@ void NioUfs::adoptAndRead (unsigned level)
     }
     __asm__ volatile ("dsb sy" ::: "memory");
 
-    /* Now the bus is free, and the marks can be drawn. */
+    /* Now the bus is free, and everything can be written down.
+     *
+     * The console can be used here as well, and it is used, because a
+     * line of text is the one thing in a photograph of this phone that
+     * has always been readable.  Round 502 found that the first console
+     * print after the doorbell does not come back; that was very likely
+     * this same thing -- the console writes to the panel, and the panel
+     * was waiting for a bus the controller was holding -- and now the
+     * controller has been waited for, so the bus is free.
+     */
+    nioUfsSay ("nio: ufs I2 taken=%d db=%08x\n", taken ? 1 : 0, dbAfter);
+    {
+      static const char hex[] = "0123456789abcdef";
+      nioUfsSay ("nio: ufs I3 dbhi=%c dblo=%c\n",
+                 hex[(dbAfter >> 4) & 0xf], hex[dbAfter & 0xf]);
+    }
+
+    /* The big figures, on a row of their own.  From the left:
+     *
+     *   1   the doorbell write was issued
+     *   2   the controller took the request   (T means it did not)
+     *   3   the delay finished
+     *   4   the cache barrier finished
+     *   5   the descriptor was read
+     *   7   the confirming read came back
+     *   H L the doorbell register, in hex
+     */
+    fbCharBig (112, 4, '1');
+    fbCharBig (112, 14, taken ? '2' : 'T');
+    fbCharBig (112, 24, '3');
+    fbCharBig (112, 34, '4');
+    fbCharBig (112, 44, '5');
+    fbCharBig (112, 54, '7');
+    {
+      static const char hex[] = "0123456789abcdef";
+      fbCharBig (112, 64, hex[(dbAfter >> 4) & 0xf]);
+      fbCharBig (112, 74, hex[dbAfter & 0xf]);
+    }
+
+    /* The small marks are still drawn, for a picture that is sharp
+     * enough to read them. */
     fbStep (0);                     // box 1: the doorbell write was issued
     fbChar (118, 11, '1');          // the same, as a character: the write was issued
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write was issued
