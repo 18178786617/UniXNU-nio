@@ -679,7 +679,7 @@ void NioUfs::adoptAndRead (unsigned level)
    * just below the text the console has written, so it is in the part
    * of the panel a photograph of the phone holds. */
   {
-    const char *heading = "UFS STEPS: 123456";
+    const char *heading = "UFS STEPS: 6123457";
     for (unsigned column = 0; column < 70; column++) {
       fbChar (118, column, ' ');
     }
@@ -1465,6 +1465,23 @@ void NioUfs::adoptAndRead (unsigned level)
      * without reading the controller, so they cost nothing that could
      * be the thing that stops.
      */
+    /* nio run-517: the host controller's own two registers are read
+     * before the doorbell is rung.
+     *
+     * The reference driver that runs on this controller checks both of
+     * them before it touches anything at all:/r/n     *
+     *   if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
+     *       con_str ("UFS", "host not enabled/ready: stop");
+     *       return;
+     *   }
+     *
+     * HCE is the host controller enable: with it clear the controller
+     * ignores the doorbell altogether.  This port writes it and does
+     * not read it back, so what it holds was never known.  It is read
+     * now, before the doorbell, where reading it is safe.
+     */
+    nioUfsSay ("nio: ufs I0 hce=%08x hcs=%08x db=%08x\n",
+               read32 (hc, 0x34), read32 (hc, 0x30), read32 (hc, 0x58));
     nioUfsSay ("nio: ufs I1 doorbell\n");
     /* The interrupts are put back BEFORE the doorbell is written, and the
      * mark that says so is drawn before the write as well, so that a
@@ -1532,8 +1549,57 @@ void NioUfs::adoptAndRead (unsigned level)
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write was issued
     uint32_t dbAfter = read32 (hc, 0x58);
     fbStep (4);                     // box 5: the doorbell read came back
-    fbChar (118, 15, '5');          // the same, as a character: the read came back
+    fbChar (118, 17, '7');          // the same, as a character: the read came back
     fbMark (1860, 176, 0x00, 0x00, 0xff);  // column 8: the read came back
+    {
+      static const char hex[] = "0123456789abcdef";
+      fbChar (118, 18, hex[(dbAfter >> 4) & 0xf]);
+      fbChar (118, 19, hex[dbAfter & 0xf]);
+    }
+    /* nio run-517: the doorbell is waited for, the way the reference
+     * driver that runs on this controller waits for it.
+     *
+     * That driver rings the doorbell and then waits for the bit of
+     * the slot it rang to be cleared, because the controller clears
+     * that bit when it takes the request:/r/n     *
+     *   ufs_wr (REG_UTRLDBR, 1);
+     *   while (ufs_rd (REG_UTRLDBR) & 1) {
+     *       if (ticks () - start > 19200000) {   // one second
+     *           ufs_wr (REG_UTRLCLR, ~1u);       // clear slot 0
+     *           return 1;                        // timeout
+     *       }
+     *   }
+     *
+     * This port rang the doorbell and walked away, so it never knew
+     * whether the controller had taken the request at all, and a slot
+     * that was never taken stayed in the list for the next command to
+     * trip over.
+     *
+     * The wait is bounded, and on the timeout the slot is cleared the
+     * way the reference driver clears it, so that a request the
+     * controller never took does not stay in the list.
+     *
+     * A character says which of the two happened: a 2 means the bit
+     * was cleared, so the controller took the request; a T means it was
+     * not, and the slot was cleared.
+     */
+    {
+      uint64_t started = timerTicks ();
+      uint64_t limit = 19ULL * 1000000ULL * 2ULL;   // two seconds
+      bool taken = false;
+      while ((timerTicks () - started) < limit) {
+        if ((read32 (hc, 0x58) & 1U) == 0) {
+          taken = true;
+          break;
+        }
+      }
+      if (taken) {
+        fbChar (118, 12, '2');          // the controller took the request
+      } else {
+        write32 (hc, 0x5c, ~1U);       // clear slot 0
+        fbChar (118, 12, 'T');          // it did not take it
+      }
+    }
     /* What the doorbell register holds after the write says whether the
      * controller took the request.  The bit for the slot that was rung
      * is cleared by the controller when it takes it, so a register that
@@ -1542,11 +1608,6 @@ void NioUfs::adoptAndRead (unsigned level)
      * The value is written into the panel as two hex digits, so that a
      * picture carries the number and not only the fact of it.
      */
-    {
-      static const char hex[] = "0123456789abcdef";
-      fbChar (118, 18, hex[(dbAfter >> 4) & 0xf]);
-      fbChar (118, 19, hex[dbAfter & 0xf]);
-    }
     __asm__ volatile ("dsb sy" ::: "memory");
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but
@@ -1597,16 +1658,16 @@ void NioUfs::adoptAndRead (unsigned level)
         : "x12", "cc", "memory"
     );
     fbStep (1);                     // box 2: the delay finished
-    fbChar (118, 12, '2');          // the same, as a character: the delay finished
+    fbChar (118, 13, '3');          // the same, as a character: the delay finished
     fbMark (1860, 104, 0xff, 0x00, 0x00);  // column 5: the delay finished
     cacheCleanInvalidate (virt, 50176);
     fbStep (2);                     // box 3: the cache barrier finished
-    fbChar (118, 13, '3');          // the same, as a character: the barrier finished
+    fbChar (118, 14, '4');          // the same, as a character: the barrier finished
     fbMark (1860, 128, 0xff, 0xff, 0x00);  // column 6: the cache barrier finished
     result.ocs = *reinterpret_cast<volatile uint32_t *> (utrd + 8) & 0xff;
     if (result.ocs != 0xfU) {
       fbStep (3);                   // box 4: the descriptor was read
-      fbChar (118, 14, '4');        // the same, as a character: it was read
+      fbChar (118, 15, '5');        // the same, as a character: it was read
       fbMark (1860, 152, 0xff, 0x00, 0xff);  // column 7: the descriptor was read
     }    if (result.ocs == 0xfU) {
       return result;
