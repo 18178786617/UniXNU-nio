@@ -1,0 +1,84 @@
+Say which step of the matching did not come back
+
+The photograph of run 545 says where the boot stopped, and it says it
+twice over: the last mark on the panel is the result of AppleARMPU's
+probe, and the mark that should follow it -- the one that says the
+candidate was taken into the start list -- is not there.  So the run
+stopped between the two, and there are four things in between:
+
+  inst->detach (this);                      the instance leaves the provider
+  newInst->setProperty (gIOProbeScoreKey);  the score is written down
+  startList->setObject (newInst);           the instance goes on the list
+  props->release ();                        the properties are let go
+
+The first of them takes the I/O lock, and the matching already holds
+it, so it is the one to look at.  But a picture says which and not why,
+so each step now leaves a mark of its own: D1 after the probe returned,
+D2 after the detach, D3 after the score was written, D4 after the
+instance went on the list, D5 after the properties were let go and D6
+after the instance was.  The last D on the panel is the step that did
+not come back.
+
+And the personalities are started after the candidates are gathered, so
+that phase gets two marks as well: S1 before a personality is started
+and S2 after it came back.  A personality's start() is a place where a
+board's own driver can stop, and the storage driver's start() is the
+one this port has watched for a long time.
+
+Every mark goes to the panel the way the matching's other marks go,
+through the console blob's own writer, so that it appears even when the
+console path is the thing that is stuck.
+
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1529,6 +1529,7 @@
+ 
+ 	if (inst && !inst->init()) {
+ 		inst->release();
++		nio_u_mark("\nD6");
+ 		inst = NULL;
+ 	}
+ 	if (inst) {
+@@ -4497,7 +4498,9 @@
+ 				newInst = inst->probe( this, &score );
+ 				nio_u_mark("\nnio: P ");
+ 				nio_u_mark(symbol->getCStringNoCopy());
++				nio_u_mark("\nD1");
+ 				inst->detach( this );
++				nio_u_mark("\nD2");
+ 				if (NULL == newInst) {
+ #if IOMATCHDEBUG
+ 					if (debugFlags & kIOLogProbe) {
+@@ -4511,6 +4514,7 @@
+ 				newPri = OSNumber::withNumber( score, 32 );
+ 				if (newPri) {
+ 					newInst->setProperty( gIOProbeScoreKey, newPri );
++					nio_u_mark("\nD3");
+ 					newPri->release();
+ 				}
+ 
+@@ -4532,12 +4536,14 @@
+ 				assert( startList );
+ 				if (startList) {
+ 					startList->setObject( newInst );
++					nio_u_mark("\nD4");
+ 				}
+ 				nio_u_mark("\nnio: cand done ");
+ 				nio_u_mark(symbol ? symbol->getCStringNoCopy() : "?");
+ 			} while (false);
+ 
+ 			props->release();
++			nio_u_mark("\nD5");
+ 			if (inst) {
+ 				inst->release();
+ 			}
+@@ -4597,7 +4603,9 @@
+ 						 * If a dext fails to start because an upgrade happened
+ 						 * concurrently, then the matching process has to restart
+ 						 */
++						nio_u_mark("\nS1");
+ 						started = startCandidate( inst );
++						nio_u_mark("\nS2");
+ #if IOMATCHDEBUG
+ 						if ((debugFlags & kIOLogStart) && (false == started)) {
+ 							LOG( "%s::start(%s) <%d> failed\n", inst->getName(), getName(),
