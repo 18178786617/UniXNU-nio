@@ -1,24 +1,30 @@
-Where the boot thread stopped, on the beacon's own count
+Where the boot thread and the matching thread are
 
 The panel of run 555 ends with the console's last line and not one of
 bsd_init's phases, even though those phases are written to the panel before
 they are written to the console.  So the boot thread never reached the first
 phase of bsd_init, and nothing on the panel says where.
 
-Run 556 put the waypoint on the heartbeat and the panel showed nothing: the
-heartbeat uses delay(), which needs timers that are not running yet, so it
-never gets past its first print -- its own patch says so.  Run 559 put it
-on the beacon, which does keep writing, but only once every sixty-four
-marks, and the panel was cut exactly there.  Run 560 wrote it once a second
-and the panel showed no waypoint either: the clock does not tick yet at this
-point of the boot, so clock_get_uptime() returns zero and the second never
-passes.
+The beacon is the one that can carry it.  The heartbeat uses delay(), which
+needs timers that are not running yet, so it prints HB 1 and stops -- its own
+patch says so -- and run 556 put the waypoint there and the panel showed
+nothing.  Run 560 wrote it once a second and the panel showed nothing
+either: the clock does not tick yet at this point of the boot, so
+clock_get_uptime() returns zero, which is the same reason the heartbeat's
+delay() never returns.  The beacon counts its own marks and writes the
+waypoint every fourth one.
 
-So the beacon counts its own marks and writes the waypoint every fourth one.
-The clock is not needed and nothing else in the boot waits for it.
+Run 561 said w8: the boot thread is between vm_set_restrictions() and
+bsd_init().  The only thing there is kperf_init_early(), whose first act is
+ml_wait_max_cpus() -- a wait for every CPU to be accounted for.  Only IOKit
+publishes that count: ml_set_max_cpus() is called from AppleARMSMP and from
+IOCPU, and only a personality that was probed and attached calls either.  So
+the boot thread waits for the matching, and the matching has to finish --
+and it has not: no candidate ever reaches its probe.
 
-The waypoint is now the whole chain, so the number says where the boot
-thread is:
+So the matching thread gets a waypoint too, and the beacon writes both.
+
+The boot thread:
 
    1  after the oslog startup functions
    2  after the mach ipc startup functions
@@ -35,17 +41,23 @@ thread is:
   13  after throttle_init()
   14  after the copyright is printed
 
-A number below 6 means the boot thread is still inside the startup chain.
+The matching thread:
+
+   1  running PE_lockdown_iokit()
+   2  PE_lockdown_iokit() returned
+   3  probeCandidates was entered
+   4  about to call inst->probe()
+   5  inst->probe() returned
 
 diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index 134b095..2b56a21 100644
+index 134b095..3fa75ef 100644
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
-@@ -439,6 +439,42 @@ nio_dc_putu(unsigned long v)
+@@ -439,6 +439,58 @@ nio_dc_putu(unsigned long v)
  	nio_dc_puts(&buf[i]);
  }
  
-+/* nio: where the boot thread is.
++/* nio: where the boot thread and the matching thread are.
 + *
 + * The panel of run 555 ends with the console's last line and not one of
 + * bsd_init's phases, even though those phases are written to the panel
@@ -55,14 +67,13 @@ index 134b095..2b56a21 100644
 + * The beacon is the one that can carry it.  The heartbeat uses delay(),
 + * which needs timers that are not running yet, so it prints HB 1 and stops
 + * -- its own patch says so -- and run 556 put the waypoint there and the
-+ * panel showed nothing.  The beacon spins, so it keeps writing.
++ * panel showed nothing.  Run 560 wrote it once a second and the panel showed
++ * nothing either: the clock does not tick yet at this point of the boot, so
++ * clock_get_uptime() returns zero, which is the same reason the heartbeat's
++ * delay() never returns.  The beacon counts its own marks and writes the
++ * waypoint every fourth one.
 + *
-+ * It counts its own iterations, not the clock: run 560 wrote the waypoint
-+ * once a second and the panel never showed one, because the clock does not
-+ * tick yet either -- clock_get_uptime() returns zero while the timer
-+ * interrupts are still off, which is the same reason the heartbeat's
-+ * delay() never returns.  The waypoint is written every fourth mark
-+ * instead, so it is on the panel whatever the clock does.
++ * The boot thread:
 + *
 + *  1  after the oslog startup functions
 + *  2  after the mach ipc startup functions
@@ -78,17 +89,34 @@ index 134b095..2b56a21 100644
 + * 12  after platform_stall_panic_or_spin()
 + * 13  after throttle_init()
 + * 14  after the copyright is printed
++ *
++ * The matching thread:
++ *
++ *  1  running PE_lockdown_iokit()
++ *  2  PE_lockdown_iokit() returned
++ *  3  probeCandidates was entered
++ *  4  about to call inst->probe()
++ *  5  inst->probe() returned
++ *
++ * Both are needed.  The boot thread of run 561 stopped at 8: between
++ * vm_set_restrictions() and bsd_init() the only thing left is
++ * kperf_init_early(), whose first act is ml_wait_max_cpus() -- a wait for
++ * every CPU to be accounted for.  Only IOKit publishes that count:
++ * ml_set_max_cpus() is called from AppleARMSMP and from IOCPU, and only a
++ * personality that was probed and attached calls either.  So the boot thread
++ * waits for the matching, and the matching has to finish.
 + */
 +volatile int nio_boot_waypoint = 0;
++volatile int nio_match_waypoint = 0;
 +
  /* nio: a beacon that never sleeps.  The heartbeat thread below uses delay(),
   * which needs working timers; it prints HB 1 and stops, and that tells us
   * nothing about whether the kernel is alive.  This one spins on its own and
-@@ -455,6 +491,16 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+@@ -455,6 +507,18 @@ nio_beacon_thread(void *arg, wait_result_t wr)
  			nio_dc_puts("V");
  			nio_dc_putu(++mark);
  			nio_dc_puts(" ");
-+			/* nio: where the boot thread is, every fourth mark.
++			/* nio: where the boot thread and the matching thread are.
 +			 *
 +			 * The count is the beacon's own: the clock does not
 +			 * tick yet at this point in the boot, so a waypoint
@@ -96,12 +124,24 @@ index 134b095..2b56a21 100644
 +			if ((mark & 0x3u) == 0) {
 +				nio_dc_puts("w");
 +				nio_dc_putu((unsigned)nio_boot_waypoint);
++				nio_dc_puts("m");
++				nio_dc_putu((unsigned)nio_match_waypoint);
 +				nio_dc_puts(" ");
 +			}
  		}
  	}
  }
-@@ -596,6 +642,7 @@ kernel_bootstrap(void)
+@@ -505,7 +569,9 @@ nio_matching_thread(void *arg, wait_result_t wr)
+ 	(void) wr;
+ 
+ 	nio_dc_puts("\nnio: MT run");
++	nio_match_waypoint = 1;
+ 	PE_lockdown_iokit();
++	nio_match_waypoint = 2;
+ 	nio_dc_puts("\nnio: MT done");
+ }
+ 
+@@ -596,6 +662,7 @@ kernel_bootstrap(void)
  	atm_init();
  #endif
  	kernel_startup_initialize_upto(STARTUP_SUB_OSLOG);
@@ -109,7 +149,7 @@ index 134b095..2b56a21 100644
  
  #if CONFIG_UBSAN_MINIMAL
  	kernel_bootstrap_log("UBSan minimal runtime init");
-@@ -637,6 +684,7 @@ kernel_bootstrap(void)
+@@ -637,6 +704,7 @@ kernel_bootstrap(void)
  #endif
  
  	kernel_startup_initialize_upto(STARTUP_SUB_MACH_IPC);
@@ -117,7 +157,7 @@ index 134b095..2b56a21 100644
  
  	/*
  	 * As soon as the virtual memory system is up, we record
-@@ -771,6 +819,7 @@ kernel_bootstrap_thread(void)
+@@ -771,6 +839,7 @@ kernel_bootstrap_thread(void)
  	 * Thread callout service.
  	 */
  	kernel_startup_initialize_upto(STARTUP_SUB_THREAD_CALL);
@@ -125,7 +165,7 @@ index 134b095..2b56a21 100644
  
  	/*
  	 * Remain on current processor as
-@@ -819,6 +868,7 @@ kernel_bootstrap_thread(void)
+@@ -819,6 +888,7 @@ kernel_bootstrap_thread(void)
  #endif
  
  	kernel_startup_initialize_upto(STARTUP_SUB_SYSCTL);
@@ -133,7 +173,7 @@ index 134b095..2b56a21 100644
  
  	/*
  	 * Initialize the globals used for permuting kernel
-@@ -845,6 +895,7 @@ kernel_bootstrap_thread(void)
+@@ -845,6 +915,7 @@ kernel_bootstrap_thread(void)
  	 * interrupts or preemption enabled may begin enforcement.
  	 */
  	kernel_startup_initialize_upto(STARTUP_SUB_EARLY_BOOT);
@@ -141,7 +181,7 @@ index 134b095..2b56a21 100644
  
  #if SCHED_HYGIENE_DEBUG
  	// Reset interrupts masked timeout before we enable interrupts
-@@ -901,6 +952,7 @@ kernel_bootstrap_thread(void)
+@@ -901,6 +972,7 @@ kernel_bootstrap_thread(void)
  #endif
  
  	kernel_startup_initialize_upto(STARTUP_SUB_LOCKDOWN);
@@ -149,7 +189,7 @@ index 134b095..2b56a21 100644
  	printf("\nR1 lockdown phase");
  
  	/*
-@@ -941,12 +993,14 @@ kernel_bootstrap_thread(void)
+@@ -941,12 +1013,14 @@ kernel_bootstrap_thread(void)
  		}
  	}
  	printf("\nR4 iokit lockdown");
@@ -164,7 +204,7 @@ index 134b095..2b56a21 100644
  
  
  #if KPERF
-@@ -957,6 +1011,7 @@ kernel_bootstrap_thread(void)
+@@ -957,6 +1031,7 @@ kernel_bootstrap_thread(void)
  	 *	Start the user bootstrap.
  	 */
  #ifdef  MACH_BSD
@@ -172,14 +212,47 @@ index 134b095..2b56a21 100644
  	bsd_init();
  	printf("\nR5 bsd_init enter");
  #endif
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index bd01596..e30efb4 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1,6 +1,10 @@
+ /*
+  * Copyright (c) 1998-2021 Apple Inc. All rights reserved.
+  *
++ * nio: where the matching thread is; the beacon writes it.
++ * See osfmk/kern/startup.c for the list of the numbers. */
++extern volatile int nio_match_waypoint;
++
+  * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+  *
+  * This file contains Original Code and/or Modifications of Original Code
+@@ -4203,6 +4207,7 @@ nio_match_watchdog(void *arg, wait_result_t wr)
+ void
+ IOService::probeCandidates( OSOrderedSet * matches )
+ {
++	nio_match_waypoint = 3;
+ 	/* nio: the panel now ends on a closed start/load pair -- IOSurface's
+ 	 * start() returns and nothing follows, with every enter line of its own
+ 	 * matched by a leave.  That puts the stall between two kexts, in the
+@@ -4551,7 +4556,9 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 				}
+ #endif
+ 				nio_u_mark("\nP1");
++				nio_match_waypoint = 4;
+ 				newInst = inst->probe( this, &score );
++				nio_match_waypoint = 5;
+ 				nio_u_mark("\nnio: P ");
+ 				nio_u_mark(symbol->getCStringNoCopy());
+ 				nio_u_mark("\nD1");
 diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
-index 53013ef..41228dd 100644
+index 53013ef..bd9e842 100644
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -1,4 +1,9 @@
  #include <kern/boot_progress.h>
 +
-+/* nio: where the boot thread is; the beacon prints it.
++/* nio: where the boot thread is; the beacon writes it.
 + * See osfmk/kern/startup.c for the list of the numbers. */
 +extern volatile int nio_boot_waypoint;
 +

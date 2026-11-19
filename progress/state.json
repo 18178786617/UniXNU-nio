@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 00:50（★★★★★★ **560 已刷机（00:42:12）。照片：仍然只有 V 标记，没有 w。** 内核里 `_nio_boot_waypoint` 符号**确实在**（fingerprint 可见）⇒ 补丁没问题，是**时钟不动**：`clock_get_uptime()` 在这个阶段返回 0（定时器中断还没起来 —— 这也正是心跳线程 `delay()` 永远不返回、只打印一次 HB 1 的原因），所以「每秒打印」的条件永远不成立。★ 561：路标改用**信标自己的计数**（每 4 个标记打一次），不依赖时钟；并把路标扩成**完整启动链** w1..w14（oslog→mach_ipc→thread_call→sysctl→early_boot→lockdown→R4→vm_set_restrictions→bsd_init→其内部四步）。**）",
+ "updated": "2026-11-20 01:55（★★★★★★★ **561 照片：路标出来了，`w8` ⇒ 根因链闭合。** w8 与 w9 之间只有 `#if KPERF kperf_init_early(); #endif`，而 `kperf_init_early()` 第一句是 **`ml_wait_max_cpus()`**（死等所有 CPU 到位）；**`ml_set_max_cpus()` 只有 IOKit 会调**（AppleARMSMP.cpp:170 / IOCPU.cpp:580）—— 只有被 probe 并 attach 的 personality 才会发布 CPU 数。⇒ **匹配不成功 → CPU 驱动不 attach → max_cpus 永不发布 → 启动线程死等 → bsd_init 永不执行**。★ 562：给**匹配线程**也加路标（m1..m5），信标同时打 `w<n>m<n>`：匹配线程在 PE_lockdown_iokit / probeCandidates 入口 / 调 probe 前 / probe 后 各置一次。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -14,11 +14,11 @@
   },
   {
    "id": "S1",
-   "name": "定位启动线程停在哪一行（信标路标 w0..w7 + console 锁有界）",
+   "name": "定位两个线程各自停在哪一行（信标 w<n>m<n>）",
    "status": "current",
-   "criteria": "心跳行出现 `w<n>`，n 指出启动线程的位置",
-   "evidence": "556 照片：心跳行不在屏上（**心跳线程用 delay()，定时器未工作，只打印 HB 1 就停**——信标补丁的注释写明了）；控制台最后一行仍是 `nio: MT thread`，零条 `nio: bsd_init:`。",
-   "next": "557：路标改由信标打；console 刷新锁等待加上界（若启动线程卡在这把锁上，本轮直接解开）"
+   "criteria": "信标行出现 `w<n>m<n>`：w=启动线程，m=匹配线程",
+   "evidence": "561 照片：`w8` ⇒ 启动线程卡在 `kperf_init_early()` → `ml_wait_max_cpus()`；而 CPU 数只由 IOKit（AppleARMSMP/IOCPU）发布 ⇒ 匹配不成功则启动线程永远等下去。",
+   "next": "562：匹配线程路标 m1..m5（PE_lockdown_iokit / probeCandidates 入口 / probe 前 / probe 后）"
   },
   {
    "id": "S2",
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 561,
+   "time": "01:25",
+   "marker": "`w8`（启动线程卡在 kperf_init_early → ml_wait_max_cpus）",
+   "qemu": "macos-15-intel",
+   "result": "★★★★★★ **路标成功：`w8`**。w8→w9 之间只有 `kperf_init_early()`，其首句 `ml_wait_max_cpus()` 死等 CPU 全部到位；而 `ml_set_max_cpus()` 只有 IOKit 的 AppleARMSMP/IOCPU 会调 ⇒ **匹配不成功 ⇒ CPU 数永不发布 ⇒ 启动线程死等 ⇒ bsd_init 永不执行**。⇒ 关键路径回到 S2（让匹配探到一个候选）。562 给匹配线程也加路标。"
+  },
   {
    "run": 560,
    "time": "00:42",
@@ -329,11 +336,11 @@
  ],
  "next_actions": [
   "★ **当前唯一在走的路**（旧 P3 = launchd 主线，拆成 S1–S3）：",
-  "S1 **当前（557）**：信标路标 w0..w7 + console 刷新锁等待有界。判据：照片上 V 标记后面的 `w<n>`；若出现 `nio: bsd_init: calling ...` 则已越过卡点。",
-  "S2 **下一轮**：按 w<n> 改那一行。判据：屏幕出现 `nio: bsd_init: calling ...` 全套相位。",
-  "S3 **再下一轮**：IOBSD → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
+  "S1 **当前（562）**：信标同时打 w（启动线程）与 m（匹配线程）路标。判据：照片上 `w<n>m<n>`。",
+  "S2 **下一轮**：按 m<n> 找到匹配停在哪一步（多半在 personality 的 match/probe），修它。判据：屏幕出现 `P1`（候选真的走到 probe）。",
+  "S3 **再下一轮**：匹配成功 → CPU 数发布 → 启动线程过 kperf → bsd_init 相位标记 → IOBSD → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
   "★ 存储层已定：mockfs RAMDisk，不用 DSU、不用本机 APFS/UFS。",
-  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；探针必须挂在**活着**的线程上（信标活着，心跳不活）。"
+  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；早期启动的探针不能依赖时钟（时钟不 tick）。"
  ],
  "notes": [
   "★★★★★★ **定时器/时钟在早期启动阶段不工作（2026-11-20 00:50 确认）**\n· `clock_get_uptime()` 在这个阶段返回 0（定时器中断未起）⇒ 任何「每秒/每 N 毫秒」的探针都不会触发。\n· 心跳线程用 `delay()`，所以它只打印一次 `HB 1` 就卡住（信标补丁的注释里早就写着这件事）。\n· 560 的路标写成「每秒打印」，因此一次都没出现 —— **探针不能依赖时钟，要用自己的计数**。\n· 教训：早期启动阶段的探针一律用自旋计数（信标每 200 万次迭代打一个 V 标记）。",
