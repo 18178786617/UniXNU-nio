@@ -373,6 +373,15 @@ timeout = -1
 # "GPUROWnn <text>". Modes 9-11 add the first GPU command, the zap shader
 # with the GPU interrupt, and the user-client path; they are raised one at a
 # time, each with its own image, so a fault is attributable.
+# The UFS arguments are off for now. native-ufs-root and native-ufs-probe
+# are what make the storage driver take the controller over, and with the
+# controller busy the boot stops inside it: the last twenty rounds all
+# ended there. The userland does not need the controller -- the root
+# device is the memory disk the loader puts in the device tree, the root
+# file system is the mockfs image in RAM, and that image holds a real
+# launchd and a real dynamic linker. The driver still takes both
+# arguments, so putting either of them back here brings the hardware
+# path back with it.
 # native-ufs-probe=12 is the storage discovery report and it is on for this
 # build on purpose. Both volume UUIDs the owner chain keys on are now measured
 # rather than carried over: tools/apfs-volumes.py walks the two windows of the
@@ -386,7 +395,7 @@ timeout = -1
 # IOStorageFamily to publish the root windows, prints every IOMedia with its
 # BSD name, size and UUID, and then panics. Remove it once the owner chain has
 # been seen to agree with these values on the device.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-root=1", "native-ufs-probe=12", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
