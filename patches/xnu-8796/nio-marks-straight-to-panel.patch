@@ -1,6 +1,6 @@
-The matching's own marks go straight to the panel, and it says how far it got
+The matching's own marks go straight to the panel, and it counts
 
-The boot of run 543 stopped inside IOService::probeCandidates, and the
+The boot of run 543 stopped inside IOService::probeCandidates and the
 last thing it printed was the result of one candidate's probe.  The
 kernel was alive -- the beacon kept writing its letters -- so the
 matching had not stopped; it was spending its time in the console.
@@ -10,7 +10,7 @@ through the console's ring buffer: it takes the console lock, copies the
 text into the ring, and wakes whoever empties it.  The ring is emptied
 one character at a time through the console blob's own writer, so a
 candidate's lines cost a lock, a wakeup and a few hundred single
-character writes, and the matching does that for every candidate it
+character writes -- and the matching does that for every candidate it
 tries.
 
 There is a way to write to the panel that does none of that.  The
@@ -33,15 +33,15 @@ So the six prints that fire per candidate now go through that writer
 instead of through printf.  They say the same things and they still
 appear in the same place on the panel, but they do not take the console
 lock and they do not go into the ring.  The print that says the
-candidate loop has finished goes the same way, so that the end of the
+candidate loop has finished goes the same way, so the end of the
 matching is visible even when the console is not.
 
 And the loop now leaves a mark of its own: a Q with the candidate count
 in hex, every sixty-four times the loop is entered.  The Q that was
-already there says that the loop was entered; this one says how many
-times, so a panel where the last Q counts up says the matching is
-moving, and a panel where the last Q is the same one as the one before
-says it stopped there.
+already there says the loop was entered; this one says how many times,
+so a panel where the last Q counts up says the matching is moving, and
+a panel where the last Q is the same one as the one before says it
+stopped there.
 
 The prints that fire once per nub -- the ones that say a nub matched,
 that the configuration thread is alive, that a match was dropped -- are
@@ -50,11 +50,10 @@ worth reading.
 
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -4051,6 +4051,31 @@
- 	while (*s != '\0') {
- 		cons_ops[1].putc(*s++, true);
+@@ -4053,6 +4053,31 @@
  	}
-+
+ }
+ 
 +/* nio: a number on the panel, without a format string. */
 +static void
 +nio_uhex(unsigned long v)
@@ -79,9 +78,10 @@ worth reading.
 +	out[j] = '\0';
 +	nio_u_mark(out);
 +}
- }
- 
++
  /* nio: every mark carries the number of the service being started, so a screen
+  * full of marks can still be read: the last number is how far matching got. */
+ static void
 @@ -4146,6 +4171,17 @@
  		}
  		nio_match_progress++;
@@ -151,7 +151,7 @@ worth reading.
  		// the matches list should always be created by findDrivers()
  		if (matches) {
  			lockForArbitration();
-@@ -5727,11 +5767,12 @@
+@@ -5727,10 +5767,12 @@
  						OSString *nio_cls = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOClassKey)) : NULL;
  						OSString *nio_nm  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIONameMatchKey)) : NULL;
  						OSString *nio_pc  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOProviderClassKey)) : NULL;
@@ -159,17 +159,16 @@ worth reading.
 -							nio_cls ? nio_cls->getCStringNoCopy() : "-",
 -							nio_nm ? nio_nm->getCStringNoCopy() : "-",
 -							nio_pc ? nio_pc->getCStringNoCopy() : "-");
--						nio_k++;
 +						nio_u_mark("\nnio: cand ");
 +						nio_u_mark(nio_cls ? nio_cls->getCStringNoCopy() : "-");
 +						nio_u_mark(" nm=");
 +						nio_u_mark(nio_nm ? nio_nm->getCStringNoCopy() : "-");
 +						nio_u_mark(" pc=");
 +						nio_u_mark(nio_pc ? nio_pc->getCStringNoCopy() : "-");
+ 						nio_k++;
  					}
  				}
- 				if ((this == gIOResources) || (this == gIOUserResources)) {
-@@ -5744,7 +5785,8 @@
+@@ -5744,7 +5786,8 @@
  			} else {
  				matches->release();
  			}
