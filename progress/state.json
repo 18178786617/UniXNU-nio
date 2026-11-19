@@ -1,8 +1,8 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 15:25（★★★★★★ **用户层路线打通：三处命令行一致 ⇒ UFS 不碰控制器；542 的照片证明启动已越过 UFS 卡点，IOKit 匹配链活着（平台专家匹配上、kext start、lock 成功、匹配走进 ArmCpu → NidUfs → AppleARMPU）。CI 543 构建中。**）",
- "headline": "★★★★★★ **现在走的是进用户层这条路，不再纠结 UFS。** ★ 进用户层**根本不需要 UFS**：根设备是 loader 放进设备树的内存盘（rootfs.img），根文件系统是 **mockfs**，而 rootfs.img 里**已经有真的 launchd（525KB）和真的 dyld（922KB）**。★ 挡路的只有内核命令行里的 `native-ufs-root=1 native-ufs-probe=12` —— **loader 那份（board.toml）才是真机生效的**，已连同内核的两份副本一共三处一起改（14d834b）。★ 542 的照片：启动走到 **0673**（历史最多 0627）⇒ **越过 UFS 卡点**；平台专家匹配上、kext start ret=0x0、lock ret=0x0，匹配一路进 ArmCpu → NidUfs(#25/#26) → AppleARMPU。",
- "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**。\n· **P0 IOKit 匹配关：已通**（542 照片：平台专家匹配上、kext 起、lock 拿到、匹配继续推进）。\n· **P1 UFS：⏸ 暂停**（机主要先进用户层；驱动仍认那两个参数，命令行加回一个词就恢复）。\n· **P2 存储层：**mockfs 那条**已经就位**（rootfs.img 里有真 launchd+dyld），只差内核把它挂成根并 exec 进去。\n· **P3 launchd：**现在的主线。\n★ **判据：屏幕上出现 `nio: exec: load_init_program enter`** ⇒ 就是进用户层的那一步。",
+ "updated": "2026-11-19 15:45（★★★★★ **543 已上机；命令行已无 UFS 参数（真机照片证明）；内核活着（V276 在写），停在 IOKit 匹配里（0673，无 mx 行）。等下一张照片。**）",
+ "headline": "★★★★★ **真机照片证明：543 的命令行已无 `native-ufs-root=1` / `native-ufs-probe=12`**（loader 打印的 `KERNEL ONLINE:` 行），**UFS 这条线彻底让开了**。**内核是活的** —— 照片上 V 序列停在 `V275:1 V`（V276 正在写，nio-busy-beacon.patch 的心跳信标）。**但启动停在 0673 = `nio: P AppleARMPU r=...`，还在 IOService::probeCandidates() 里**（`mx<n>` 是候选循环【退出】时打印的，屏幕上没有 ⇒ 没退出）。★ 停滞看门狗 15 秒无进展就 panic，**没有 panic ⇒ 匹配在推进，只是慢**。",
+ "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
    "id": "P0",
@@ -26,7 +26,7 @@
    "status": "★ 已就位（mockfs 那条）",
    "criteria": "/flash 挂上 DSU 里的 APFS + switch_root 成功",
    "evidence": "· 根设备：设备树 `/chosen/memory-map` 的 `RAMDisk` 属性（loader 放 rootfs.img 进去）⇒ 与 UFS 无关\n· 根文件系统：`bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**\n· `rootfs/rootfs.img`（N4KROOT 格式）：slot A = **真 launchd（525088B）**，slot B = **真 dyld（922912B）**（`tools/check-mockfs-paths.py` 确认）\n· mockfs 提供 `/sbin/launchd`、`/usr/lib/dyld`、`/probe.bin`\n· 内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`",
-   "next": "★ **现在就走这条**。543 已经把三处命令行都改一致（loader 那份生效），⇒ UFS 驱动不碰控制器 ⇒ bsd_init 走到 init_task ⇒ mockfs 挂成根 ⇒ exec launchd。\n★ 判据：屏幕上出现 **`nio: exec: load_init_program enter`**。"
+   "next": "**等下一张照片**（543 于 15:38:52 上机，照片 15:40，约 85 秒时匹配还在跑）。\n★ 判据（四个探针都在 series 里）：`mx<n>`（匹配走完）、`nio: exec: load_init_program enter`（进用户层）、panic `nio: the matching path stalled (rounds=N)`（匹配卡死）。"
   },
   {
    "id": "P3",
@@ -34,7 +34,7 @@
    "status": "★ 现在的主线",
    "criteria": "看到 launchd / 用户态进程在跑",
    "evidence": "boot-args 已备好 launchd_unsecure_cache=1、wdt=-1、wdt_test=no_user_checkin、-wdt_no_pmu",
-   "next": "等 `nio: exec: load_init_program enter` 出现。若出现，下一轮看 launchd 自己的第一行输出，再按 ios-sweet 的墙序：AMFI（`launchd_unsecure_cache` 可绕）→ watchdogd（要 IOWatchDog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface。"
+   "next": "主线。等 `nio: exec: load_init_program enter`；出现之后下一轮看 launchd 自己的第一行输出，再按 ios-sweet 的墙序：AMFI（`launchd_unsecure_cache` 可绕）→ watchdogd（要 IOWatchDog 服务）→ Sandbox 策略 → IOMobileFramebuffer/IOSurface。"
   },
   {
    "id": "P3+",
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 543,
+   "time": "15:38",
+   "marker": "nio: exec: load_init_program enter",
+   "qemu": "macos-26",
+   "result": "★★★★★ **已上机并有照片**。① **命令行已干净**：照片里 loader 打印的 `KERNEL ONLINE:` 行**没有 `native-ufs-root=1` / `native-ufs-probe=12`** ⇒ 真机生效的正是我们改的那份。② **内核活着**：V 信标停在 `V275:1 V`（V276 正在写）。③ **停在 0673 = `nio: P AppleARMPU r=0xdffffffffd16ff2d400`**，仍在 `IOService::probeCandidates()`（`mx<n>` 是循环退出时打印的，屏幕上没有）。④ **无 panic** ⇒ 15 秒停滞看门狗没触发 ⇒ 匹配在推进，只是慢。"
+  },
   {
    "run": 542,
    "time": "15:16",
@@ -230,6 +237,7 @@
   "★ **别再为 UFS 的门铃加新探针** —— 先把用户层打通，回头再收拾它。"
  ],
  "notes": [
+  "★★★★★ **用户层路线（★ 最重要的一份）**\n  · **为什么不需要 UFS**：根设备 = 设备树 `/chosen/memory-map` 的 `RAMDisk`（loader 放 rootfs.img 进去）⇒ 与 UFS 无关；\n    根文件系统 = `bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**；\n    rootfs.img（N4KROOT）slot A = 真 launchd(525088B)、slot B = 真 dyld(922912B)；\n    内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`。\n    ⇒ **命令行去掉 `native-ufs-root=1` / `native-ufs-probe=12` 即可**（`NioUfs::start()` 里 `if ((!probe && !rootMode) || ...) return false;` ⇒ 不碰控制器）。\n  · **命令行有三处，真机生效的是第一处**：① `board.toml` 的 `payload.kernel_args` ← **loader 真正用的**（照片里 `KERNEL ONLINE:` 打印的就是它）；② `package/unixnu.toml` 的 `args` ← QEMU；③ `patches/xnu-8796/nio-boot-args-fallback.patch` 的 `nio_port_cmdline[]` ← 内核 fallback（`PE_boot_args()`）；④（先前已改）`nio-port-command-line.patch` 的 arm_init.c strlcpy。★ 543 的 QEMU 日志确认 cmdline 里已无 UFS 参数 ⇒ 三处一致。\n  · **判读表（四个探针都在 series 里）**：`mx<n>` = 候选循环退出（匹配走完）；`nio: exec: load_init_program enter` = **进用户层**；panic `nio: the matching path stalled (rounds=N)` = 匹配卡死（但内核活着）；V 信标 = 内核还活着（`nio-busy-beacon.patch`，每 200 万次自旋写一个 V）。\n  · **UFS 想恢复**：board.toml 的 `payload.kernel_args` 加回 `native-ufs-root=1`（或 `native-ufs-probe=12`）。",
   "★★★★★ 539（round 517）已上机 —— 判读 `UFS STEPS: 6123457`\n★★ **找到了最直接的参照：`refs/ios-v60/shim/ufs.c`（Apple 自家 UFS 驱动，UFS_BASE 与 nio 同为 0x1d84000）**。\n  逐字段核对结果：**我们的描述符是对的**（dw0=0x11000000、dw2(OCS)=0x0f、dw6/dw7、寄存器偏移 0x50/0x54/0x58/0x5c/0x60/0x20/0x30/0x34 全对）。\n  ★ **shim 做了、我们没做的两件事**：\n  ① **等门铃位清零**：`ufs_wr(REG_UTRLDBR,1); while (ufs_rd(REG_UTRLDBR)&1) { if(timeout){ufs_wr(REG_UTRLCLR,~1u); return 1;} }`\n     —— 控制器取走请求时会清掉该位；**我们敲了门铃就走，从不知道控制器取没取走**，且没取走的槽会留在列表里给下一条命令踩。\n  ② **前置检查 HCE**：`if (!(hce&1) || !(hcs&HCS_DP) || !(hcs&HCS_UTRLRDY)) stop;`\n     —— **HCE(0x34) bit0 = 主机控制器使能，为 0 时门铃写会被忽略**；我们写了 HCE=1 但**从不读回**。\n  ★ MI10 的完成判据也查实了（`hakios.ufshc.c:616-622`）：**判据是门铃寄存器本身**（`done = waiting & ~db`），不是 UTRLCNR。\n★ **判读**：`'2'`=控制器取走了；`'T'`=没取走（超时清槽）；col18-19=门铃寄存器值（bit0 仍为 1 ⇒ 没取走）。\n★ 环境备忘：本机**无 ffmpeg**；`Add-Type`/Reflection/WSL **被安全策略拦**；GitHub releases 下载不通（代理只转 git）；`api.github.com` 不通 ⇒ 取消 CI 只能机主在网页上做。视频判读走 pip 装 PyAV。",
   "★★★ 518 编译失败（我引入的）⇒ 512 已修；并给提交前检查器补了这条规则\n★★ **错误原文**：\n  NioUfs.cpp:1273:49: error: value size does not match register size specified by the constraint and modifier [-Werror,-Wasm-operand-widths]\n★★ **原因**：511 写的是 `msr daifclr, %0 :: \"r\" ((uint32_t)(daif & 0x3))` —— **DAIF 在 arm64 上是 64 位寄存器**（`mrs %0, daif` 读的是 64 位），而我把这个值截成了 32 位。\n★★ **修法（512）**：把**整个保存的状态**写回（64 位）：`msr daifclr, %0 :: \"r\" (daif)`。这同时是**行为上更对**的：原本就关着的中断保持关着，原本开着的恢复。\n★★★ **顺带补强提交前检查器**：`tools/check-driver.py` 原先只查「汇编限值宽度 vs 寄存器宽度」，**不懂「msr/mrs 这类系统寄存器指令所带值的宽度」** ⇒ 511 的错它没抓到。已补该规则（命名参数与位置参数两种写法都查），**并用真实失败版双向验证**：失败版报 `the operand of \"msr\" is 32-bit and the register it names is 64-bit`；修好版零误报。★ 这条纪律：**检查器每加一类规则，必须拿真实失败版验一遍**，否则和没有一样。",
   "★★★★★ 517（round 510）判决：nexus type 是别的芯片的寄存器 —— 这条线关闭\n★★ **照片铁证**：`13i nio: ufs H0e nexus set vs=00000000` ⇒ 写了 `0xFFFFFFFF`、读回 `0` ⇒ **该寄存器在此板不存在**。\n★★ **原因（已查实，不是猜）**：\n  · `SamsungPkg/Drivers/UfsDxe/UfsDxe.c` 是 **Exynos 9810**：`EXYNOS9810_UFS_BASE = 0x11120000`，VS 窗口 = `BASE + 0x1100`；\n  · nio 是 **SM8250**：UFS 在 `0x1d84000`，DT `reg = <0 0x1d84000 0 0x3000>`（`refs/sm8250-common/dts/sm8250.dtsi:58`）；\n  · **MI10（`refs/umi/drivers/storage/hakios.ufshc.c`，同 SM8250、真机跑通）完全不碰 nexus type / VS 窗口** —— 它的寄存器表里没有 vendor window。\n  ⇒ 那个地址在本板是**控制器窗口内的另一个寄存器**，510 往里写了全 1（**已撤销**）。\n  ⇒ ★ **round 493 / 495 / 510 三轮都栽在这条线上，全部作废**：查资料时要先确认**参照实现的平台与本板是否同代**。\n★★ **门铃改按 MI10 的做法**（`hakios.ufshc.c:527-537`，真机跑通）：\n  istate = ml_set_interrupts_enabled (FALSE);\n  ok = hc_in && !hc_closed && !hc_dead && *hc_loader.take_back == 0 &&\n      hc_read (UFSHC_UTRLBA)  == hc_list_lo &&\n      hc_read (UFSHC_UTRLBAU) == hc_list_hi &&\n      (hc_read (UFSHC_UTRLRSR) & 1) != 0 &&\n      (hc_read (UFSHC_UTRLDBR) & bit) == 0;\n  if (ok) { hc_write (UFSHC_UTRLDBR, bit); }\n  ml_set_interrupts_enabled (istate);\n  · **我们漏了三件**：① 没关中断；② 列表基址没读回比对（只写了并打印自己写的值）；③ 门铃状态读归读但没进决策。\n  · **关中断为什么重要**：门铃一响控制器就去抓描述符，**抓取占着总线**；这期间来的中断若 handler 碰总线，就等一条被控制器占着的总线 ⇒ 死锁。\n  · 关中断用 arm64 `msr daifset, #0x3`（`DAIFSC_IRQF|DAIFSC_FIQF`，XNU 自己就这么用，`refs/xnu-src/osfmk/arm64/proc_reg.h:472`），**报告必须在关中断之前打印** —— console 的锁靠中断释放。\n★ 517 其它读数：`adopt D ba written ba=04c9d000` = `own=04c9d000` ✓、`rsr=00000001 db=00000000` ✓、仍无 `H4 bad=` / `not ringing` / panic ⇒ 描述符校验继续通过（509 的修复稳定）。",
