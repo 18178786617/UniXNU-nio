@@ -45,6 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'build/verified-root'
 ARCHIVE = OUT / 'libVerifiedRoot.a'
 CORE_OBJECTS = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837'
+BOOTSTRAP_OBJECTS = ROOT / 'build/xnu/obj/DEVELOPMENT_ARM64_BCM2837'
 CORE_IMAGE = CORE_OBJECTS / 'mach.development.bcm2837.unstripped'
 RECIPE = CORE_OBJECTS / 'osfmk/DEVELOPMENT/prng_random.o.json'
 
@@ -176,33 +177,31 @@ def force_core_rebuild() -> None:
         return
     if not CORE_OBJECTS.is_dir():
         return
-    objects = list(CORE_OBJECTS.rglob('*.o'))
-    cpos = list(CORE_OBJECTS.rglob('*.cpo'))
-    archives = list(CORE_OBJECTS.rglob('*.a'))
-    filelists = (list(CORE_OBJECTS.rglob('*.filelist'))
-                 + list(CORE_OBJECTS.rglob('*.libfilelist')))
-    core = f'{CORE_IMAGE.stat().st_size} bytes' if CORE_IMAGE.exists() else 'absent'
-    print(f'PASS: the object directory holds {len(objects)} .o, {len(cpos)} .cpo, '
-          f'{len(archives)} archives, {len(filelists)} file lists, core {core}')
 
-    # The kernel is not linked against the objects: MakeInc.kernel lists, as its
-    # only per-component prerequisites, the component `.filelist` files, and
-    # each of those lists the objects by name.  Run 550 deleted 977 objects and
-    # the link still came back in three minutes with the tree's code in it,
-    # because the file lists were still there and make had no reason to walk
-    # into the components at all -- the objects it named were never asked for.
-    #
-    # So the file lists go too, with the archives and everything the link
-    # writes.  Without them make must descend into every component, build
-    # `$(OBJS)` from the sources, regenerate the lists and link a new core.
-    #
-    # EXPORT_HDRS stays: the headers under it are restored from a blob by an
-    # earlier step, not made here, and the compile needs them.
-    doomed = [CORE_IMAGE, *objects, *cpos, *archives, *filelists]
-    for name in ('link.filelist', 'ltolink.filelist', 'nonltolink.filelist',
-                 'mach.development.bcm2837', 'mach.development.bcm2837.dSYM',
-                 '.LDFLAGS'):
-        doomed.append(CORE_OBJECTS / name)
+    # Two object roots exist.  The bootstrap pass compiles into build/xnu/obj,
+    # the final pass into build/xnu/ios-obj, and the file lists the link reads
+    # are written next to the objects they name.  The core of run 552 carried
+    # the osfmk patch of that round and none of the bsd or iokit ones, while
+    # its own log showed bsd/kern/bsd_init.c carrying the mark: the objects
+    # that the link read were built earlier, from an older tree, out of the
+    # other root.  So both roots are cleared.
+    doomed = []
+    for root in (CORE_OBJECTS, BOOTSTRAP_OBJECTS):
+        if not root.is_dir():
+            continue
+        objects = list(root.rglob('*.o'))
+        cpos = list(root.rglob('*.cpo'))
+        archives = list(root.rglob('*.a'))
+        filelists = (list(root.rglob('*.filelist'))
+                     + list(root.rglob('*.libfilelist')))
+        core = f'{CORE_IMAGE.stat().st_size} bytes' if CORE_IMAGE.exists() else 'absent'
+        print(f'PASS: {root.name} holds {len(objects)} .o, {len(cpos)} .cpo, '
+              f'{len(archives)} archives, {len(filelists)} file lists, core {core}')
+        doomed += [CORE_IMAGE, *objects, *cpos, *archives, *filelists]
+        for name in ('link.filelist', 'ltolink.filelist', 'nonltolink.filelist',
+                     'mach.development.bcm2837', 'mach.development.bcm2837.dSYM',
+                     '.LDFLAGS'):
+            doomed.append(root / name)
     gone = 0
     for path in doomed:
         if path.is_dir():

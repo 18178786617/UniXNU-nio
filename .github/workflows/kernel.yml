@@ -749,7 +749,8 @@ jobs:
           # ends in true whether or not the tee target could be written.
           python3 - "$obj" "$native" "$work" <<'PY' | tee "$dest/fingerprint.log" || true
           import os, sys
-          marks = [b'nio: STALL rounds=', b'nio: HB ', b'the matching path stalled', b'nio: U1']
+          marks = [b'nio: bsd_init: ', b'nio: MT thread', b'\nD1', b'\nS1',
+                   b'nio: STALL rounds=', b'nio: HB ', b'the matching path stalled', b'nio: U1']
           obj, native, work = sys.argv[1:4]
 
           def probe(label, path):
@@ -778,6 +779,20 @@ jobs:
                   return n
               print('object directory totals: %d .o, %d .cpo, %d .filelist, %d .a'
                     % (count('.o'), count('.cpo'), count('.filelist'), count('.a')))
+              # The kernel is linked against the component file lists, so those
+              # lists are what the link reads.  If one of them names an object
+              # outside this directory, that is the object the core was built
+              # from, and it is the one that has to be rebuilt.
+              for comp in ('bsd', 'iokit', 'osfmk'):
+                  rel = os.path.join(comp, 'DEVELOPMENT', comp + '.filelist')
+                  path = os.path.join(obj, rel)
+                  if not os.path.isfile(path):
+                      print('filelist %s: MISSING' % rel)
+                      continue
+                  raw = [n for n in open(path, 'rb').read().split(b'\n') if n.strip()]
+                  print('filelist %s: %d entries; first: %s'
+                        % (rel, len(raw),
+                           b' | '.join(raw[:3]).decode('latin1')))
           src = os.path.join(work, 'osfmk/kern/startup.c') if work else ''
           if src and os.path.isfile(src):
               d = open(src, 'rb').read()
@@ -800,6 +815,15 @@ jobs:
                        'yes' if b'nio: U1' in d else 'no'))
           else:
               print('IOService.cpp source: MISSING', isrc)
+          bsrc = os.path.join(work, 'bsd/kern/bsd_init.c') if work else ''
+          if bsrc and os.path.isfile(bsrc):
+              d = open(bsrc, 'rb').read()
+              import time as _t
+              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(bsrc)))
+              print('bsd_init.c source: mtime %s, BSDINIT=%s'
+                    % (stamp, 'yes' if b'nio: bsd_init: ' in d else 'no'))
+          else:
+              print('bsd_init.c source: MISSING', bsrc)
           # Why is the string in the source but not in the object?  Print the
           # source's digest and the exact line, and every nio: literal the
           # object does carry, so the next round compares the two directly.

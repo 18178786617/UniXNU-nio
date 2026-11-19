@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 20:35（★★★★★★★ **找到了：链接的唯一前置是 `.filelist`，不是对象。** 550 删 977 个 `.o`、551 还把 115 个源文件盖成当前时间、make 跑 331 秒、链接成功——出来的内核里仍然没有 `nio: bsd_init: `。原因在 `makedefs/MakeInc.kernel:147`：内核目标的前置只有 `<component>.filelist`，而对象是**按名字列在那些清单里**的；清单还在，make 就不会进组件去编，被删的对象根本没人要。★ 553：把 `*.filelist`/`*.libfilelist`/`*.a`/`.LDFLAGS` 连同对象一起删。**）",
- "headline": "★★★★★★★ **553：删掉 `.filelist`，链接才会真的重建。**\\n· 551 的证据：`PASS: 115 patched sources carry a fresh mtime`、`bsd/kern/bsd_init.c` 确实带 `nio: bsd_init:`、977 对象已删，最终 make 331 秒后链接成功——发布内核里 `nio: bsd_init: ` = 0、`nio: WAIT ` = 0、`nio: cand done ` = 0。\\n· 机理（源码级）：`MakeInc.kernel:147` 的内核目标只依赖各组件 `.filelist`；`bsd/conf/Makefile.template:551` 的 `.filelist: $(OBJS)`。清单存在且比内核新时，make 既不遍历组件也不编译，链接照旧用清单里那些（已删的）名字对应的旧副本 ⇒ 白删。\\n· 553 的手段：`force_core_rebuild()` 连 `*.filelist`/`*.libfilelist`/`*.a`/`link.filelist`/`justlto*`/`.LDFLAGS`/`.dSYM` 一起删；保留 `EXPORT_HDRS`（那是上一步从 blob 还原的头文件）。\\n· 判据不变：`nio: bsd_init: ` 必须出现在发布内核里；没有就不刷机。",
+ "updated": "2026-11-19 20:45（★★★★★★★ **照片读出来的真卡点**：552 的屏幕最后一行是 `Q6`，而且**没有 `P1`** —— IOKit 匹配跑到第 6 个候选，**一个 personality 都没走到 `probe()`** ⇒ 没有驱动装载 ⇒ IOBSD 永不出现 ⇒ `bsd_init` 等不到 IOBSD ⇒ 到不了 `load_init_program` ⇒ **到不了用户层**。★ 同时查明：内核里 `nio: MT thread`（osfmk，本轮新补丁）在、`nio: bsd_init: `（bsd）不在、`cand done`（iokit）不在，而旧的 `nio_match_progress`/`nio_probe_cand`（iokit 老探针）在 ⇒ **osfmk 的改动进内核，bsd/iokit 的改动停在源码层**。★ 554：两个对象根（`build/xnu/obj` 与 `build/xnu/ios-obj`）一起清，连 `.filelist` 一起删，并打印清单头几行与各对象是否带标记。**）",
+ "headline": "★★★★★★★ **目标：手机执行 `/sbin/launchd`（用户层起来）。**\n· **卡点（552 照片 + 内核字节）**：`Q2..Q6` 之后没有 `P1` ⇒ 没有任何候选走到 `inst->probe()` ⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ `bsd_init` 卡在等 IOBSD。\n· **为什么看不到更多**：我们写在 `bsd/kern/bsd_init.c` 与 `iokit/Kernel/IOService.cpp` 的探针**没进内核**（`nio: bsd_init: `=0、`cand done`=0），只有 `osfmk` 的进了（`nio: MT thread` 在屏上）。旧的 `nio_match_progress` 变量在，说明这两个组件的对象是**更早一次编译**留下的。\n· **554 的做法**：两个对象根一起清空（`build/xnu/obj` 与 `build/xnu/ios-obj`），连 `*.filelist`/`*.a` 一起删；指纹步骤打印三个组件清单的前几行、对象总数、以及 `bsd_init.o`/`IOService.cpo`/`startup.o` 各自带不带标记。\n· **判定**：发布内核里出现 `nio: bsd_init: ` ⇒ bsd 组件的改动进了内核 ⇒ 探针可见 ⇒ 下一轮就能定位并修掉「候选不走 probe」。",
  "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 554,
+   "time": "20:45",
+   "marker": "`nio: bsd_init: ` 出现在发布内核",
+   "qemu": "macos-26",
+   "result": "★★★★★★★ **清空两个对象根 + 打印链接清单**。553 只清了 `build/xnu/ios-obj`，而 bootstrap 那轮的对象在 `build/xnu/obj`——链接读的清单就写在那里，所以 bsd/iokit 拿到的是旧对象。本轮两个根一起清（`.o`/`.cpo`/`.a`/`*.filelist`/`*.libfilelist`/核心/`.LDFLAGS`/`justlto*`），保留 `EXPORT_HDRS`；指纹步骤新增：三个组件 `.filelist` 的条目数与前三条路径、对象目录 `.o/.cpo/.filelist/.a` 总数、`bsd_init.c` 源码与 `bsd_init.o`/`IOService.cpo`/`startup.o` 各自是否带本轮标记。"
+  },
   {
    "run": 553,
    "time": "20:35",
