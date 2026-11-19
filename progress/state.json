@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 23:30（★★★★★★ **558 在 Intel runner 上编译失败——是我自己造成的：** 信标函数用了 `nio_boot_waypoint`，而我把变量声明放在了它后面 ⇒ 未声明标识符 ⇒ 2 个错误 ⇒ bootstrap 没编出 `link.filelist` ⇒ archive-01 报「No XNU symbol names」。★ 已修：声明挪到信标之前；并给检查器加了「先用后声明」的**提示式**检查（只提示不拦截，避免误报挡路）。★ 同时按机主要求**从 CI 里删掉 QEMU**（它 brew 装 QEMU 再跑 90 秒，结论一直是「没用」，还抢 runner 时间）。**）",
+ "updated": "2026-11-20 00:10（★★★★★★ **559 已刷机（23:48:03）。照片：仍无 `nio: bsd_init:` 相位标记，控制台最后是早期启动地标 `nio: 2/3/4`（source_pthread / telemetry / awl / iotrace），说明启动线程还停在启动链里、没进 bsd_init。**路标 `w<n>` 看不到：559 的路标每 64 个 V 标记打一次，而屏幕刚好切在 V5312 与 V5329 之间 —— 差 17 个标记就看到了。★ 560：路标改成**每秒**打一次（信标用 clock_get_uptime），并把 bsd_init 内部步点加细到 w4..w8（boot_progress_stage / platform_stall / throttle_init / copyright 各一步）。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 559,
+   "time": "23:48",
+   "marker": "（信标每 64 个标记打一次路标，屏幕刚好切掉）",
+   "qemu": "macos-15-intel",
+   "result": "**照片仍无 bsd_init 相位标记**；控制台最后是早期启动地标 nio: 2/3/4 ⇒ 启动线程仍在启动链中。路标 w<n> 印在 mark 5312（每 64 个一次），屏幕可见范围是 5329-5360 ⇒ 差 17 个标记。改为每秒打印。"
+  },
   {
    "run": 558,
    "time": "23:11",
