@@ -1,0 +1,75 @@
+Give the wait for a resource an end
+
+The photograph of run 548 says where the boot stopped, and it says it
+twice: the mark that says a personality is being started is there, and
+the mark that says it came back never came.  The two photographs taken
+minutes apart are the same, with only the beacon further along, so the
+boot is not slow -- it is stopped.
+
+It is stopped in startCandidate(), which is where a personality's start
+begins:
+
+    if ((this != gIOResources) && (this != gIOUserResources)) {
+        // stall for any nub resources
+        checkResources();
+        // stall for any driver resources
+        service->checkResources();
+    }
+
+and checkResources() ends in checkResource(), which ends in
+
+    waitForService( table );
+
+with no timeout.  The resource the platform expert waits for is the BSD
+resource, and this port's storage driver matches for observation only
+and never publishes it -- so the wait had no end.  The userland does not
+need the BSD resource: the root volume the kernel boots from is the
+mockfs image in RAM, and mockfs is the file system that mounts it.
+
+The wait now has an end.  Two seconds is long enough for a resource
+that is going to come and short enough that one that is not going to
+come does not hold the boot for ever.
+
+The resource is named on the panel before the wait and after it, so that
+a picture says which one it was:
+
+  nio: WAIT IOBSD
+  nio: WAITED
+
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -5463,7 +5463,33 @@
+ 		LOG("config(%p): stalling %s\n", IOSERVICE_OBFUSCATE(IOThreadSelf()), getName());
+ 	}
+ 
+-	waitForService( table );
++	/* nio: the wait is bounded.
++	 *
++	 * This is where the boot stopped: the platform expert's start() waits
++	 * for the resources its nub asks for, and the one it asks for is the
++	 * BSD resource, which the storage driver publishes.  This port's storage
++	 * driver matches for observation only and never publishes it, so the
++	 * wait had no end: the panel showed the mark that says a personality is
++	 * being started, and the mark that says it came back never came.
++	 *
++	 * The wait now has an end.  Two seconds is long enough for a resource
++	 * that is going to come, and short enough that one that is not going
++	 * to come does not hold the boot for ever.  The userland does not need
++	 * the BSD resource: the root volume the kernel boots from is the
++	 * mockfs image in RAM, and mockfs is the file system that mounts it.
++	 *
++	 * The resource is named on the panel before the wait and after it, so
++	 * that a picture says which one it was. */
++	nio_u_mark("\nnio: WAIT ");
++	nio_u_mark(str ? str->getCStringNoCopy() : "?");
++	{
++		mach_timespec_t nio_to;
++	
++		nio_to.tv_sec = 2;
++		nio_to.tv_nsec = 0;
++		waitForService( table, &nio_to );
++	}
++	nio_u_mark("\nnio: WAITED");
+ 
+ 	if (gIOKitDebug & kIOLogConfig) {
+ 		LOG("config(%p): waking\n", IOSERVICE_OBFUSCATE(IOThreadSelf()));
