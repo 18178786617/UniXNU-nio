@@ -678,57 +678,15 @@ jobs:
           python3 device/tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
             | tee -a "${base:-out}/logs/ci-steps.log" || true
 
-      - name: Boot the kernel in QEMU
-        # The phone gives us 30 seconds and a console that dies; QEMU gives us a
-        # full console, an exception log and a framebuffer we can read back.
-        # tools/qemu-nio.py does what DarwinBoot does: place the segments, put
-        # the tree and a boot_args struct behind the kernel, jump to the entry.
-        if: always()
-        continue-on-error: true
-        run: |
-          base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
-          mkdir -p "$base/logs" out/qemu
-          exec > >(tee "$base/logs/qemu-run.log") 2>&1
-          echo "base=$base"
-          if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-            echo "installing qemu"
-            brew install qemu
-          fi
-          qemu-system-aarch64 --version | head -1
-          python3 device/scripts/make-qemu-adt.py --output out/qemu/kernel.adt
-          cmdline=$(python3 device/scripts/merge-kernel-args.py --print \
-            device/package/unixnu.toml device/board.toml)
-          echo "cmdline: $cmdline"
-          kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
-          if [ -z "$kernel" ]; then
-            echo "no kernel.macho to boot in QEMU"
-            exit 0
-          fi
-          echo "kernel: $kernel"
-          python3 device/tools/qemu-nio.py --kernel "$kernel" \
-            --adt out/qemu/kernel.adt --cmdline "$cmdline" \
-            --seconds 90 --out out/qemu
-          ls -la out/qemu || true
-          # The artifacts of a workflow run cannot be pulled without a token,
-          # so the QEMU output goes into the diagnostics tree as well.
-          for f in out/qemu/qemu.log out/qemu/qemu-guest-errors.log out/qemu/fb.bin \
-                   out/qemu/ramoops.bin out/qemu/console.txt out/qemu/fb.png \
-                   out/qemu/serial.log; do
-            if [ -f "$f" ]; then cp "$f" "$base/logs/"; else echo "missing $f"; fi
-          done
-          ls -la "$base/logs" | head -20
-
-      - name: Upload the QEMU framebuffer
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: qemu-framebuffer
-          path: |
-            out/qemu/fb.png
-            out/qemu/fb.bin
-            out/qemu/qemu.log
-          if-no-files-found: ignore
+      # The kernel is not booted in QEMU any more.  The owner said on
+      # 2026-11-19 that it tells us nothing: QEMU has no UFS, no real
+      # firmware, no mockfs root and no console that dies the way the
+      # phone's does, and every round it was read as if it were evidence.
+      # It also cost runner time -- the step installed QEMU with brew and
+      # then ran it for ninety seconds -- and on the Intel image that is
+      # time the kernel build needs.  The phone is the judge: the panel is
+      # read from a photograph, and the marks that matter go straight to the
+      # framebuffer.
 
       - name: Fingerprint where the round's marker lives
         # run-337 onward publish a core without the new strings although the
@@ -1447,13 +1405,8 @@ jobs:
           # guest's memory gives the whole console as a string.  Text is
           # read more exactly than a picture of pixels, and it is what says
           # which of the driver's steps were taken.
-          for shot in out/qemu/fb.png out/qemu/ramoops.bin out/qemu/console.txt \
-                      out/qemu/qemu-guest-errors.log; do
-            if [ -f "$shot" ]; then
-              cp "$shot" "$stage/ci-kernel/$(basename "$shot")"
-              echo "the round's screen: $(basename "$shot") ($(wc -c < "$shot") bytes)"
-            fi
-          done
+          # QEMU is not run, so there is no screen to ship with the kernel.
+          # The phone's own panel is the judge now.
           # The size and the digest go with it, so that what was fetched can
           # be checked against what was built without the build machine.
           python3 - "$stage/ci-kernel/kernel.macho" > "$stage/ci-kernel/SHA256SUMS" <<'PY'

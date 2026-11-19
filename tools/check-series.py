@@ -282,6 +282,50 @@ def main(argv):
                 problems.append("%s: a function definition inside a function (%s)"
                                 % (rel, h))
 
+    advisories = []
+
+    # A name the series declares has to be declared before it is used.  Run
+    # 558 declared the boot thread's waypoint after the beacon that reads
+    # it, the kernel did not compile, and the round was lost.
+    for rel in sorted(wanted):
+        f = SCRATCH / rel
+        if not f.is_file():
+            continue
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").split("\n")
+        except OSError:
+            continue
+        for name in sorted(set(re.findall(r"\b(nio_[a-z0-9_]+)\b", "\n".join(lines)))):
+            first_use = None
+            first_decl = None
+            for no, line in enumerate(lines, 1):
+                if name not in line:
+                    continue
+                if first_use is None:
+                    first_use = no
+                head = line.split(name, 1)[0]
+                if re.search(r"\b(?:volatile|static|const|extern|unsigned|signed|int|long|short|char|void|size_t|uint\w+|int\w+)\b", head):
+                    first_decl = no
+                    break
+            if first_use is None:
+                continue
+            if first_decl is None:
+                advisories.append("%s: %s is used but never declared" % (rel, name))
+            elif first_decl > first_use:
+                advisories.append("%s: %s is used on line %d but declared on line %d"
+                                  % (rel, name, first_use, first_decl))
+
+    if advisories:
+        # Advisory only.  The rule is a heuristic -- a name declared on the
+        # line after its type, or one that only ever appears in a comment,
+        # reads as "never declared" -- and a rule that cries wolf is worse
+        # than no rule.  What it is for is the failure of run 558, where the
+        # waypoint was declared after the beacon that reads it and the kernel
+        # did not compile.
+        print("advisories (not failures):")
+        for a in advisories:
+            print("  " + a)
+
     if problems:
         print("problems:")
         for p in problems:

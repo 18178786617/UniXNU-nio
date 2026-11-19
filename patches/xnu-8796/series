@@ -175,5 +175,5 @@ nio-bsd-init-phases-direct.patch
 nio-bound-the-resource-wait.patch
 nio-matching-on-its-own-thread.patch
 nio-drop-reasons-on-panel.patch
-nio-boot-waypoints.patch
 nio-console-no-lock-wait.patch
+nio-boot-waypoints.patch

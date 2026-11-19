@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 22:50（★★★★★★ **556 照片：路标没出现，因为心跳线程是死的。** 信标补丁自己的注释写着：心跳用 `delay()`，那时定时器还没工作，所以它只打印一次 `HB 1` 就停住；一直在跑的是信标 `V`。我 556 把路标挂在心跳上 ⇒ 白跑一轮。 ★ 557：路标改由**信标**打（每 64 个 V 或变化时打 `w<n>`），并给 console 刷新锁的等待加上界（那把锁是在持锁状态下写设备，设备不收字符就永远不放 —— 556 的现象正是「控制台最后一行之后全静」）。**）",
+ "updated": "2026-11-19 23:30（★★★★★★ **558 在 Intel runner 上编译失败——是我自己造成的：** 信标函数用了 `nio_boot_waypoint`，而我把变量声明放在了它后面 ⇒ 未声明标识符 ⇒ 2 个错误 ⇒ bootstrap 没编出 `link.filelist` ⇒ archive-01 报「No XNU symbol names」。★ 已修：声明挪到信标之前；并给检查器加了「先用后声明」的**提示式**检查（只提示不拦截，避免误报挡路）。★ 同时按机主要求**从 CI 里删掉 QEMU**（它 brew 装 QEMU 再跑 90 秒，结论一直是「没用」，还抢 runner 时间）。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 558,
+   "time": "23:11",
+   "marker": "（Intel runner 上编译失败：信标先用了后声明的变量）",
+   "qemu": "macos-26→macos-15-intel",
+   "result": "**失败在编译，不是链接**：Intel 镜像上 startup.c 2 个错误（`nio_boot_waypoint` 未声明——声明被放在信标函数之后）。bootstrap 因此没写 link.filelist，archive-01 失败。已修声明位置。"
+  },
   {
    "run": 557,
    "time": "22:50",
@@ -315,6 +322,7 @@
   "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；探针必须挂在**活着**的线程上（信标活着，心跳不活）。"
  ],
  "notes": [
+  "★★★★★★ **CI 规矩（机主 2026-11-19 22:40 与 23:14）**\n· **晚上 arm64 池会满**：默认 runner 改成 `macos-15-intel`（不用等），一轮 20 多分钟而不是 9 分钟；arm64 有位置时再改回 `macos-26`。\n· **CI 里不再跑 QEMU**（机主：「没有用，CI 上就把他取消了，浪费时间」）：原来那一步会 brew 装 QEMU 再跑 90 秒，而它的结论从来没有被采信过。**\n· **探针必须挂在活着的线程上**：心跳用 `delay()`（定时器未工作）只打印一次 HB 1 就停；信标是自旋的，一直在写。556 的路标挂在心跳上，白跑一轮。",
   "★★★★★★ **真因（2026-11-19 22:05）：探针写进了编译器不走的分支 / 走的是会丢的通道**\n· 554 的硬数据：`bsd/DEVELOPMENT/bsd_init.o` mtime 13:02:57、`iokit/DEVELOPMENT/IOService.cpo` 13:00:09、`osfmk/.../startup.o` 13:01:47，源码 12:59:16 ⇒ **三个组件每轮都重编**，S1 旧前提（组件不进内核）是错的，已作废。\n· bsd 的相位标记：`nio-bsd-init-phases-direct.patch` 把 `#define bsd_init_kprintf` 插进 `#if DEBUG_BSDINIT` 的 **#else 分支**；而 `nio-bsdinit-narrates.patch` 把 `DEBUG_BSDINIT` 从 0 改成 1 ⇒ #else 是死分支 ⇒ 我们的定义从未编译。内核证据：`bsd_init: ` ×43（XNU 自己的）、`nio: bsd_init: ` ×0。\n· iokit 的丢弃原因：`NIO_DROP` 记了原因，但汇总只走 `printf` → console 环 → 环满即丢（546 面板就是证据：只有 iokit 的标记、没有 bsd_init 的相位）。\n· 555 的做法：相位标记 `#undef` 后放在 `#endif` 之后（必赢）；丢弃原因改用 `nio_u_mark` 直接上屏（R=原因、K=personality 类别）；指纹打印发布内核里全部 `nio:` 标记清单（一眼看清什么真的进去了）。\n\n★★★★★★ **工程卫生三修（否则补丁永远写不对）**\n· 本地 `tools/check-series.py` 改用 `git apply`（与 CI 的 patches.py 同法）。`patch` 会把 hunk 落到第一个匹配的偏移，CI 不会。\n· 本地基线树 `.tmp/xnu-8796.101.5` 之前是 CRLF（Windows 检出），CI 是 LF ⇒ 补丁上下文对不上、落点乱跳。已 `core.autocrlf=false` 重新检出为 LF。\n· 仓库里 10 个 `.patch` 文件在工作树中是 CRLF，已归一化为 LF（.gitattributes 早已声明 `*.patch text eol=lf`）。\n· 另：本地基线树里混进了 3 个 CI 没有的文件（source_pthread_bootstrap.c / kpc.c / boot_progress.h），已删除。",
   "★★★★★★ **定稿路线（2026-11-19 20:50）：只做这 3 步，不再换方向。**\n· 目标：手机内核 exec `/sbin/launchd`（用户层）。判据：屏幕出现 launchd 痕迹。\n· 卡点（唯一）：552 照片有 `Q2..Q6` 没有 `P1` ⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ bsd_init 卡在等根设备。\n· 前置（唯一）：bsd/iokit 的改动必须进内核，否则探针不可见、代码改不动。\n\n★★★★★★ **已排除的假设（不要再试，也不要据此改方向）**\n① 「核心没重编」——已被 552 证伪：`nio: MT thread`（本轮新补丁）在屏上，核心确实是新编的。\n② 「D/S/WAIT 判读卡点」——无效。那些探针（`nio-matching-step-marks` / `nio-bound-the-resource-wait` / `nio-bsd-init-phases-direct`）从未进内核，屏幕上的 `D1 D2 D3 D5`/`cand done`/`S1` 是更早那版内核里的旧探针。\n③ 「删掉 .o 就够」——550 证伪（删 977 个对象，链接照样用旧代码）。\n④ 「给源码盖新时间就够」——551 证伪（115 个源文件盖成现在，出来的内核仍无本轮标记）。\n⑤ 「QEMU 能判断」——无效，不拿它当依据。\n⑥ 「UFS 门铃是主线」——已让开（543 起命令行不再带 UFS 参数），用户层不依赖 UFS。\n⑦ 「用 DSU / 手机本机只读系统盘当根」——**已退出主线，不在当前三步里**。根设备来自设备树 /chosen/memory-map 的 RAMDisk，rootfs/rootfs.img 是 N4KROOT，bsd/vfs/vfs_conf.c 里 mockfs 是唯一有 vfc_mountroot 的文件系统；内核命令行不带 native-ufs-root=1，所以用户层不需要 UFS，也就不需要 DSU。工程里现在没有任何 DSU 代码（board.toml / patches / drivers 全部搜不到 DSU，只有工作区里下载的 iOS OTA 资产 DSU.zip 与旧笔记提到过它）。\n\n★★★★★★ **两个对象根（本次的真正机关）**\n· `build/xnu/obj/DEVELOPMENT_ARM64_BCM2837` ← bootstrap 那轮编译的\n· `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837` ← 最终那轮编译的\n· 链接读的 `<component>.filelist` 写在对象旁边（`MakeInc.kernel:147`），清一个根不够。",
   "★★★★★★ **编号对照（防止再被误读成「回头」，2026-11-19 20:55）**\n· 旧看板第①项「IOBSD 匹配关」判据=「面板出现 SM unlocked 之后的新行」⇒ 证明**匹配锁没死锁** ⇒ **已完成，不回头**（并入现在的 S0）。\n· 现在的 **S1「让 bsd/iokit 的改动进内核」不是第①项**，是这轮才出现的一步。原因：写在这两个组件里的探针从来没进过手机，所以「匹配走到哪一步」既看不见也改不了；先把探针送进内核，才谈得上定位与修复。\n· 旧①与 S1/S2 的关系：旧①是**较弱的判据**（锁没死），S2 是**更严的判据**（候选真的走到 `inst->probe()` ⇒ personality 装载 ⇒ IOBSD 出现）。旧①通过不等于 personality 装载过——这一点直到 552 的照片才被验证（`Q2..Q6` 之后没有 `P1`）。\n· 旧 P1（UFS 挂 APFS 根卷）作废；旧 P2（存储层 DSU→mockfs）已定型；旧 P3（launchd）= 现在的 S1–S3。",
