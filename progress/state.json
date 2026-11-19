@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 15:45（★★★★★ **543 已上机；命令行已无 UFS 参数（真机照片证明）；内核活着（V276 在写），停在 IOKit 匹配里（0673，无 mx 行）。等下一张照片。**）",
- "headline": "★★★★★ **真机照片证明：543 的命令行已无 `native-ufs-root=1` / `native-ufs-probe=12`**（loader 打印的 `KERNEL ONLINE:` 行），**UFS 这条线彻底让开了**。**内核是活的** —— 照片上 V 序列停在 `V275:1 V`（V276 正在写，nio-busy-beacon.patch 的心跳信标）。**但启动停在 0673 = `nio: P AppleARMPU r=...`，还在 IOService::probeCandidates() 里**（`mx<n>` 是候选循环【退出】时打印的，屏幕上没有 ⇒ 没退出）。★ 停滞看门狗 15 秒无进展就 panic，**没有 panic ⇒ 匹配在推进，只是慢**。",
+ "updated": "2026-11-19 17:55（★★★★★ **546 的照片给出判决：候选相位完整走完（`nio: cand done AppleARMPU` 出现、D5/D6 都在）⇒ 我上轮怀疑的 detach() 自死锁【不是元凶】；但面板上一个 `nio: bsd_init:` 都没有 ⇒ bsd_init 的阶段标记卡在控制台环形缓冲里。548 把它们和 init 轨迹全改成直写。CI 548 构建中。**）",
+ "headline": "★★★★★ **546（round 521）的照片：匹配【走完了】。** `nio: cand done AppleARMPU` 出现、D1-D6 全部到位、start 相位起了 20 个服务（V1..V20）⇒ **我上轮怀疑的 `inst->detach()` 自死锁不是元凶**。★ 但面板上**一个 `nio: bsd_init:` 都没有** —— bsd_init 有 ~30 个阶段标记（`calling setconf` / `vfs_mountroot` / `calling VFS_ROOT`），它们走 printf（环形缓冲），**而环形缓冲正是卡住的地方** ⇒ 写进去了出不来。⇒ **548 把 bsd_init 的阶段标记和 init 轨迹全改成直写**（CI 548 构建中）。",
  "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
@@ -18,7 +18,7 @@
    "status": "⏸ 暂停（用户层优先）",
    "criteria": "根卷挂载成功的日志",
    "evidence": "★★★★★ run-508/509 判决（22:43 真机照片，514 与 515）：**卡点从硬件收回到我们自己的代码里** —— `H4 bad=00000080`（只有 word[7] 一位不符）+ `H4c descriptor differs; not ringing` + 末尾 `ocs=f resp=ff scsi=ff`（result 初值）⇒ **门铃根本没敲**。根因：507/508 的读回校验里**写入公式与比对公式是两套**（PRD 偏移总在 vs 无数据时期望 0），而第一条命令 TEST UNIT READY 恰是无数据命令 ⇒ 永久误报。MI10 `s->utrd[7]=((UCD_PRDT/4)<<16)|n` 证实偏移总在。⇒ 509 已修：八个字只建一次。★ 此前 490 已排除描述符内容、cacheClean、门铃前状态、SMMU、HCE、总线死；499–506 已用 framebuffer 方块证明门铃写**确实返回**（十轮误判的根源是 console 打印会永久卡住）。",
-   "next": "**⏸ 暂停。** 驱动仍认 `native-ufs-probe` / `native-ufs-root`，**把命令行加回一个词就恢复**（board.toml 一行）。\n★ 教训（这二十轮的真相）：照片上『门铃写没返回』的判决，根因是**我们自己的探针** —— 门铃写之后第一次 framebuffer 写要等**控制器占着的总线**。真要继续做 UFS，探针必须放在**确认读之后**（518/519 已经这么改了）。"
+   "next": "**⏸ 暂停（用户层优先）**。★ 546 的照片：候选相位完整走完 ⇒ UFS 这条线【不在当前卡点上】。\n★ 教训：这二十轮『门铃写没返回』的判决，根因是**我们自己的探针**（门铃写后第一次 framebuffer 写要等控制器占着的总线）。真要继续做 UFS，探针必须放在**确认读之后**（518/519 已经这么改了）。"
   },
   {
    "id": "P2",
@@ -26,7 +26,7 @@
    "status": "★ 已就位（mockfs 那条）",
    "criteria": "/flash 挂上 DSU 里的 APFS + switch_root 成功",
    "evidence": "· 根设备：设备树 `/chosen/memory-map` 的 `RAMDisk` 属性（loader 放 rootfs.img 进去）⇒ 与 UFS 无关\n· 根文件系统：`bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**\n· `rootfs/rootfs.img`（N4KROOT 格式）：slot A = **真 launchd（525088B）**，slot B = **真 dyld（922912B）**（`tools/check-mockfs-paths.py` 确认）\n· mockfs 提供 `/sbin/launchd`、`/usr/lib/dyld`、`/probe.bin`\n· 内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`",
-   "next": "**等下一张照片**（543 于 15:38:52 上机，照片 15:40，约 85 秒时匹配还在跑）。\n★ 判据（四个探针都在 series 里）：`mx<n>`（匹配走完）、`nio: exec: load_init_program enter`（进用户层）、panic `nio: the matching path stalled (rounds=N)`（匹配卡死）。"
+   "next": "★★★ **现在就走这条**（mockfs 已就位）。★ **548 的面板是决定性的**：\n  · 出现 `nio: bsd_init: calling setconf` ⇒ bsd_init 走到了根卷这一步\n  · 出现 `nio: bsd_init: vfs_mountroot` ⇒ 在挂根卷（mockfs）\n  · 出现 `nio: exec: load_init_program enter` ⇒ **内核到了用户层的门口**\n  · 出现 `nio: exec: load_init_program_at_path /sbin/launchd` ⇒ **正在 exec launchd**\n★ 这四个标记现在走【直写】(不走控制台环形缓冲)，所以不会再被环形缓冲吞掉。"
   },
   {
    "id": "P3",
@@ -46,6 +46,20 @@
   }
  ],
  "rounds": [
+  {
+   "run": 546,
+   "time": "17:22",
+   "marker": "nio: cand done AppleARMPU / D5 / D6 / S1V1..V20",
+   "qemu": "macos-26",
+   "result": "★★★★★ **判决：匹配走完了**。照片逐行：D1,D2,D5（NidUfs，**无 D3/D4 ⇒ newInst==NULL ⇒ 没匹配上**，正常）→ D1,D2,D3,D4,`nio: cand done AppleARMPU`,D5 → **D6** → **S1V1 V2 … V20**（start 相位起了 20 个服务）。⇒ **我上轮怀疑的 `inst->detach()` 自死锁不是元凶**（D2 出来了 ⇒ detach 返回了）。★ **但面板上一个 `nio: bsd_init:` 都没有** ⇒ bsd_init 的阶段标记走 printf 卡在环形缓冲里。★ V 信标从 276 跑到 1298 ⇒ 直写让整体快了很多。"
+  },
+  {
+   "run": 548,
+   "time": "17:55",
+   "marker": "nio: exec: load_init_program enter",
+   "qemu": "macos-26",
+   "result": "★★★★★ **547 修正版**（CI 548）：① bsd_init 的 ~30 个阶段标记 + init 轨迹（exec_mach_imgact / load_init_program / load_init_program_at_path）**全改直写**（不走控制台环形缓冲）—— 546 的面板上一个 `nio: bsd_init:` 都没有，⇒ 它们卡在环形缓冲里；② **两个助手函数放文件作用域**（547 编译失败：'function definition is not allowed here' —— bsd_init 的宏在函数体内、exec 标记在 exec_mach_imgact 内）；③ `tools/check-series.py` 新增【C 文件里嵌套函数定义】的检查（与基线比，且只查 .c 不查 .cpp）"
+  },
   {
    "run": 543,
    "time": "15:38",
@@ -237,6 +251,7 @@
   "★ **别再为 UFS 的门铃加新探针** —— 先把用户层打通，回头再收拾它。"
  ],
  "notes": [
+  "★★★★★ **★ 生成补丁的正确流程（★ 今天踩了四遍，记死）**\n  ① **先把自己的补丁从 series 里移除**（否则基线里已经带上了我的改动 ⇒ diff 为空 / 反向）\n  ② 干净树 + **CI 同样的 `patch -p1 --no-backup-if-mismatch --forward`** 全 series ⇒ 得到基线树\n  ③ **在这棵树上做修改**（★ 基线副本要在修改【之前】复制！）\n  ④ `diff -u --label a/<path> --label b/<path> 基线 改后 > 补丁`\n  ⑤ 把补丁放回 series 末尾，再验一次（★ 检查器会重建 series-check 树，别在那棵树上改）\n  ★ **`diff` 退出码是 1（文件有差异）⇒ `&&` 链会断** —— 用 `;` 或 `|| true`\n  ★ **树是 LF**（`refs/` 里的原始树）⇒ 读写前先探测行尾\n  ★ **series 里有重复的补丁名** ⇒ 第二遍报 'already applied'，看起来像『补丁已在树里』，很误导 ⇒ 检查器现在查重复\n  ★ **C 文件里不能嵌套定义函数**（C++ 可以）⇒ 助手函数要放【文件作用域】；检查器现在查这条\n  ★ **检查器有两份同名文件会跑错**（外层 `tools/` 与仓库里的 `device/UniXNU-nio/tools/`）⇒ 只用仓库那份",
   "★★★★★ **用户层路线（★ 最重要的一份）**\n  · **为什么不需要 UFS**：根设备 = 设备树 `/chosen/memory-map` 的 `RAMDisk`（loader 放 rootfs.img 进去）⇒ 与 UFS 无关；\n    根文件系统 = `bsd/vfs/vfs_conf.c` 的 `vfstbllist` 里**只有 mockfs 有 `vfc_mountroot`**；\n    rootfs.img（N4KROOT）slot A = 真 launchd(525088B)、slot B = 真 dyld(922912B)；\n    内核 `load_init_program()`（kern_exec.c:8256）→ exec `/sbin/launchd`。\n    ⇒ **命令行去掉 `native-ufs-root=1` / `native-ufs-probe=12` 即可**（`NioUfs::start()` 里 `if ((!probe && !rootMode) || ...) return false;` ⇒ 不碰控制器）。\n  · **命令行有三处，真机生效的是第一处**：① `board.toml` 的 `payload.kernel_args` ← **loader 真正用的**（照片里 `KERNEL ONLINE:` 打印的就是它）；② `package/unixnu.toml` 的 `args` ← QEMU；③ `patches/xnu-8796/nio-boot-args-fallback.patch` 的 `nio_port_cmdline[]` ← 内核 fallback（`PE_boot_args()`）；④（先前已改）`nio-port-command-line.patch` 的 arm_init.c strlcpy。★ 543 的 QEMU 日志确认 cmdline 里已无 UFS 参数 ⇒ 三处一致。\n  · **判读表（四个探针都在 series 里）**：`mx<n>` = 候选循环退出（匹配走完）；`nio: exec: load_init_program enter` = **进用户层**；panic `nio: the matching path stalled (rounds=N)` = 匹配卡死（但内核活着）；V 信标 = 内核还活着（`nio-busy-beacon.patch`，每 200 万次自旋写一个 V）。\n  · **UFS 想恢复**：board.toml 的 `payload.kernel_args` 加回 `native-ufs-root=1`（或 `native-ufs-probe=12`）。",
   "★★★★★ 539（round 517）已上机 —— 判读 `UFS STEPS: 6123457`\n★★ **找到了最直接的参照：`refs/ios-v60/shim/ufs.c`（Apple 自家 UFS 驱动，UFS_BASE 与 nio 同为 0x1d84000）**。\n  逐字段核对结果：**我们的描述符是对的**（dw0=0x11000000、dw2(OCS)=0x0f、dw6/dw7、寄存器偏移 0x50/0x54/0x58/0x5c/0x60/0x20/0x30/0x34 全对）。\n  ★ **shim 做了、我们没做的两件事**：\n  ① **等门铃位清零**：`ufs_wr(REG_UTRLDBR,1); while (ufs_rd(REG_UTRLDBR)&1) { if(timeout){ufs_wr(REG_UTRLCLR,~1u); return 1;} }`\n     —— 控制器取走请求时会清掉该位；**我们敲了门铃就走，从不知道控制器取没取走**，且没取走的槽会留在列表里给下一条命令踩。\n  ② **前置检查 HCE**：`if (!(hce&1) || !(hcs&HCS_DP) || !(hcs&HCS_UTRLRDY)) stop;`\n     —— **HCE(0x34) bit0 = 主机控制器使能，为 0 时门铃写会被忽略**；我们写了 HCE=1 但**从不读回**。\n  ★ MI10 的完成判据也查实了（`hakios.ufshc.c:616-622`）：**判据是门铃寄存器本身**（`done = waiting & ~db`），不是 UTRLCNR。\n★ **判读**：`'2'`=控制器取走了；`'T'`=没取走（超时清槽）；col18-19=门铃寄存器值（bit0 仍为 1 ⇒ 没取走）。\n★ 环境备忘：本机**无 ffmpeg**；`Add-Type`/Reflection/WSL **被安全策略拦**；GitHub releases 下载不通（代理只转 git）；`api.github.com` 不通 ⇒ 取消 CI 只能机主在网页上做。视频判读走 pip 装 PyAV。",
   "★★★ 518 编译失败（我引入的）⇒ 512 已修；并给提交前检查器补了这条规则\n★★ **错误原文**：\n  NioUfs.cpp:1273:49: error: value size does not match register size specified by the constraint and modifier [-Werror,-Wasm-operand-widths]\n★★ **原因**：511 写的是 `msr daifclr, %0 :: \"r\" ((uint32_t)(daif & 0x3))` —— **DAIF 在 arm64 上是 64 位寄存器**（`mrs %0, daif` 读的是 64 位），而我把这个值截成了 32 位。\n★★ **修法（512）**：把**整个保存的状态**写回（64 位）：`msr daifclr, %0 :: \"r\" (daif)`。这同时是**行为上更对**的：原本就关着的中断保持关着，原本开着的恢复。\n★★★ **顺带补强提交前检查器**：`tools/check-driver.py` 原先只查「汇编限值宽度 vs 寄存器宽度」，**不懂「msr/mrs 这类系统寄存器指令所带值的宽度」** ⇒ 511 的错它没抓到。已补该规则（命名参数与位置参数两种写法都查），**并用真实失败版双向验证**：失败版报 `the operand of \"msr\" is 32-bit and the register it names is 64-bit`；修好版零误报。★ 这条纪律：**检查器每加一类规则，必须拿真实失败版验一遍**，否则和没有一样。",
