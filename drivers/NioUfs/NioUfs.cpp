@@ -1534,6 +1534,19 @@ void NioUfs::adoptAndRead (unsigned level)
     fbStep (4);                     // box 5: the doorbell read came back
     fbChar (118, 15, '5');          // the same, as a character: the read came back
     fbMark (1860, 176, 0x00, 0x00, 0xff);  // column 8: the read came back
+    /* What the doorbell register holds after the write says whether the
+     * controller took the request.  The bit for the slot that was rung
+     * is cleared by the controller when it takes it, so a register that
+     * still has the bit set says the request was not taken.
+     *
+     * The value is written into the panel as two hex digits, so that a
+     * picture carries the number and not only the fact of it.
+     */
+    {
+      static const char hex[] = "0123456789abcdef";
+      fbChar (118, 18, hex[(dbAfter >> 4) & 0xf]);
+      fbChar (118, 19, hex[dbAfter & 0xf]);
+    }
     __asm__ volatile ("dsb sy" ::: "memory");
     /* nio run-505: column 4 is drawn immediately after the write, before
      * any delay or barrier.  Red without it means the write returned but

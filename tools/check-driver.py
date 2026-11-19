@@ -262,7 +262,71 @@ def check(path: str) -> list[str]:
                         "register it names is 64-bit"
                         % (path, number, match.group("op")))
 
+    # A local variable that is declared and then never used again.  The
+    # compiler refuses to build it:
+    #
+    #   error: unused variable 'dbAfter' [-Werror,-Wunused-variable]
+    #
+    # This is the mistake round 515 made: a register was read into a
+    # variable so that the read would be a step of its own, and the
+    # variable was never looked at.
+    #
+    # The check is a plain reading of the text: a declaration of a local
+    # variable inside a function, and no further mention of the name in
+    # that function.  A name that is declared and used later is not
+    # reported, and a name that is declared outside any function -- a
+    # file-scope one -- is not reported either, because it may be used
+    # in another file.
+    for number, name, body in locals_in_functions(code):
+        # The name must appear AFTER the declaration.  The declaration
+        # itself counts as an appearance, so a variable that is only
+        # declared and never used again would be counted as used.
+        after = body[body.find(name) + len(name):]
+        if name not in after:
+            problems.append(
+                "%s:%d: the local variable \"%s\" is never used" % (path, number, name))
+
     return problems
+
+
+def locals_in_functions(code: str):
+    """Yield (line number, name, the text of the function) for each local.
+
+    A block of code is either a function or a lambda, and a lambda is
+    written as "auto name = [&] (...) { ... }" -- so the two are looked
+    for in two ways.  A declaration is a type and a name and an
+    assignment or an opening bracket, inside such a block.
+    """
+    starts = []
+    for match in re.finditer(r"^[A-Za-z_][A-Za-z0-9_:<>,\s\*&]*?"
+                             r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^;{]*\)\s*\{",
+                             code, re.M):
+        starts.append((match.end() - 1, "function"))
+    for match in re.finditer(r"\bauto\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*"
+                             r"\[[^\]]*\]\s*\([^)]*\)\s*(?:->[^{]*?)?\{",
+                             code, re.M):
+        starts.append((match.end() - 1, "lambda"))
+
+    for start, kind in starts:
+        depth = 0
+        end = start
+        for index in range(start, len(code)):
+            if code[index] == "{":
+                depth += 1
+            elif code[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        body = code[start:end]
+        base = code.count("\n", 0, start) + 1
+        for local in re.finditer(r"^\s+(?:const\s+)?(?:unsigned\s+|signed\s+)?"
+                                 r"(?:uint\d+_t|int\d+_t|size_t|bool|boolean_t|"
+                                 r"uintptr_t|vm_offset_t|IOPhysicalAddress|"
+                                 r"[A-Z][A-Za-z0-9_]*)\s+\*?\s*"
+                                 r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|;|\[)",
+                                 body, re.M):
+            yield base + body.count("\n", 0, local.start()), local.group(1), body
 
 
 def main(argv: list[str]) -> int:
