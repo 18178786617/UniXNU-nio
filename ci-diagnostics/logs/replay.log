@@ -1,0 +1,18 @@
+base=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio
+record=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json exists=True
+tree object=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o exists=False
+recorded file=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c output=startup.o
+replaying 439 arguments in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT
+replay rc=1
+replay stderr tail: st_tests();
+      |                       ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c:1153:22: warning: mixing declarations and code is incompatible with standards before C99 [-Wdeclaration-after-statement]
+ 1153 |         struct recount_snap snap = { 0 };
+      |                             ^
+673 warnings and 2 errors generated.
+
+preprocess rc=0
+preprocessed bytes=1247959 has HB=True
+preprocessed bytes=1247959 has hb-started=True
+replay object missing=True
+assembly rc=1
