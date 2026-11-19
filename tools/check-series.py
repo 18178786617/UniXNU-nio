@@ -217,6 +217,58 @@ def main(argv):
         if needle not in f.read_text(encoding="utf-8", errors="replace"):
             problems.append("%s: does not hold %r" % (rel, needle))
 
+    # A function definition inside a function.  C does not allow it, and the
+    # compiler says so where the braces still balance, so the balance check
+    # above does not catch it: run 547 put a helper inside exec_mach_imgact
+    # and the build said "function definition is not allowed here".
+    #
+    # The tree is read, not the patch: a header line that ends in ) and is
+    # followed by a brace is a function definition, and a function
+    # definition at a brace depth above zero is inside another function.
+    KEYWORDS = ("if", "for", "while", "switch", "else", "do", "return",
+                "case", "default", "sizeof", "defined")
+
+    def nested_definitions(text):
+        """The lines of a text that hold a function definition inside a function."""
+        found = []
+        code = strip_code(text).split("\n")
+        depth = 0
+        for i, line in enumerate(code):
+            stripped = line.strip()
+            if depth > 0 and stripped.endswith(")") and i + 1 < len(code) \
+                    and code[i + 1].strip() == "{":
+                head = stripped[:-1].strip()
+                word = head.split()[-1] if head.split() else ""
+                if word and not any(word.startswith(k) for k in KEYWORDS) \
+                        and not head.startswith(("}", "extern", "static inline")) \
+                        and "=" not in head and "(" in head:
+                    found.append(head[-60:])
+            depth += line.count("{") - line.count("}")
+        return found
+
+    for rel in sorted(wanted):
+        # C++ allows a function definition inside a function; C does not.
+        if not rel.endswith(".c"):
+            continue
+        f = SCRATCH / rel
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        after = nested_definitions(text)
+        before = set()
+        s = srcp / rel
+        if s.is_file():
+            before = set(nested_definitions(s.read_text(encoding="utf-8", errors="replace")))
+        # only the ones the series brought are a problem: a nested definition
+        # that was already in the tree is the tree's own business
+        for h in after:
+            if h not in before:
+                problems.append("%s: a function definition inside a function (%s)"
+                                % (rel, h))
+
     if problems:
         print("problems:")
         for p in problems:
@@ -224,7 +276,6 @@ def main(argv):
         return 1
     print("the series applies and the tree it makes balances")
     return 1 if failures else 0
-
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
