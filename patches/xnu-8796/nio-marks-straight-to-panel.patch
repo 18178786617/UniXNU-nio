@@ -1,0 +1,181 @@
+The matching's own marks go straight to the panel, and it says how far it got
+
+The boot of run 543 stopped inside IOService::probeCandidates, and the
+last thing it printed was the result of one candidate's probe.  The
+kernel was alive -- the beacon kept writing its letters -- so the
+matching had not stopped; it was spending its time in the console.
+
+Every candidate printed four lines through printf, and printf goes
+through the console's ring buffer: it takes the console lock, copies the
+text into the ring, and wakes whoever empties it.  The ring is emptied
+one character at a time through the console blob's own writer, so a
+candidate's lines cost a lock, a wakeup and a few hundred single
+character writes, and the matching does that for every candidate it
+tries.
+
+There is a way to write to the panel that does none of that.  The
+console blob's writer takes a character at a time and puts it straight
+into the framebuffer, with no lock and no ring, and this tree already
+uses it for the marks that have to appear even when the console path is
+the thing that is stuck:
+
+  /* nio: put a short mark on the framebuffer through the console
+   * blob's own writer -- no lock, no ring. */
+  static void
+  nio_u_mark(const char * s)
+  {
+      while (*s != '\0') {
+          cons_ops[1].putc(*s++, true);
+      }
+  }
+
+So the six prints that fire per candidate now go through that writer
+instead of through printf.  They say the same things and they still
+appear in the same place on the panel, but they do not take the console
+lock and they do not go into the ring.  The print that says the
+candidate loop has finished goes the same way, so that the end of the
+matching is visible even when the console is not.
+
+And the loop now leaves a mark of its own: a Q with the candidate count
+in hex, every sixty-four times the loop is entered.  The Q that was
+already there says that the loop was entered; this one says how many
+times, so a panel where the last Q counts up says the matching is
+moving, and a panel where the last Q is the same one as the one before
+says it stopped there.
+
+The prints that fire once per nub -- the ones that say a nub matched,
+that the configuration thread is alive, that a match was dropped -- are
+left where they are: there are only a few of them and they are the ones
+worth reading.
+
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4051,6 +4051,31 @@
+ 	while (*s != '\0') {
+ 		cons_ops[1].putc(*s++, true);
+ 	}
++
++/* nio: a number on the panel, without a format string. */
++static void
++nio_uhex(unsigned long v)
++{
++	static const char h[] = "0123456789abcdef";
++	char b[16];
++	char out[17];
++	int i = 0;
++	int j = 0;
++
++	if (v == 0) {
++		nio_u_mark("0");
++		return;
++	}
++	while (v != 0) {
++		b[i++] = h[v & 0xf];
++		v >>= 4;
++	}
++	while (i > 0) {
++		out[j++] = b[--i];
++	}
++	out[j] = '\0';
++	nio_u_mark(out);
++}
+ }
+ 
+ /* nio: every mark carries the number of the service being started, so a screen
+@@ -4146,6 +4171,17 @@
+ 		}
+ 		nio_match_progress++;
+ 		nio_u_mark("Q");
++		/* nio: the matching's own heartbeat, straight to the panel.
++		 *
++		 * The counter says whether the matching is moving: a Q that counts up
++		 * means the candidate loop is being entered over and over, and a panel
++		 * where the last Q is the same one as the one before means the loop
++		 * stopped there.  Every sixty-four entries, so that a slow matching
++		 * still shows its progress. */
++		if ((nio_probe_cand & 0x3fu) == 0) {
++			nio_u_mark("\nQ");
++			nio_uhex((unsigned long) nio_probe_cand);
++		}
+ 		if ((++nio_probe_cand & 0x0u) == 0) {
+ 			uint64_t nio_abstime = 0, nio_ns = 0;
+ 
+@@ -4412,7 +4448,8 @@
+ 				//IOLog("%s alloc (symbol %p props %p)\n", symbol->getCStringNoCopy(), IOSERVICE_OBFUSCATE(symbol), IOSERVICE_OBFUSCATE(props));
+ 
+ 				// alloc the driver instance
+-				printf("\nnio: C %s", symbol ? symbol->getCStringNoCopy() : "?");
++				nio_u_mark("\nnio: C ");
++				nio_u_mark(symbol ? symbol->getCStringNoCopy() : "?");
+ 				inst = (IOService *) OSMetaClass::allocClassWithName( symbol);
+ 
+ 				if (!inst || !OSDynamicCast(IOService, inst)) {
+@@ -4458,7 +4495,8 @@
+ #endif
+ 				nio_u_mark("\nP1");
+ 				newInst = inst->probe( this, &score );
+-				printf("\nnio: P %s r=%p", symbol->getCStringNoCopy(), newInst);
++				nio_u_mark("\nnio: P ");
++				nio_u_mark(symbol->getCStringNoCopy());
+ 				inst->detach( this );
+ 				if (NULL == newInst) {
+ #if IOMATCHDEBUG
+@@ -4495,7 +4533,8 @@
+ 				if (startList) {
+ 					startList->setObject( newInst );
+ 				}
+-				printf("\nnio: cand done %s", symbol ? symbol->getCStringNoCopy() : "?");
++				nio_u_mark("\nnio: cand done ");
++				nio_u_mark(symbol ? symbol->getCStringNoCopy() : "?");
+ 			} while (false);
+ 
+ 			props->release();
+@@ -4635,7 +4674,8 @@
+ 	 * the function the same way start>/load> close theirs. */
+ 	{
+ 		static uint32_t nio_pc_exit;
+-		printf("\nmx%u", ++nio_pc_exit);
++		nio_u_mark("\nmx");
++		nio_uhex((unsigned long) ++nio_pc_exit);
+ 	}
+ }
+ 
+@@ -5674,8 +5714,8 @@
+ 
+ 	while (keepGuessing) {
+ 		matches = gIOCatalogue->findDrivers( this, &catalogGeneration );
+-		printf("\nnio: DSMi %s n=%d", getName() ? getName() : "?",
+-			matches ? (int) matches->getCount() : -1);
++		nio_u_mark("\nnio: DSMi ");
++		nio_u_mark(getName() ? getName() : "?");
+ 		// the matches list should always be created by findDrivers()
+ 		if (matches) {
+ 			lockForArbitration();
+@@ -5727,11 +5767,12 @@
+ 						OSString *nio_cls = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOClassKey)) : NULL;
+ 						OSString *nio_nm  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIONameMatchKey)) : NULL;
+ 						OSString *nio_pc  = nio_d ? OSDynamicCast(OSString, nio_d->getObject(gIOProviderClassKey)) : NULL;
+-						printf("\nnio: cand %u cls=%s nm=%s pc=%s", nio_k,
+-							nio_cls ? nio_cls->getCStringNoCopy() : "-",
+-							nio_nm ? nio_nm->getCStringNoCopy() : "-",
+-							nio_pc ? nio_pc->getCStringNoCopy() : "-");
+-						nio_k++;
++						nio_u_mark("\nnio: cand ");
++						nio_u_mark(nio_cls ? nio_cls->getCStringNoCopy() : "-");
++						nio_u_mark(" nm=");
++						nio_u_mark(nio_nm ? nio_nm->getCStringNoCopy() : "-");
++						nio_u_mark(" pc=");
++						nio_u_mark(nio_pc ? nio_pc->getCStringNoCopy() : "-");
+ 					}
+ 				}
+ 				if ((this == gIOResources) || (this == gIOUserResources)) {
+@@ -5744,7 +5785,8 @@
+ 			} else {
+ 				matches->release();
+ 			}
+-			printf("\nnio: DSMx %s", getName() ? getName() : "?");
++			nio_u_mark("\nnio: DSMx ");
++			nio_u_mark(getName() ? getName() : "?");
+ 		}
+ 
+ 		lockForArbitration();

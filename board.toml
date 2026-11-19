@@ -373,6 +373,11 @@ timeout = -1
 # "GPUROWnn <text>". Modes 9-11 add the first GPU command, the zap shader
 # with the GPU interrupt, and the user-client path; they are raised one at a
 # time, each with its own image, so a fault is attributable.
+# The GPU probe is off too (nio-gpu=8). It is a cold start of the
+# Adreno -- the firmware, the GMU's context, and then power on the GX --
+# and it has stopped at the release of the CM3 before, with the mark for
+# the step after it never arriving. The userland does not need the GPU,
+# and the display does not go through it: the panel is on the DSI path.
 # The UFS arguments are off for now. native-ufs-root and native-ufs-probe
 # are what make the storage driver take the controller over, and with the
 # controller busy the boot stops inside it: the last twenty rounds all
@@ -395,7 +400,7 @@ timeout = -1
 # IOStorageFamily to publish the root windows, prints every IOMedia with its
 # BSD name, size and UUID, and then panics. Remove it once the owner chain has
 # been seen to agree with these values on the device.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "nio-gpu=8", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
