@@ -1,0 +1,53 @@
+base=out/nio/ios-16.5-20F66/nio
+installing qemu
+[32m==>[0m [1mDownloading bottle manifests[0m
+✔︎ Bottle Manifest qemu (11.1.0)
+[34m==>[0m [1mWould install 1 formula:[0m
+qemu
+[34m==>[0m [1mWould install 6 dependencies for qemu:[0m
+capstone
+libslirp
+libssh
+ncurses
+snappy
+vde
+[32m==>[0m [1mFetching downloads for: [32mqemu[39m[0m
+✔︎ Bottle Manifest capstone (5.0.9)
+✔︎ Bottle Manifest libslirp (4.9.3)
+✔︎ Bottle libslirp (4.9.3)
+✔︎ Bottle Manifest libssh (0.12.2)
+✔︎ Bottle Manifest ncurses (6.6)
+✔︎ Bottle Manifest snappy (1.2.2)
+✔︎ Bottle libssh (0.12.2)
+✔︎ Bottle capstone (5.0.9)
+✔︎ Bottle Manifest vde (2.3.3)
+✔︎ Bottle snappy (1.2.2)
+✔︎ Bottle vde (2.3.3)
+✔︎ Bottle ncurses (6.6)
+✔︎ Bottle qemu (11.1.0)
+[32m==>[0m [1mInstalling dependencies for qemu:[0m [32mcapstone[39m, [32mlibslirp[39m, [32mlibssh[39m, [32mncurses[39m, [32msnappy[39m and [32mvde[39m[0m
+[32m==>[0m [1mInstalling qemu dependency: [32mcapstone[39m[0m
+[34m==>[0m [1mPouring capstone--5.0.9.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/capstone/5.0.9: 31 files, 23MB
+[32m==>[0m [1mInstalling qemu dependency: [32mlibslirp[39m[0m
+[34m==>[0m [1mPouring libslirp--4.9.3.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/libslirp/4.9.3: 13 files, 354KB
+[32m==>[0m [1mInstalling qemu dependency: [32mlibssh[39m[0m
+[34m==>[0m [1mPouring libssh--0.12.2.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/libssh/0.12.2: 25 files, 1.6MB
+[32m==>[0m [1mInstalling qemu dependency: [32mncurses[39m[0m
+[34m==>[0m [1mPouring ncurses--6.6.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/ncurses/6.6: 4,086 files, 9.9MB
+[32m==>[0m [1mInstalling qemu dependency: [32msnappy[39m[0m
+[34m==>[0m [1mPouring snappy--1.2.2.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/snappy/1.2.2: 19 files, 145.0KB
+[32m==>[0m [1mInstalling qemu dependency: [32mvde[39m[0m
+[34m==>[0m [1mPouring vde--2.3.3.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/vde/2.3.3: 66 files, 1.1MB
+[32m==>[0m [1mInstalling [32mqemu[39m[0m
+[34m==>[0m [1mPouring qemu--11.1.0.sonoma.bottle.tar.gz[0m
+🍺  /usr/local/Cellar/qemu/11.1.0: 170 files, 704.9MB
+QEMU emulator version 11.1.0
+wrote out/qemu/kernel.adt (12444 bytes) from nio-qemu-hardware.json
+cmdline: -v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam native-ufs-root=1 native-ufs-probe=12 rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 startup_debug=1 wdt=-1 debug=0x1 nio-gpu=8 native-ufs-diagnostics=1 -wdt_no_pmu wdt_test=no_user_checkin
+no kernel.macho to boot in QEMU
