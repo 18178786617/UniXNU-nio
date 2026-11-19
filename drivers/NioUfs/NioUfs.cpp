@@ -679,8 +679,8 @@ void NioUfs::adoptAndRead (unsigned level)
    * just below the text the console has written, so it is in the part
    * of the panel a photograph of the phone holds. */
   {
-    const char *heading = "UFS STEPS: 12345";
-    for (unsigned column = 0; column < 60; column++) {
+    const char *heading = "UFS STEPS: 123456";
+    for (unsigned column = 0; column < 70; column++) {
       fbChar (118, column, ' ');
     }
     for (unsigned column = 0; heading[column]; column++) {
@@ -691,8 +691,8 @@ void NioUfs::adoptAndRead (unsigned level)
     if (!fbBytes) {
       return;
     }
-    static const unsigned widths[5] = { 16, 24, 32, 40, 48 };
-    unsigned size = widths[index < 5 ? index : 4];
+    static const unsigned widths[6] = { 16, 24, 32, 40, 48, 56 };
+    unsigned size = widths[index < 6 ? index : 5];
     unsigned row = 1900, col = 8 + index * 56;
     for (unsigned y = row; y < row + 32; y++) {
       for (unsigned x = col; x < col + size; x++) {
@@ -740,7 +740,7 @@ void NioUfs::adoptAndRead (unsigned level)
    * of the console is lit and unlit pixels side by side, so a run of
    * equal pixels does not survive in text.
    */
-  for (unsigned col = 0; col < 192; col += 16) {
+  for (unsigned col = 0; col < 208; col += 16) {
     fbMark (1860, col, 0x00, 0x00, 0x00);
   }
   fbMark (1860, 8, 0xff, 0xff, 0xff);   // column 1: this boot, marks cleared
@@ -1466,6 +1466,22 @@ void NioUfs::adoptAndRead (unsigned level)
      * be the thing that stops.
      */
     nioUfsSay ("nio: ufs I1 doorbell\n");
+    /* The interrupts are put back BEFORE the doorbell is written, and the
+     * mark that says so is drawn before the write as well, so that a
+     * picture can tell the masking from the write.
+     *
+     * Round 511 masked them for the ring, on the strength of the
+     * reference driver on this chip.  That driver takes the controller
+     * over from the loader in a handshake and rings a controller that
+     * is idle; this port rings one that is already running with the
+     * firmware's own list in it.  So the masking is taken off again
+     * before the ring, and the picture says whether that is where the
+     * run stopped. */
+    boolean_t interruptState = ml_set_interrupts_enabled (FALSE);
+    (void) ml_set_interrupts_enabled (interruptState);
+    fbStep (5);                     // box 6: the interrupts are back
+    fbChar (118, 16, '6');          // the same, as a character: the interrupts are back
+    fbMark (1860, 192, 0xff, 0xff, 0x00);  // column 9: the interrupts are back
     /* nio run-515: the doorbell is written with the interrupts as they
      * were, and not with them masked.
      *
@@ -1486,16 +1502,32 @@ void NioUfs::adoptAndRead (unsigned level)
      */
     write32 (hc, 0x58, 1);          // ring slot 0
 
-    /* The write is a posted write: it goes into the store buffer and the
-     * processor carries on.  What says the write reached the controller
-     * is a read of the register, and a read waits for the bus.  The
-     * reference driver reads the doorbell register right after writing
-     * it, and that read is what tells it the write landed.
+    /* nio run-516: the mark is drawn IMMEDIATELY after the write, before
+     * anything else at all -- before a barrier, before a read, before
+     * anything.
      *
-     * The mark is drawn BEFORE the read, so that a picture says which of
-     * the two stopped: the write, or the read that confirms it.
+     * The photograph of run 533 said white, green and red and no fourth
+     * white.  The fourth white is drawn straight after the write, so the
+     * run stopped between the red and the fourth white.  Three things sit
+     * in that gap and only one of them can be named from the picture:/r/n     *
+     *   1. the masking of the interrupts, and the putting back of them
+     *      afterwards -- round 511 added that, and round 533 is the
+     *      first round to have it;
+     *   2. the write itself;
+     *   3. the reading of the register that confirms it.
+     *
+     * So the two are separated here.  The mask is put back first, and
+     * the mark that says the interrupts are back is drawn before the
+     * write.  Then the write, then the mark that says the write was
+     * issued, and only then the read that confirms it.
+     *
+     *   the mark before the write   the write is what stopped
+     *   the mark after the write    the read is what stopped
+     *
+     * A picture that shows neither says the write is what stopped; one
+     * that shows the first and not the second says the read is.
      */
-    fbStep (0);                     // box 1: the doorbell write was issued
+    fbStep (0);                     // box 1: the write was issued
     fbChar (118, 11, '1');          // the same, as a character: the write was issued
     fbMark (1860, 80, 0xff, 0xff, 0xff);   // column 4: the write was issued
     uint32_t dbAfter = read32 (hc, 0x58);
