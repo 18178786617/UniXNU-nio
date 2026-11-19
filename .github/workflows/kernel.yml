@@ -892,6 +892,34 @@ jobs:
             # A warning, not a failure: the round still publishes a bootable (if
             # stale) kernel, and the watcher refuses to flash one without the mark.
             echo "::warning title=stale core::no 'nio: bsd_init: ' in the kernel; the core was not rebuilt from the series"
+            # Name the stage that kept the code out. Run 550 deleted 977 objects
+            # and still linked the tree's code, so the next round has to say
+            # whether the objects exist, which directory they are in, what they
+            # carry, and what the source says -- not leave it to a guess.
+            obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837 2>/dev/null | head -1)
+            work=$(ls -d out/nio/*/nio/tree/.cache/xnu-work 2>/dev/null | head -1)
+            echo "object directory: ${obj:-none}"
+            echo "work tree: ${work:-none}"
+            if [ -n "$obj" ]; then
+              echo "inventory: $(find "$obj" -name '*.o' 2>/dev/null | wc -l) .o, $(find "$obj" -name '*.cpo' 2>/dev/null | wc -l) .cpo"
+              for name in bsd_init.o IOService.o startup.o vfs_conf.o kern_exec.o; do
+                found=$(find "$obj" -name "$name" 2>/dev/null | head -1)
+                if [ -z "$found" ]; then
+                  echo "  $name: absent"
+                  continue
+                fi
+                mark=no
+                python3 -c 'import sys; d=open(sys.argv[1],"rb").read(); sys.exit(0 if b"nio: bsd_init: " in d or b"nio: S1" in d else 1)' "$found" && mark=yes
+                echo "  $name: $(stat -c '%s bytes %y' "$found" 2>/dev/null || stat -f '%z bytes %Sm' "$found") mark=$mark"
+              done
+            fi
+            for source in bsd/kern/bsd_init.c iokit/Kernel/IOService.cpp; do
+              if [ -n "$work" ] && [ -f "$work/$source" ]; then
+                echo "  source $source: $(stat -c '%y' "$work/$source" 2>/dev/null || stat -f '%Sm' "$work/$source")"
+              else
+                echo "  source $source: absent"
+              fi
+            done
           fi
 
       - name: Collect the logs

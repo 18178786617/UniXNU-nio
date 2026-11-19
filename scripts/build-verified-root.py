@@ -37,6 +37,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,14 @@ def force_core_rebuild() -> None:
     the link needs (`libVerifiedRoot.a` among them) exist -- the condition the
     LDFILELIST step needs, and the reason a relink was avoided before.
 
+    Run 550 showed that deleting the objects is not enough by itself: it removed
+    977 of them, the final make came back in three minutes, the link succeeded,
+    and the core still carried the tree's code.  So the sources the series
+    changed are also given a fresh mtime -- a file dated now cannot be called
+    older than an object the tree shipped, whichever directory that object is
+    in.  Together with the deletion the core has to be rebuilt and has to be
+    rebuilt from these sources.
+
     The compile records (`*.o.json`) are kept: this recipe read one of them,
     and they are what the archive builders were given.
 
@@ -164,15 +173,74 @@ def force_core_rebuild() -> None:
         return
     if not CORE_OBJECTS.is_dir():
         return
-    removed = 0
-    if CORE_IMAGE.exists():
-        CORE_IMAGE.unlink()
-        removed += 1
-    for path in CORE_OBJECTS.rglob('*'):
-        if path.is_file() and path.suffix in ('.o', '.cpo'):
+    objects = list(CORE_OBJECTS.rglob('*.o'))
+    cpos = list(CORE_OBJECTS.rglob('*.cpo'))
+    core = f'{CORE_IMAGE.stat().st_size} bytes' if CORE_IMAGE.exists() else 'absent'
+    print(f'PASS: the object directory holds {len(objects)} .o, {len(cpos)} .cpo, core {core}')
+    for path in [CORE_IMAGE, *objects, *cpos]:
+        if path.is_file():
             path.unlink()
-            removed += 1
-    print(f'PASS: the core is rebuilt from the patched sources ({removed} files removed)')
+    print(f'PASS: removed the core image and {len(objects) + len(cpos)} objects')
+
+    # Deleting the objects is not enough on its own: run 550 removed 977 of them
+    # and the link still came back in three minutes with the tree's code in it,
+    # so the objects a recipe reads are not all under this directory.  A source
+    # with a fresh mtime cannot be skipped, whichever directory the object is
+    # in -- make compares the two times, and "now" is later than any file the
+    # tree shipped.  The series leaves its files modified in the work tree, so
+    # git names them; nothing has to know which patch touched which file.
+    touched, missing = touch_patched_sources()
+    print(f'PASS: {touched} patched sources carry a fresh mtime'
+          + (f' ({missing} named by git but not on disk)' if missing else ''))
+    for relative, mark in (('bsd/kern/bsd_init.c', b'nio: bsd_init: '),
+                           ('iokit/Kernel/IOService.cpp', b'nio: S1'),
+                           ('bsd/kern/kern_exec.c', b'nio: exec: load_init_program enter')):
+        path = ROOT / '.cache/xnu-work' / relative
+        if not path.is_file():
+            print(f'  {relative}: absent')
+            continue
+        raw = path.read_bytes()
+        stamp = time.strftime('%H:%M:%S', time.localtime(path.stat().st_mtime))
+        print(f'  {relative}: mtime {stamp}, '
+              + ('carries ' if mark in raw else 'does NOT carry ')
+              + repr(mark.decode().strip()))
+
+
+def touch_patched_sources() -> tuple[int, int]:
+    """Give every file the series changed a mtime of now, so make cannot skip it.
+
+    Two sources name them.  The work tree is a git clone and `git apply` leaves
+    the patches unstaged, so its status is the full list; the series' own
+    `+++ b/` lines are read as well, because a tree that arrived with the
+    patches committed would report nothing.  A path that is not on disk is
+    skipped -- a patch may delete one.
+    """
+    work = ROOT / '.cache/xnu-work'
+    if not work.is_dir():
+        return 0, 0
+    names: list[str] = []
+    if (work / '.git').exists():
+        listed = subprocess.run(['git', '-C', str(work), 'status', '--porcelain'],
+                                capture_output=True, text=True, check=False)
+        for line in listed.stdout.splitlines():
+            relative = line[3:].strip()
+            if ' -> ' in relative:
+                relative = relative.split(' -> ', 1)[1]
+            names.append(relative.strip('"'))
+    for directory in (ROOT / 'patches/xnu', ROOT / 'patches/xnu-8796'):
+        for patch in sorted(directory.glob('*.patch')):
+            for line in patch.read_text(errors='replace').splitlines():
+                if line.startswith('+++ b/'):
+                    names.append(line[6:].strip())
+    touched = missing = 0
+    for relative in dict.fromkeys(names):
+        path = work / relative
+        if path.is_file():
+            os.utime(path, None)
+            touched += 1
+        else:
+            missing += 1
+    return touched, missing
 
 
 def main() -> int:

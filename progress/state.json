@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 19:25（★★★★★★★ **真正的元凶找到了：XNU 核心从来没有被重新编译过。** 549 的内核里**一个本轮补丁的字符串都没有**（`nio: bsd_init: ` / `nio: WAIT ` / `nio: cand done ` 全缺），而 CI 自己的指纹日志写着 `iokit/DEVELOPMENT/IOService.o: MISSING`、prelink 输入的 mtime 就是那次链接失败的 bootstrap。⇒ 树里带着一个**比所有源码都新的预编核心**，make 认为它是最新的 ⇒ 一个文件都不编。这些轮次手机跑的都是**同一个内核**，所以怎么改都「没什么变化」。⇒ 550：在最后的 XNU 构建之前删掉核心和全部 .o，逼它从打过补丁的源码重编；watch-round 加了一道闸：没有本轮标记就**不刷机**。**）",
- "headline": "★★★★★★★ **不是 IOKit、不是 UFS、不是 personality —— 是内核根本没被编出来。** 证据（全部来自 CI 自己发布的产物，不是推测）：\n① 549 的 `kernel.macho` 里搜不到 `nio: bsd_init: `、`nio: WAIT `、`nio: cand done ` —— 而这三条分别来自系列里第 173/174/172 个补丁；\n② CI 的 `fingerprint.log` 明写：`IOService.cpp source: STALL=yes`（源码有补丁）但 `iokit/DEVELOPMENT/IOService.o: MISSING`（对象根本不存在）；\n③ 同一个日志：prelink 输入 `mach.development.bcm2837.unstripped` 的 mtime = 10:32:28，就是那次**链接失败**的 bootstrap 结束时刻。\n⇒ 结论：**发布出去的核心是树里自带的预编核心**，它比所有源码都新，make 判定「已经是最新」⇒ 不编译、不链接。我们写进 XNU 的补丁（包括 D1-D6、S1/S2、WAIT、bsd_init 相位、exec 标记）**一条都没进过手机**。★ 550 的修法：`scripts/build-verified-root.py`（最后一个 archive 步骤，正好在最终 XNU 构建之前）在 CI 里删掉核心镜像 + 全部 .o/.cpo ⇒ 强制重编。★ 同时给 `watch-round.sh` 加闸：内核里没有 `nio: bsd_init: ` 就**不刷机**（省一次拍照）。",
+ "updated": "2026-11-19 20:10（★★★★★★★ **550 证伪了「删对象就够了」**：删掉 977 个 .o/.cpo 后，最终 make 只用 **178 秒**就链接成功，内核里仍然没有 `nio: bsd_init: ` ⇒ 说明链接读到的对象**不在那个目录里**（或者是树里带的另一份）。★ 551 换成更强的一招：给**补丁改过的每一个源文件**盖上新 mtime（`git status` + 各补丁的 `+++ b/` 路径），文件时间是「现在」，任何树里带的旧对象都不可能比它新 ⇒ make 必须重编。另加：陈旧时打印对象清单与标记。**）",
+ "headline": "★★★★★★★ **550 的判决：删对象没用，链接读的不是那些对象；551 改用「给源码盖新时间」。**\n· 550 做了对的事（`force_core_rebuild` 删掉核心 + 977 个 `.o`/`.cpo`，日志有 `PASS: the core is rebuilt ... (977 files removed)`），\n  UI 也确认那一刻 `osfmk/DEVELOPMENT/startup.o` 不存在（`xnu-trace.log`: `before make ... object MISSING`）。\n· 可是最终 make **11:30:24 → 11:33:22，178 秒**就结束，还**链接成功**（prelink 输入 mtime 11:33:19）。\n  975 个对象不可能在 178 秒内重编完 ⇒ **链接用的对象不是这个目录里的那一批**。\n· 结果不变：内核里 `nio: bsd_init: ` = 0、`nio: WAIT ` = 0、`nio: cand done ` = 0；只有很老的 `nio: HB ` = 1。\n★ 551 的修法不再猜目录：把**补丁改过的源文件**的 mtime 全部设成「现在」（`git status --porcelain` + 每个补丁的 `+++ b/` 路径，去重约 115 个）。\n  对象在哪个目录都躲不过——make 只会比「源码」和「对象」两个时间，而「现在」比树里带的任何文件都新。\n★ 并在「内核必须带本轮标记」那道闸里，陈旧时打印对象清单（`.o`/`.cpo` 数量、`bsd_init.o`/`IOService.o` 是否存在、各自带不带标记、源码 mtime），下一轮日志直接说出卡在哪一段。",
  "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 551,
+   "time": "20:10",
+   "marker": "核心必须重编：`nio: bsd_init: ` 出现",
+   "qemu": "macos-26",
+   "result": "★★★★★★★ **给补丁改过的源码盖新 mtime，逼 make 重编**。550 证明删对象不够（链接照样用树里的代码）。`build-verified-root.py` 的 `force_core_rebuild()` 现在还会 touch `git status` 列出的与被各补丁 `+++ b/` 点名的源文件，并逐个打印 `bsd_init.c`/`IOService.cpp`/`kern_exec.c` 的 mtime 与是否带标记；陈旧时 CI 打印对象清单。"
+  },
   {
    "run": 550,
    "time": "19:25",
@@ -265,6 +272,7 @@
   "★ **别再为 UFS 的门铃加新探针** —— 先把用户层打通，回头再收拾它。"
  ],
  "notes": [
+  "★★★★★★★ **550 判决：删对象不够（2026-11-19 20:10）**\n· 现象：`PASS: removed the core image and 976 objects`，最终 make 178 秒就链接成功，内核仍无 `nio: bsd_init: `。\n· 结论：**链接读到的对象不在 `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837` 里**（或树在链接前又铺了一份）。\n  不要再用「删某个目录的对象」当手段——这是第二次被同一件事骗。\n· 现在的判据：**只认内核里有没有 `nio: bsd_init: `**。没有 ⇒ 本轮不算数，不刷机（`watch-round.sh` 的 3a 闸）。\n· 551 的手段：源码 mtime = 现在（约 115 个文件）。这是唯一不依赖「对象放哪」的办法。\n· 若 551 仍然陈旧：CI 日志会直接给出 `.o` 数量、`bsd_init.o`/`IOService.o` 是否存在、带不带标记 ⇒ 那时才谈下一步。",
   "★★★★★★★ **核心是旧的（2026-11-19 19:25 查明，最高优先级）**\n· **判据**：拿 CI 发布的 `kernel.macho` 直接 `grep -aF 'nio: bsd_init: '`。没有 ⇒ 核心不是本轮编的。\n· **证据链**：\n  ① 549 的 kernel.macho：`nio: bsd_init: `=0、`nio: WAIT `=0、`nio: cand done `=0；但 `nio: exec: load_init_program enter`=1（那是很老的补丁带来的）。\n  ② 549 的 `fingerprint.log`：`IOService.cpp source: STALL=yes` ／ `iokit/DEVELOPMENT/IOService.o: MISSING`。\n  ③ 同日志：`native (prelink input)` mtime 10:32:28 ＝ bootstrap 链接失败那一刻。\n· **机理**：树里（`out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/`）自带一个预编核心，它比 git checkout 出来的源码新 ⇒ make 认为目标已满足 ⇒ 既不编译也不链接。我们所有 XNU 补丁都停留在源码层。\n· **修法**：`scripts/build-verified-root.py` 的 `force_core_rebuild()`（只在 `GITHUB_ACTIONS=true` 下、obj 目录存在时）删核心 + 全部 .o/.cpo。\n· **防复发**：`tools/watch-round.sh` 3a 段检查内核里有没有 `nio: bsd_init: `，没有就不刷机。\n· ★ **以后每轮先看这一步**：CI 日志里搜 `PASS: the core is rebuilt from the patched sources`；没有这行 ⇒ 核心又是旧的，别再拍照。",
   "★★★★★★ **★ 卡死根因（2026-11-19 18:20 查明）**\n  · **判据**：`S1`（personality 开始启动）出现而 **`S2`（启动完了）不出现** ⇒ 卡在 `startCandidate()`。\n  · `IOService::startCandidate()`（IOService.cpp:5150）里有：\n    ```c\n    if ((this != gIOResources) && (this != gIOUserResources)) {\n        checkResources();            // 等这个 nub 的资源\n        service->checkResources();   // 等驱动的资源\n    }\n    ```\n  · `checkResources()` → `checkResource()`（IOService.cpp:5440）→ **`waitForService(table)`（无 timeout ⇒ 无限等）**。\n  · **平台专家等的资源是 BSD 资源**，由存储驱动发布；**我们的存储驱动匹配后只 return false（观测模式），从不发布 IOBSD** ⇒ 这个等待永远不结束 ⇒ **启动卡死**。\n  · ★ **用户层不需要 BSD 资源**：内核的根卷是 loader 放进设备树的 RAM 盘（rootfs.img），根文件系统是 mockfs（`vfstbllist` 里唯一有 `vfc_mountroot` 的）。\n  · ⇒ **549：把 `waitForService` 的等待加上界（2 秒）+ 直写标记资源名**。\n  · ★★ 这也解释了之前一系列怪事：为什么改 UFS 探针、命令行、GPU 都不影响卡点 —— **卡点在 personality 的 start() 里，与它们无关**。",
   "★★★★★ **★ 生成补丁的正确流程（★ 今天踩了四遍，记死）**\n  ① **先把自己的补丁从 series 里移除**（否则基线里已经带上了我的改动 ⇒ diff 为空 / 反向）\n  ② 干净树 + **CI 同样的 `patch -p1 --no-backup-if-mismatch --forward`** 全 series ⇒ 得到基线树\n  ③ **在这棵树上做修改**（★ 基线副本要在修改【之前】复制！）\n  ④ `diff -u --label a/<path> --label b/<path> 基线 改后 > 补丁`\n  ⑤ 把补丁放回 series 末尾，再验一次（★ 检查器会重建 series-check 树，别在那棵树上改）\n  ★ **`diff` 退出码是 1（文件有差异）⇒ `&&` 链会断** —— 用 `;` 或 `|| true`\n  ★ **树是 LF**（`refs/` 里的原始树）⇒ 读写前先探测行尾\n  ★ **series 里有重复的补丁名** ⇒ 第二遍报 'already applied'，看起来像『补丁已在树里』，很误导 ⇒ 检查器现在查重复\n  ★ **C 文件里不能嵌套定义函数**（C++ 可以）⇒ 助手函数要放【文件作用域】；检查器现在查这条\n  ★ **检查器有两份同名文件会跑错**（外层 `tools/` 与仓库里的 `device/UniXNU-nio/tools/`）⇒ 只用仓库那份",
