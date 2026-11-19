@@ -883,15 +883,15 @@ jobs:
             echo "::error title=no kernel::the build produced no kernel.macho"
             exit 1
           fi
-          if python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(0 if b"nio: HB " in d else 1)' "$kernel"; then
-            echo "the kernel carries the stall marker at $kernel"
+          # The mark is bsd/kern/bsd_init.c's, written through the series.  "nio: HB "
+          # was the old measure and it lied: it comes from an old patch and sits in
+          # the core the tree ships, so it was present in every stale kernel.
+          if python3 -c 'import sys; d = open(sys.argv[1], "rb").read(); sys.exit(0 if b"nio: bsd_init: " in d else 1)' "$kernel"; then
+            echo "the kernel carries this round's bsd_init mark at $kernel"
           else
-            # A warning, not a failure: since run-349 the constraint is known --
-            # the tree ships the kernel and any attempt to force a relink makes
-            # the LDFILELIST step regenerate link.filelist, which cannot succeed
-            # before the archives exist.  Keeping the round green still gives a
-            # bootable (if stale) kernel; the note says it is stale.
-            echo "::warning title=stale kernel::no 'nio: HB ' in the kernel; the core is the one the tree ships"
+            # A warning, not a failure: the round still publishes a bootable (if
+            # stale) kernel, and the watcher refuses to flash one without the mark.
+            echo "::warning title=stale core::no 'nio: bsd_init: ' in the kernel; the core was not rebuilt from the series"
           fi
 
       - name: Collect the logs
