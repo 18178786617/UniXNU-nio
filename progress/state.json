@@ -1,19 +1,19 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
  "updated": "2026-11-19 20:50（★★★★★★★ **路线定稿，不再改方向。** 目标只有一个：手机内核 exec `/sbin/launchd`（用户层）。卡点只有一个：**IOKit 匹配里没有任何候选走到 `inst->probe()`**（552 照片：有 `Q2..Q6`，没有 `P1`）⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ `bsd_init` 等不到根设备 ⇒ 到不了 `load_init_program`。本条及下面 phases/next_actions 就是全部计划，一轮一个 CI。**）",
- "headline": "★★★★★★★ **路线（定稿）：① 让 bsd/iokit 的改动进内核 → ② 让候选走到 probe() → ③ 拿到 IOBSD、挂 mockfs 根、exec `/sbin/launchd`。**\n· **为什么第①步是前提**：内核里 `nio: MT thread`（osfmk，本轮新补丁）=1 ⇒ osfmk 的改动进内核；而 `nio: bsd_init: `=0、`cand done`=0 ⇒ bsd/iokit 的改动**停在源码层**，我们写在这两个组件里的探针从来没进过手机。\n· **第①步的做法**（554，commit `edcb94a`，正在构建）：两个对象根 `build/xnu/obj` 与 `build/xnu/ios-obj` 一起清空，连 `*.filelist`/`*.a` 一起删；指纹步骤打印三个组件 `.filelist` 的前几条路径、对象目录 `.o/.cpo/.filelist/.a` 总数、`bsd_init.o`/`IOService.cpo`/`startup.o` 各自带不带本轮标记。**判据：发布内核里出现 `nio: bsd_init: `。**\n· **第②步**（554 通过后下一轮）：在 `iokit/Kernel/IOService.cpp` 打印每个候选的 personality 匹配结果与 `probe()` 返回值，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的每一次重试与超时；**判据：屏幕上出现 `P1`。**\n· **第③步**：IOBSD 出现后 `bsd_init` 走 `vfs_mountroot()`（mockfs/N4KROOT 挂成根）→ `load_init_program()` → exec `/sbin/launchd`；**判据：屏幕出现 launchd 启动痕迹。**\n· **纪律**：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不用我的推断当刷机闸。",
- "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**① 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**② 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**③ 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
+ "headline": "★★★★★★★ **路线（定稿）：S1 让 bsd/iokit 的改动进内核 → S2 让候选走到 probe() → S3 拿到 IOBSD、挂 mockfs 根、exec `/sbin/launchd`。**\n· **为什么S1是前提**：内核里 `nio: MT thread`（osfmk，本轮新补丁）=1 ⇒ osfmk 的改动进内核；而 `nio: bsd_init: `=0、`cand done`=0 ⇒ bsd/iokit 的改动**停在源码层**，我们写在这两个组件里的探针从来没进过手机。\n· **S1的做法**（554，commit `edcb94a`，正在构建）：两个对象根 `build/xnu/obj` 与 `build/xnu/ios-obj` 一起清空，连 `*.filelist`/`*.a` 一起删；指纹步骤打印三个组件 `.filelist` 的前几条路径、对象目录 `.o/.cpo/.filelist/.a` 总数、`bsd_init.o`/`IOService.cpo`/`startup.o` 各自带不带本轮标记。**判据：发布内核里出现 `nio: bsd_init: `。**\n· **S2**（554 通过后下一轮）：在 `iokit/Kernel/IOService.cpp` 打印每个候选的 personality 匹配结果与 `probe()` 返回值，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的每一次重试与超时；**判据：屏幕上出现 `P1`。**\n· **S3**：IOBSD 出现后 `bsd_init` 走 `vfs_mountroot()`（mockfs/N4KROOT 挂成根）→ `load_init_program()` → exec `/sbin/launchd`；**判据：屏幕出现 launchd 启动痕迹。**\n· **纪律**：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不用我的推断当刷机闸。",
+ "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
   {
-   "id": "P0",
+   "id": "S0",
    "name": "内核启动并跑到 IOKit 匹配",
    "status": "done",
    "criteria": "屏幕出现 `nio: MT thread`（匹配已挪到独立线程）",
-   "evidence": "552 照片：V 心跳 → `QHNo POST boot-arg set.` → `nio: MT thread` → `R4 iokit lockdown` → vm_kern 的 `M r=1 num=1 spar=44619 barea=0x106000` → `nio: 2` / `nio: 3` → `E16` → `Q2..Q6`",
+   "evidence": "552 照片：V 心跳 → `QHNo POST boot-arg set.` → `nio: MT thread` → `R4 iokit lockdown` → vm_kern 的 `M r=1 num=1 spar=44619 barea=0x106000` → `nio: 2`/`nio: 3` → `E16` → `Q2..Q6`",
    "next": "维持现状：匹配在线程上，启动线程继续往下走"
   },
   {
-   "id": "P1",
+   "id": "S1",
    "name": "让 bsd/iokit 组件的改动进内核",
    "status": "current",
    "criteria": "发布内核里 `grep -aF \"nio: bsd_init: \"` 有结果",
@@ -21,23 +21,23 @@
    "next": "554：两个对象根一起清空（`.o`/`.cpo`/`.a`/`*.filelist`/核心/`.LDFLAGS`/`justlto*`，保留 `EXPORT_HDRS`），并打印清单前几条路径与各对象是否带标记"
   },
   {
-   "id": "P2",
+   "id": "S2",
    "name": "让候选走到 probe()（personality 装载）",
    "status": "blocked",
    "criteria": "屏幕出现 `P1`（`nio-probe-entry-marks.patch`：Q=通过 personality/模块检查，P1=即将 `inst->probe()`）",
    "evidence": "552 照片最后一行是 `Q6`，之后什么都没有，`P1` 一次都没出现",
-   "next": "P1 通了以后，在 IOService.cpp 打印每个候选的 personality 匹配结果、模块加载结果与 probe() 返回值；再决定是补 personality、跳过坏候选、还是延长等待"
+   "next": "S1 通了以后，在 IOService.cpp 打印每个候选的 personality 匹配结果、模块加载结果与 probe() 返回值；再决定是补 personality、跳过坏候选、还是延长等待"
   },
   {
-   "id": "P3",
+   "id": "S3",
    "name": "拿到 IOBSD → 挂 mockfs 根（rootfs.img / N4KROOT）→ exec /sbin/launchd",
    "status": "blocked",
    "criteria": "屏幕出现 launchd 启动痕迹（用户层进程在跑）",
-   "evidence": "内核里 `mockfs`=73、`launchd`=16、`N4KROOT`=1；mockfs 那条路已就位（不依赖 UFS）。**DSU / 手机本机只读系统盘不是本计划的一部分**（见 notes 里的已排除清单）。",
-   "next": "存储路线已定：**不碰 UFS、不用 DSU**。根设备来自设备树 /chosen/memory-map 的 RAMDisk，rootfs/rootfs.img 是 N4KROOT，bsd/vfs/vfs_conf.c 里 mockfs 是唯一有 vfc_mountroot 的文件系统，内核命令行不带 native-ufs-root=1。IOBSD 出现后直接走 vfs_mountroot() → load_init_program() → exec /sbin/launchd。"
+   "evidence": "内核里 `mockfs`=73、`launchd`=16、`N4KROOT`=1；`bsd/vfs/vfs_conf.c` 里 mockfs 是唯一有 `vfc_mountroot` 的文件系统；`rootfs/rootfs.img` 是 N4KROOT，含真 `/sbin/launchd`(525KB) 与真 dyld(922KB)；内核命令行不带 `native-ufs-root=1`",
+   "next": "S2 通了以后，在 bsd_init.c 打印等 IOBSD 的每次重试与超时；IOBSD 出现后确认 mountroot 与 load_init_program。**存储路线不再改：mockfs RAMDisk，不碰 UFS、不用 DSU。**"
   },
   {
-   "id": "P4",
+   "id": "S4",
    "name": "各子系统驱动（GPU/WiFi/BT/modem/audio）",
    "status": "todo",
    "criteria": "逐个子系统有实证",
@@ -286,10 +286,11 @@
   }
  ],
  "next_actions": [
-  "① **当前（554，commit edcb94a，正在构建）**：两个对象根一起清空 + 打印链接清单与对象标记。判据：内核里出现 `nio: bsd_init: `。",
-  "② **554 通过后下一轮**：在 `iokit/Kernel/IOService.cpp` 逐候选打印 personality/模块/probe 结果，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的重试与超时。判据：屏幕出现 `P1`。",
-  "③ **再下一轮**：按②的结论修（补 personality / 跳过坏候选 / 放宽等待），目标让 IOBSD 出现。",
-  "④ **再下一轮**：IOBSD 出现 → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
+  "★ **当前唯一在走的路**（旧 roadmap 的 P3 = launchd 主线，现在拆成 S1–S3 三步）：",
+  "S1 **当前（554，commit edcb94a，正在构建）**：两个对象根一起清空 + 打印链接清单与对象标记。判据：内核里出现 `nio: bsd_init: `。",
+  "S2 **554 通过后下一轮**：在 `iokit/Kernel/IOService.cpp` 逐候选打印 personality/模块/probe 结果，在 `bsd/kern/bsd_init.c` 打印等 IOBSD 的重试与超时。判据：屏幕出现 `P1`。",
+  "S3 **再下一轮**：按 S2 的结论修（补 personality / 跳过坏候选 / 放宽等待），目标让 IOBSD 出现；随后 mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
+  "★ 存储层已定，不再回头：mockfs RAMDisk（rootfs.img / N4KROOT）。**不用 DSU、不用本机 APFS/UFS**（旧 P2 已就位，旧 P1 已作废）。",
   "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机，不拿我的推断当刷机闸；照片没看懂之前不换方向。",
   "★ 判读表（下一张照片只看这些）：`P1` 出现 ⇒ 候选开始 probe；`nio: bsd_init: ` 出现 ⇒ bsd 探针可见；`nio: exec: load_init_program enter` 出现 ⇒ **进用户层**。"
  ],
@@ -439,7 +440,8 @@
  ],
  "qemu_local": "本机跑 QEMU（20 秒一轮，不用手机不占 CI）：python3 device/UniXNU-nio/tools/qemu-nio.py --kernel out/kernel.macho --adt out/qemu/kernel.adt --qemu E:/qemu/qemu-system-aarch64.exe --seconds 25 --report-stop --out out/qemu-local ；完整说明与坑见桌面日记最前面那一节。★ 注意：QEMU 走不到匹配这一步（prelink 空洞），面板判决只能靠真机照片。",
  "roadmap": {
-  "P1_UFS_起来_挂APFS根卷": {
+  "⚠️说明_本节是旧路线存档": "旧编号：P1=UFS 起来挂 APFS 根卷（已暂停作废）；P2=存储层 DSU 只读系统盘（★ 已就位，路线已定为 mockfs RAMDisk，不再动）；P3=launchd 起用户态（★ 就是现在的 S1–S3 这条主线）。**当前唯一在走的路以 phases 的 S0–S4 为准。**",
+  "旧_P1_UFS_起来_挂APFS根卷": {
    "status": "⏸ 暂停（用户层优先）",
    "done": "匹配链通(461) → 驱动启动(468) → 控制器看见设备 DP=1 → ★★ **542 照片：启动越过 UFS 卡点（0673 行），匹配链活着** ⇒ UFS 本身不再是拦路虎，但硬件路径仍卡在门铃（探针的错，已定位）",
    "remaining_6_steps": [
@@ -489,20 +491,20 @@
     "★ 顺带查明": "probe=12 起的 mediaReportThread 也是 kernel_thread_start 起的 ⇒ **不跑** ⇒ probe=12 的 IOMedia 报告**永远看不到**，以后别指望它。probe=12 与正常路径走同一个 startRoot，差别只在失败时 panic vs return false。"
    }
   },
-  "P2_存储层_DSU只读系统盘": {
+  "旧_P2_存储层_DSU只读系统盘": {
    "status": "★ 现在走这条（mockfs 已就位）",
    "remaining": "4GB 读出做成 rootfs.img + boot 镜像换掉十几 MB",
    "estimate": "构建侧为主，1-3 天",
    "hardest": "DSU 分区边界与 system staged over ufs=false 的容量布局",
    "done": "rootfs.img 里有真 launchd(525KB)+真 dyld(922KB)；mockfs 是唯一有 mountroot 的 fs；根设备来自设备树 RAMDisk ⇒ **与 UFS 无关**"
   },
-  "P3_launchd起用户态": {
+  "旧_P3_launchd起用户态": {
    "status": "★ 现在的主线",
    "ready": "boot-args 全套齐了：unentitled_ios_sim_launch / launchd_unsecure_cache / wdt=-1 / wdt_test=no_user_checkin / amfi_get_out_of_my_way / amfi_allow_any_signature / nio_skip_security_extensions；rootfs.img 在（1.45 MB）",
    "estimate": "半天到 1 天",
    "hardest": "不是配置，是内核能否挂上根卷并把控制交给 launchd —— 那正是 P1 的第 6 步"
   },
-  "P3plus_拨号_GPU_WiFi_BT_modem_audio": {
+  "旧_P3plus_拨号_GPU_WiFi_BT_modem_audio": {
    "status": "★ 现在的主线",
    "umi_带的高通驱动": {
     "wifi": "6852 行：wifi.c 193 KB（完整 WLAN 栈）+ apple80211 29 KB + wlfw.c 23 KB（WCNSS 固件加载）+ sta/lx/wlan",
@@ -599,7 +601,7 @@
     "dyld_cache_未预生成": "IPSW root 的常态，Apple 在恢复后首次启动时由 launchd 生成⇒ 移植引导链需要在首启阶段处理，或保留 boot 时生成路径"
    }
   },
-  "总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
+  "旧_总风险": "越往后越依赖 Apple 自己的 kext（APFS、launchd、IOMobileFramebuffer），而这些黑盒程度更高（IOLog 到不了屏、无法加探针）⇒ 可观测性下降，排障变慢。"
  },
  "official_direction": {
   "来源": "https://unixnu.com/zh/（机主指出应以官方为准，不要只看本仓）",
