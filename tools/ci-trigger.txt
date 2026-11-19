@@ -1,1 +1,1 @@
-round on macos-15-intel, asked for at 2026-11-19 02:31:59: round 514, the steps after the doorbell are written as characters in the panel
+round on macos-15-intel, asked for at 2026-11-19 12:47:52: round 515, the doorbell is rung with the interrupts as they were
