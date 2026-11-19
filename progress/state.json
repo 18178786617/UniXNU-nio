@@ -6,11 +6,11 @@
  "phases": [
   {
    "id": "S0",
-   "name": "内核启动并跑到 IOKit 匹配",
+   "name": "内核启动并跑到 IOKit 匹配（旧看板第①项「IOBSD 匹配关」，已完成，不回头）",
    "status": "done",
    "criteria": "屏幕出现 `nio: MT thread`（匹配已挪到独立线程）",
-   "evidence": "552 照片：V 心跳 → `QHNo POST boot-arg set.` → `nio: MT thread` → `R4 iokit lockdown` → vm_kern 的 `M r=1 num=1 spar=44619 barea=0x106000` → `nio: 2`/`nio: 3` → `E16` → `Q2..Q6`",
-   "next": "维持现状：匹配在线程上，启动线程继续往下走"
+   "evidence": "552 照片：V 心跳 → `QHNo POST boot-arg set.` → `nio: MT thread` → `R4 iokit lockdown` → vm_kern 的 `M r=1 num=1 spar=44619 barea=0x106000` → `nio: 2`/`nio: 3` → `E16` → `Q2..Q6`。**旧①的判据只是「面板出现 SM unlocked 之后的新行」，它证明的是匹配锁没死锁**（内核里 `SM unlocked`/`SM enter` 都在），**不是「personality 装载成功」**——这一层旧看板没判过，也没人验过。",
+   "next": "维持现状：匹配在线程上，启动线程继续往下走。**这一项不用再做**，S1 不是回头路。"
   },
   {
    "id": "S1",
@@ -296,6 +296,7 @@
  ],
  "notes": [
   "★★★★★★ **定稿路线（2026-11-19 20:50）：只做这 3 步，不再换方向。**\n· 目标：手机内核 exec `/sbin/launchd`（用户层）。判据：屏幕出现 launchd 痕迹。\n· 卡点（唯一）：552 照片有 `Q2..Q6` 没有 `P1` ⇒ 没有 personality 装载 ⇒ 没有 IOBSD ⇒ bsd_init 卡在等根设备。\n· 前置（唯一）：bsd/iokit 的改动必须进内核，否则探针不可见、代码改不动。\n\n★★★★★★ **已排除的假设（不要再试，也不要据此改方向）**\n① 「核心没重编」——已被 552 证伪：`nio: MT thread`（本轮新补丁）在屏上，核心确实是新编的。\n② 「D/S/WAIT 判读卡点」——无效。那些探针（`nio-matching-step-marks` / `nio-bound-the-resource-wait` / `nio-bsd-init-phases-direct`）从未进内核，屏幕上的 `D1 D2 D3 D5`/`cand done`/`S1` 是更早那版内核里的旧探针。\n③ 「删掉 .o 就够」——550 证伪（删 977 个对象，链接照样用旧代码）。\n④ 「给源码盖新时间就够」——551 证伪（115 个源文件盖成现在，出来的内核仍无本轮标记）。\n⑤ 「QEMU 能判断」——无效，不拿它当依据。\n⑥ 「UFS 门铃是主线」——已让开（543 起命令行不再带 UFS 参数），用户层不依赖 UFS。\n⑦ 「用 DSU / 手机本机只读系统盘当根」——**已退出主线，不在当前三步里**。根设备来自设备树 /chosen/memory-map 的 RAMDisk，rootfs/rootfs.img 是 N4KROOT，bsd/vfs/vfs_conf.c 里 mockfs 是唯一有 vfc_mountroot 的文件系统；内核命令行不带 native-ufs-root=1，所以用户层不需要 UFS，也就不需要 DSU。工程里现在没有任何 DSU 代码（board.toml / patches / drivers 全部搜不到 DSU，只有工作区里下载的 iOS OTA 资产 DSU.zip 与旧笔记提到过它）。\n\n★★★★★★ **两个对象根（本次的真正机关）**\n· `build/xnu/obj/DEVELOPMENT_ARM64_BCM2837` ← bootstrap 那轮编译的\n· `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837` ← 最终那轮编译的\n· 链接读的 `<component>.filelist` 写在对象旁边（`MakeInc.kernel:147`），清一个根不够。",
+  "★★★★★★ **编号对照（防止再被误读成「回头」，2026-11-19 20:55）**\n· 旧看板第①项「IOBSD 匹配关」判据=「面板出现 SM unlocked 之后的新行」⇒ 证明**匹配锁没死锁** ⇒ **已完成，不回头**（并入现在的 S0）。\n· 现在的 **S1「让 bsd/iokit 的改动进内核」不是第①项**，是这轮才出现的一步。原因：写在这两个组件里的探针从来没进过手机，所以「匹配走到哪一步」既看不见也改不了；先把探针送进内核，才谈得上定位与修复。\n· 旧①与 S1/S2 的关系：旧①是**较弱的判据**（锁没死），S2 是**更严的判据**（候选真的走到 `inst->probe()` ⇒ personality 装载 ⇒ IOBSD 出现）。旧①通过不等于 personality 装载过——这一点直到 552 的照片才被验证（`Q2..Q6` 之后没有 `P1`）。\n· 旧 P1（UFS 挂 APFS 根卷）作废；旧 P2（存储层 DSU→mockfs）已定型；旧 P3（launchd）= 现在的 S1–S3。",
   "★★★★★★ **为什么路线看起来变过（诚实记录，2026-11-19 20:50）**\n· 前十几轮我改方向，每一次当时都有理由，但**理由建立在坏数据上**：bsd 与 iokit 两个组件的改动从没进过内核，所以屏幕上的 `D1 D2 D3 D5` / `cand done` / `S1` 全是更早那版内核里的旧探针，我拿它们当成了当前进度。\n· 真正的转折点是 552 的照片 + 内核字节：`nio: MT thread`（本轮新补丁，osfmk）在屏上，而 `nio: bsd_init: `=0、`cand done`=0。\n· 从 552 起：先让探针进内核（①），再修匹配（②），最后起用户层（③）。**这三步之外不再开新方向。**\n· 纪律：每一轮只允许改一个组件、只允许有一个判据；照片没读懂之前不改代码。",
   "★★★★★★★ **550 判决：删对象不够（2026-11-19 20:10）**\n· 现象：`PASS: removed the core image and 976 objects`，最终 make 178 秒就链接成功，内核仍无 `nio: bsd_init: `。\n· 结论：**链接读到的对象不在 `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837` 里**（或树在链接前又铺了一份）。\n  不要再用「删某个目录的对象」当手段——这是第二次被同一件事骗。\n· 现在的判据：**只认内核里有没有 `nio: bsd_init: `**。没有 ⇒ 本轮不算数，不刷机（`watch-round.sh` 的 3a 闸）。\n· 551 的手段：源码 mtime = 现在（约 115 个文件）。这是唯一不依赖「对象放哪」的办法。\n· 若 551 仍然陈旧：CI 日志会直接给出 `.o` 数量、`bsd_init.o`/`IOService.o` 是否存在、带不带标记 ⇒ 那时才谈下一步。",
   "★★★★★★★ **核心是旧的（2026-11-19 19:25 查明，最高优先级）**\n· **判据**：拿 CI 发布的 `kernel.macho` 直接 `grep -aF 'nio: bsd_init: '`。没有 ⇒ 核心不是本轮编的。\n· **证据链**：\n  ① 549 的 kernel.macho：`nio: bsd_init: `=0、`nio: WAIT `=0、`nio: cand done `=0；但 `nio: exec: load_init_program enter`=1（那是很老的补丁带来的）。\n  ② 549 的 `fingerprint.log`：`IOService.cpp source: STALL=yes` ／ `iokit/DEVELOPMENT/IOService.o: MISSING`。\n  ③ 同日志：`native (prelink input)` mtime 10:32:28 ＝ bootstrap 链接失败那一刻。\n· **机理**：树里（`out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/`）自带一个预编核心，它比 git checkout 出来的源码新 ⇒ make 认为目标已满足 ⇒ 既不编译也不链接。我们所有 XNU 补丁都停留在源码层。\n· **修法**：`scripts/build-verified-root.py` 的 `force_core_rebuild()`（只在 `GITHUB_ACTIONS=true` 下、obj 目录存在时）删核心 + 全部 .o/.cpo。\n· **防复发**：`tools/watch-round.sh` 3a 段检查内核里有没有 `nio: bsd_init: `，没有就不刷机。\n· ★ **以后每轮先看这一步**：CI 日志里搜 `PASS: the core is rebuilt from the patched sources`；没有这行 ⇒ 核心又是旧的，别再拍照。",
