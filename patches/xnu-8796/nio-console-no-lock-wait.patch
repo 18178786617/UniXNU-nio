@@ -1,0 +1,47 @@
+The console flush lock is not waited for for ever
+
+console_ring_try_empty() holds the flush lock while it writes the
+characters to the device.  If the device does not take them, the lock is
+never released, and every other thread that prints waits on it -- including
+the thread that has to drain the ring, which is the only one that can.  The
+boot thread, on its way to bsd_init(), prints the copyright, and that is
+where it would stop.
+
+So the wait is bounded now.  The ring is a buffer for the device, and
+console_write() already writes straight to the device when the ring has no
+room; a message that is lost is better than a boot that stops.
+
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+index 7eccba7..e227243 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -403,7 +403,28 @@ console_ring_try_empty(bool fail_fast)
+ 		if (__probable(!in_debugger) && fail_fast && !lck_mtx_try_lock(&console_ring.flush_lock)) {
+ 			return;
+ 		} else if (__probable(!in_debugger) && !fail_fast) {
+-			lck_mtx_lock(&console_ring.flush_lock);
++			/* nio: do not wait for the flush lock for ever.
++			 *
++			 * The lock is held while the characters are written to
++			 * the device, so a device that does not take them keeps
++			 * every other thread waiting here -- and the thread
++			 * that is waiting is the one that has to drain the
++			 * ring.  The run 555 panel ends with the console's
++			 * last line and no bsd_init phase at all, which is
++			 * what a boot thread stuck on this lock looks like.
++			 *
++			 * Give up after a while instead: the ring is a buffer
++			 * for the device, and console_write() already writes
++			 * straight to the device when the ring has no room.
++			 * A message that is lost is better than a boot that
++			 * stops. */
++			unsigned int nio_tries = 0;
++			while (!lck_mtx_try_lock(&console_ring.flush_lock)) {
++				if (++nio_tries > 10000u) {
++					return;
++				}
++				cpu_pause();
++			}
+ 		}
+ 
+ 		if (__probable(!in_debugger)) {
