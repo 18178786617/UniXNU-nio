@@ -1,1 +1,1 @@
-round on macos-15-intel, asked for at 2026-11-19 12:47:52: round 515, the doorbell is rung with the interrupts as they were
+round on macos-26, asked for at 2026-11-19 13:10:44: round 516, the three things after the doorbell are told apart
