@@ -213,20 +213,17 @@ index 134b095..3fa75ef 100644
  	printf("\nR5 bsd_init enter");
  #endif
 diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
-index bd01596..e30efb4 100644
+index bd01596..27f8d67 100644
 --- a/iokit/Kernel/IOService.cpp
 +++ b/iokit/Kernel/IOService.cpp
-@@ -1,6 +1,10 @@
- /*
-  * Copyright (c) 1998-2021 Apple Inc. All rights reserved.
-  *
-+ * nio: where the matching thread is; the beacon writes it.
+@@ -1,3 +1,7 @@
++/* nio: where the matching thread is; the beacon writes it.
 + * See osfmk/kern/startup.c for the list of the numbers. */
 +extern volatile int nio_match_waypoint;
 +
-  * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
+ /*
+  * Copyright (c) 1998-2021 Apple Inc. All rights reserved.
   *
-  * This file contains Original Code and/or Modifications of Original Code
 @@ -4203,6 +4207,7 @@ nio_match_watchdog(void *arg, wait_result_t wr)
  void
  IOService::probeCandidates( OSOrderedSet * matches )
@@ -246,20 +243,19 @@ index bd01596..e30efb4 100644
  				nio_u_mark(symbol->getCStringNoCopy());
  				nio_u_mark("\nD1");
 diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
-index 53013ef..bd9e842 100644
+index 53013ef..86ce659 100644
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
-@@ -1,4 +1,9 @@
+@@ -1,4 +1,8 @@
  #include <kern/boot_progress.h>
 +
 +/* nio: where the boot thread is; the beacon writes it.
 + * See osfmk/kern/startup.c for the list of the numbers. */
 +extern volatile int nio_boot_waypoint;
-+
  /*
   * Copyright (c) 2000-2021 Apple Inc. All rights reserved.
   *
-@@ -582,7 +587,9 @@ native_mobile_graphics_load_probe(void)
+@@ -582,7 +586,9 @@ native_mobile_graphics_load_probe(void)
  void
  bsd_init(void)
  {
@@ -269,7 +265,7 @@ index 53013ef..bd9e842 100644
  	struct uthread *ut;
  	vnode_t init_rootvnode = NULLVP;
  	struct proc_ro_data kernproc_ro_data = {
-@@ -595,6 +602,7 @@ bsd_init(void)
+@@ -595,6 +601,7 @@ bsd_init(void)
  
  #if (DEVELOPMENT || DEBUG)
  	platform_stall_panic_or_spin(PLATFORM_STALL_XNU_LOCATION_BSD_INIT);
@@ -277,7 +273,7 @@ index 53013ef..bd9e842 100644
  #endif
  
  #define DEBUG_BSDINIT 1
-@@ -629,8 +637,10 @@ bsd_init(void)
+@@ -629,8 +636,10 @@ bsd_init(void)
  } while (0)
  
  	throttle_init();
