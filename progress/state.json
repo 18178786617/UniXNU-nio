@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 01:55（★★★★★★★ **561 照片：路标出来了，`w8` ⇒ 根因链闭合。** w8 与 w9 之间只有 `#if KPERF kperf_init_early(); #endif`，而 `kperf_init_early()` 第一句是 **`ml_wait_max_cpus()`**（死等所有 CPU 到位）；**`ml_set_max_cpus()` 只有 IOKit 会调**（AppleARMSMP.cpp:170 / IOCPU.cpp:580）—— 只有被 probe 并 attach 的 personality 才会发布 CPU 数。⇒ **匹配不成功 → CPU 驱动不 attach → max_cpus 永不发布 → 启动线程死等 → bsd_init 永不执行**。★ 562：给**匹配线程**也加路标（m1..m5），信标同时打 `w<n>m<n>`：匹配线程在 PE_lockdown_iokit / probeCandidates 入口 / 调 probe 前 / probe 后 各置一次。**）",
+ "updated": "2026-11-20 03:20（★★★★★ **563 在 GitHub 上是全绿的，但内核没发布出来** —— 原因是**推 57MB 内核时网络超时**：`RPC failed; HTTP 408 ... send-pack: unexpected disconnect`。发布步骤带 `set +e`，所以推送失败只打了注解、不判失败 ⇒ job 绿、但 `ci-kernel/run-563` 分支不存在 ⇒ 我们的巡场误报成「构建失败」。★ 已修：发布步骤把 `http.postBuffer` 提到 512MB、放开 lowSpeedLimit、**推送最多重试 5 次**（每次间隔 20 秒），失败则 `exit 1`；巡场也改成用公开 API 区分「绿但没发布内核」与「真失败」。★ 564 = 重新构建并发布（内核内容与 563 相同：启动线程路标 w1..w14 + 匹配线程路标 m1..m5）。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 563,
+   "time": "02:48",
+   "marker": "（构建绿，但内核分支因 HTTP 408 没推上去）",
+   "qemu": "macos-15-intel",
+   "result": "**job 全绿**（每一步 success），但 `ci-kernel/run-563` 不存在：发布 57MB 内核时 HTTP 408 断流，而该步骤 `set +e` 不判失败 ⇒ 巡场看到 ci-logs 分支就误报 failed。已修：加大 postBuffer、放开 lowSpeedLimit、推送重试 5 次、失败即 exit 1。"
+  },
   {
    "run": 561,
    "time": "01:25",

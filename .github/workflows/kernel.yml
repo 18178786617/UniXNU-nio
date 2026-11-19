@@ -1295,6 +1295,20 @@ jobs:
           cd device
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The kernel is fifty-seven megabytes and the push of run 563 died
+          # in the middle of it: "RPC failed; HTTP 408 ... send-pack:
+          # unexpected disconnect while reading sideband packet".  The step
+          # has `set +e`, so the push failed, the job stayed green, and the
+          # branch was never created: the round looked like a failure and
+          # its kernel was lost.
+          #
+          # The buffer is raised so the pack is sent in one piece instead of
+          # a stream the connection can cut, the low-speed limit is lifted so
+          # a slow transfer is not killed, and the push is tried again: a
+          # 408 is the network's word, not the pack's.
+          git config http.postBuffer 524288000
+          git config http.lowSpeedLimit 0
+          git config http.lowSpeedTime 600
           # An orphan branch, not a checkout of the remote one. Switching to
           # the remote branch removes the repository's own files from the
           # working tree, and the commit that follows then deletes the
@@ -1437,10 +1451,20 @@ jobs:
           # that is turned down by the remote for its size, so what is about
           # to be pushed is named before the push, not after it.
           echo "the branch carries $(git ls-files | wc -l) file(s)"
-          if ! out=$(git push origin HEAD:refs/heads/ci-kernel/run-$GITHUB_RUN_NUMBER 2>&1); then
-            echo "::error title=the kernel branch::$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
-          else
+          published=no
+          for attempt in 1 2 3 4 5; do
+            if out=$(git push origin HEAD:refs/heads/ci-kernel/run-$GITHUB_RUN_NUMBER 2>&1); then
+              published=yes
+              break
+            fi
+            echo "the push of the kernel failed (attempt $attempt): $(printf '%s' "$out" | head -4 | tr '\n' ' ')"
+            sleep 20
+          done
+          if [ "$published" = yes ]; then
             echo "the kernel is on ci-kernel/run-$GITHUB_RUN_NUMBER"
+          else
+            echo "::error title=the kernel branch::the kernel could not be pushed after five attempts; the round's kernel is lost"
+            exit 1
           fi
           # The newest run also answers to one name that does not change, so
           # that a fetch does not have to know the run number.
