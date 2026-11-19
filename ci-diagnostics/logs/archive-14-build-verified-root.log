@@ -1,0 +1,8 @@
+PASS: real VerifiedRoot crypto + empty policy table -> libVerifiedRoot.a
+      root verification is disabled: no signed policy bundle exists for this board
+PASS: the object directory holds 857 .o, 120 .cpo, core absent
+PASS: removed the core image and 977 objects
+PASS: 115 patched sources carry a fresh mtime
+  bsd/kern/bsd_init.c: mtime 11:57:25, carries 'nio: bsd_init:'
+  iokit/Kernel/IOService.cpp: mtime 11:57:25, carries 'nio: S1'
+  bsd/kern/kern_exec.c: mtime 11:57:25, carries 'nio: exec: load_init_program enter'
