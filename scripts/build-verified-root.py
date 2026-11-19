@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -148,22 +149,24 @@ def force_core_rebuild() -> None:
     phone has been running the same kernel, which is what "no change" on the
     panel has meant.
 
-    Deleting the core image and the objects under it makes the link read the
-    sources again.  It is done here because this recipe is the last one before
-    `build-xnu-4k-baseline.sh` runs the final make, and by then the archives
-    the link needs (`libVerifiedRoot.a` among them) exist -- the condition the
-    LDFILELIST step needs, and the reason a relink was avoided before.
+    Deleting the core image and the objects under it was the first attempt, and
+    two rounds said it is not enough.  Run 550 removed 977 objects and the link
+    came back in three minutes; run 551 went further, gave 115 patched sources a
+    fresh mtime, spent 331 seconds in the final make, linked -- and still
+    published a core with none of the series' strings in it, while its own log
+    showed `bsd/kern/bsd_init.c` carrying `nio: bsd_init:` at the time.
 
-    Run 550 showed that deleting the objects is not enough by itself: it removed
-    977 of them, the final make came back in three minutes, the link succeeded,
-    and the core still carried the tree's code.  So the sources the series
-    changed are also given a fresh mtime -- a file dated now cannot be called
-    older than an object the tree shipped, whichever directory that object is
-    in.  Together with the deletion the core has to be rebuilt and has to be
-    rebuilt from these sources.
+    The reason is in MakeInc.kernel: the kernel's only per-component
+    prerequisites are the `<component>.filelist` files, and those lists are what
+    the link reads.  An object that is deleted but still named by a list that
+    exists is simply not asked for.  So the lists are deleted here as well, with
+    the component archives and the link's own outputs.  Without them make has to
+    descend into every component, compile `$(OBJS)` from the sources the series
+    changed, regenerate the lists and link a core that carries them.
 
     The compile records (`*.o.json`) are kept: this recipe read one of them,
-    and they are what the archive builders were given.
+    and they are what the archive builders were given.  `EXPORT_HDRS` stays too;
+    the headers under it are restored from a blob by an earlier step.
 
     Only the CI does this.  A local tree carries a core that was built on
     purpose, and deleting it would make every local run of this recipe a full
@@ -175,12 +178,40 @@ def force_core_rebuild() -> None:
         return
     objects = list(CORE_OBJECTS.rglob('*.o'))
     cpos = list(CORE_OBJECTS.rglob('*.cpo'))
+    archives = list(CORE_OBJECTS.rglob('*.a'))
+    filelists = (list(CORE_OBJECTS.rglob('*.filelist'))
+                 + list(CORE_OBJECTS.rglob('*.libfilelist')))
     core = f'{CORE_IMAGE.stat().st_size} bytes' if CORE_IMAGE.exists() else 'absent'
-    print(f'PASS: the object directory holds {len(objects)} .o, {len(cpos)} .cpo, core {core}')
-    for path in [CORE_IMAGE, *objects, *cpos]:
-        if path.is_file():
+    print(f'PASS: the object directory holds {len(objects)} .o, {len(cpos)} .cpo, '
+          f'{len(archives)} archives, {len(filelists)} file lists, core {core}')
+
+    # The kernel is not linked against the objects: MakeInc.kernel lists, as its
+    # only per-component prerequisites, the component `.filelist` files, and
+    # each of those lists the objects by name.  Run 550 deleted 977 objects and
+    # the link still came back in three minutes with the tree's code in it,
+    # because the file lists were still there and make had no reason to walk
+    # into the components at all -- the objects it named were never asked for.
+    #
+    # So the file lists go too, with the archives and everything the link
+    # writes.  Without them make must descend into every component, build
+    # `$(OBJS)` from the sources, regenerate the lists and link a new core.
+    #
+    # EXPORT_HDRS stays: the headers under it are restored from a blob by an
+    # earlier step, not made here, and the compile needs them.
+    doomed = [CORE_IMAGE, *objects, *cpos, *archives, *filelists]
+    for name in ('link.filelist', 'ltolink.filelist', 'nonltolink.filelist',
+                 'mach.development.bcm2837', 'mach.development.bcm2837.dSYM',
+                 '.LDFLAGS'):
+        doomed.append(CORE_OBJECTS / name)
+    gone = 0
+    for path in doomed:
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            gone += 1
+        elif path.is_file():
             path.unlink()
-    print(f'PASS: removed the core image and {len(objects) + len(cpos)} objects')
+            gone += 1
+    print(f'PASS: removed the core image, the file lists and {gone} build products')
 
     # Deleting the objects is not enough on its own: run 550 removed 977 of them
     # and the link still came back in three minutes with the tree's code in it,

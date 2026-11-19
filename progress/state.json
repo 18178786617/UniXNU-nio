@@ -1,7 +1,7 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-19 20:02（★★★★★★★ **换方向：不再等匹配返回。** 照片证实卡在 `S1` 之后——`S1` 写在 `startCandidate(inst)` 前、`S2` 写在它返回后，所以是**某个 personality 的 `start()` 不返回**，而 bsd_init、根卷、launchd 全都排在同一个线程后面等它。★ 552：**把匹配挪到自己的线程**，启动线程不再等它，直接走 bsd_init。就算某个 `start()` 永不返回，内核也能进用户层。**）",
- "headline": "★★★★★★★ **552 判决方向变了：让匹配下线，让启动线程先走。**\n· 照片（机主提供，旧帧但内容一致）：`nio: P NidUfs` → D1 D2 D3 D5 → `nio: C AppleARMCPU` → P1 → `nio: P AppleARMCPU` → D1..D4 → `nio: cand done AppleARMCPU` → D5 → **S1** → V 心跳一直跑。\n· 代码位置（`iokit/Kernel/IOService.cpp` 4646/4648）：`S1` → `startCandidate(inst)` → `S2`。**S1 有、S2 没有 ⇒ `startCandidate()` 没返回。**\n  而 `StartIOKitMatching()` 是在启动线程里同步调用的（`PE_lockdown_iokit()`，`startup.c:904`）⇒ bsd_init 永远轮不到。\n· ★ 552 的改法：在 `startup.c` 里把 `PE_lockdown_iokit()` 丢进 `kernel_thread_start`，启动线程直接继续 bsd_init。\n  新标记：`nio: MT thread`（已挪走）／`nio: MT inline`（建线程失败，退回原路）／`MT run`、`MT done`（匹配本身进没进、回没回）。\n· 同时保留 551 的「给补丁改过的源码盖新 mtime」——内核必须带本轮标记才算数。",
+ "updated": "2026-11-19 20:35（★★★★★★★ **找到了：链接的唯一前置是 `.filelist`，不是对象。** 550 删 977 个 `.o`、551 还把 115 个源文件盖成当前时间、make 跑 331 秒、链接成功——出来的内核里仍然没有 `nio: bsd_init: `。原因在 `makedefs/MakeInc.kernel:147`：内核目标的前置只有 `<component>.filelist`，而对象是**按名字列在那些清单里**的；清单还在，make 就不会进组件去编，被删的对象根本没人要。★ 553：把 `*.filelist`/`*.libfilelist`/`*.a`/`.LDFLAGS` 连同对象一起删。**）",
+ "headline": "★★★★★★★ **553：删掉 `.filelist`，链接才会真的重建。**\\n· 551 的证据：`PASS: 115 patched sources carry a fresh mtime`、`bsd/kern/bsd_init.c` 确实带 `nio: bsd_init:`、977 对象已删，最终 make 331 秒后链接成功——发布内核里 `nio: bsd_init: ` = 0、`nio: WAIT ` = 0、`nio: cand done ` = 0。\\n· 机理（源码级）：`MakeInc.kernel:147` 的内核目标只依赖各组件 `.filelist`；`bsd/conf/Makefile.template:551` 的 `.filelist: $(OBJS)`。清单存在且比内核新时，make 既不遍历组件也不编译，链接照旧用清单里那些（已删的）名字对应的旧副本 ⇒ 白删。\\n· 553 的手段：`force_core_rebuild()` 连 `*.filelist`/`*.libfilelist`/`*.a`/`link.filelist`/`justlto*`/`.LDFLAGS`/`.dSYM` 一起删；保留 `EXPORT_HDRS`（那是上一步从 blob 还原的头文件）。\\n· 判据不变：`nio: bsd_init: ` 必须出现在发布内核里；没有就不刷机。",
  "distance": "距用户层还剩 **1 个阶段**：**P3 launchd 起用户态**（P0 匹配链已通、P1 UFS 已让开、P2 的 mockfs 已就位）。**当前状态：匹配还在跑，还没到 mountroot。**\n· 路径（bsd_init.c）：匹配 → `vfs_mountroot()`（mockfs 挂成根，1022 行）→ `IOFindBSDRoot()`（最多等 30 秒等 IOBSD 资源，1342 行）→ `bsdinit_task` → `load_init_program()`（1301 行）→ exec `/sbin/launchd`。\n★ **下一张照片只要看两行**：\n  · **`mx<n>`** 出现 ⇒ 候选循环退出了，匹配走完（后面就是 mountroot）\n  · **`nio: exec: load_int_program enter`** 出现 ⇒ **进用户层了**\n  · panic `nio: the matching path stalled (rounds=N)` ⇒ 匹配卡死（但那说明内核活着）",
  "phases": [
   {
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 553,
+   "time": "20:35",
+   "marker": "`nio: bsd_init: ` 出现在发布内核",
+   "qemu": "macos-26",
+   "result": "★★★★★★★ **删掉组件 filelist，逼 make 进组件重编并重新链接**。551 证明「删对象 + 盖源码时间」不够：链接读的是 `.filelist` 里点名的对象，清单在就不进组件。本轮同时删 `*.a`（组件归档）、`link.filelist`/`justlto*`/`.LDFLAGS`/`.dSYM`，并让指纹日志打印 `.o/.cpo/.filelist/.a` 的实际数量、把探针从 `IOService.o` 改成 `IOService.cpo`（C++ 目标从来是 `.cpo`，之前那条 MISSING 是探针写错）。"
+  },
   {
    "run": 552,
    "time": "20:02",

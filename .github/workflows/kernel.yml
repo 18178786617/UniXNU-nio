@@ -764,8 +764,20 @@ jobs:
 
           probe('kernel.macho (published)', os.popen("ls out/nio/*/nio/kernel/kernel.macho 2>/dev/null | head -1").read().strip())
           probe('native (prelink input)', native)
-          for rel in ('osfmk/DEVELOPMENT/startup.o', 'iokit/DEVELOPMENT/IOService.o'):
+          # C++ objects are built as .cpo, not .o: probing IOService.o said
+          # MISSING for rounds and read like the compile had been skipped, when
+          # the file that class is compiled into has always been IOService.cpo.
+          for rel in ('osfmk/DEVELOPMENT/startup.o', 'bsd/DEVELOPMENT/bsd_init.o',
+                      'iokit/DEVELOPMENT/IOService.cpo'):
               probe(rel, os.path.join(obj, rel) if obj else '')
+          if obj and os.path.isdir(obj):
+              def count(suffix):
+                  n = 0
+                  for base, _dirs, files in os.walk(obj):
+                      n += sum(1 for f in files if f.endswith(suffix))
+                  return n
+              print('object directory totals: %d .o, %d .cpo, %d .filelist, %d .a'
+                    % (count('.o'), count('.cpo'), count('.filelist'), count('.a')))
           src = os.path.join(work, 'osfmk/kern/startup.c') if work else ''
           if src and os.path.isfile(src):
               d = open(src, 'rb').read()
