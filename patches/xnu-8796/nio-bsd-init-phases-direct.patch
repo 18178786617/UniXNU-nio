@@ -1,0 +1,122 @@
+The phases of bsd_init and the exec marks go to the panel straight
+
+The panel of run 546 showed the matching's marks and not one of bsd_init's
+own phases, even though the matching runs on another thread while bsd_init
+runs on this one and the two write at the same time.  The matching's marks
+go straight to the framebuffer through the console blob's own writer, and
+bsd_init's phases go through printf, which goes into the console's ring
+buffer.  The ring is where the boot stopped, so the phases were written
+into it and never came out.
+
+So they say themselves on the panel now, the way the matching's marks do:
+no lock, no ring.  The panel will say whether this thread got as far as
+the root volume -- "calling setconf", "vfs_mountroot", "calling VFS_ROOT"
+-- and whether the kernel ever reached the door of the userland, which is
+what the exec marks are for:
+
+  nio: exec: exec_mach_imgact enter
+  nio: exec: load_init_program_at_path /sbin/launchd
+  nio: exec: load_init_program enter
+
+The phase on the panel carries the text as it was written, so a message
+with a number in it shows the number's place and not its value; the one
+in the console has the value.  Both are written, so nothing is lost.
+
+The struct mirrors osfmk/console/serial_protos.h's struct console_ops,
+which neither of these files includes -- the layout is what matters, and
+the symbol is the one serial_console.c defines.
+
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -582,7 +582,41 @@
+ #if DEBUG_BSDINIT
+ #define bsd_init_kprintf(x, ...) kprintf("bsd_init: " x, ## __VA_ARGS__)
+ #else
+-#define bsd_init_kprintf(x, ...) printf("nio: bsd_init: " x, ## __VA_ARGS__)
++
++/* nio: a mark on the panel, straight through the console blob's own writer.
++ *
++ * The struct mirrors osfmk/console/serial_protos.h's struct console_ops,
++ * which this file does not include -- the layout is what matters, and the
++ * symbol is the one serial_console.c defines. */
++struct nio_wd_console_ops {
++	void (*putc)(char, bool);
++	int (*getc)(bool);
++};
++extern struct nio_wd_console_ops cons_ops[];
++
++static void
++nio_bmark(const char *s)
++{
++	while (*s != '\0') {
++		cons_ops[1].putc(*s++, true);
++	}
++}
++
++/* nio: the phase on the panel and the phase in the console.  The one on the
++ * panel carries the text as it was written, so a message with a number in it
++ * shows the number's place and not its value; the one in the console has the
++ * value.  Both are written, so nothing is lost.
++ *
++ * The panel of run 546 showed the matching's marks and not one of these, and
++ * the matching runs on another thread while bsd_init runs on this one, so the
++ * two were writing to the same place at the same time: the direct marks went
++ * to the framebuffer and these went into the console's ring, and the ring is
++ * where the boot stopped.  So the phases say themselves on the panel now, and
++ * they say whether this thread got as far as the root volume. */
++#define bsd_init_kprintf(x, ...) do { \
++	nio_bmark("\nnio: bsd_init: " x); \
++	printf("nio: bsd_init: " x, ## __VA_ARGS__); \
++} while (0)
+ #endif
+ 
+ 	throttle_init();
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1166,7 +1166,26 @@
+ 	/* ip_user_fname is a user address, not a string.  The file name is
+ 	 * already on the console by the time we get here, so only mark the
+ 	 * arrival. */
+-	printf("nio: exec: exec_mach_imgact enter\n");
++
++/* nio: a mark on the panel, straight through the console blob's own writer.
++ *
++ * The struct mirrors osfmk/console/serial_protos.h's struct console_ops,
++ * which this file does not include -- the layout is what matters, and the
++ * symbol is the one serial_console.c defines. */
++struct nio_wd_console_ops {
++	void (*putc)(char, bool);
++	int (*getc)(bool);
++};
++extern struct nio_wd_console_ops cons_ops[];
++
++static void
++nio_emark(const char *s)
++{
++	while (*s != '\0') {
++		cons_ops[1].putc(*s++, true);
++	}
++}
++	nio_emark("\nnio: exec: exec_mach_imgact enter");
+ 	proc_t                  p = vfs_context_proc(imgp->ip_vfs_context);
+ 	int                     error = 0;
+ 	task_t                  task;
+@@ -7819,7 +7838,8 @@
+ 	assert(scratch_addr);
+ 	assert(path);
+ 
+-	printf("nio: exec: load_init_program_at_path %s\n", path);
++	nio_emark("\nnio: exec: load_init_program_at_path ");
++	nio_emark(path);
+ 
+ 	/*
+ 	 * Copy out program name.
+@@ -7931,7 +7951,7 @@
+ void
+ load_init_program(proc_t p)
+ {
+-	printf("nio: exec: load_init_program enter\n");
++	nio_emark("\nnio: exec: load_init_program enter");
+ 	boot_progress_stage("load_init_program enter");
+ 	uint32_t i;
+ 	int error;

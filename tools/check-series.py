@@ -116,6 +116,17 @@ def main(argv):
     names = read_series(seriesp)
     patchdir = seriesp.parent
 
+    # A patch that is listed twice is applied twice: the first time it works
+    # and the second time it says "reversed or previously applied", which
+    # reads like the patch is already in the tree and hides the real state.
+    # It happened twice in one afternoon, so it is checked here.
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    if duplicates:
+        print("the series lists a patch more than once:")
+        for d in duplicates:
+            print("  " + d)
+        return 1
+
     if SCRATCH.exists():
         shutil.rmtree(SCRATCH)
     SCRATCH.mkdir(parents=True)
