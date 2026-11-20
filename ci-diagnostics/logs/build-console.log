@@ -1,0 +1,37 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree
+== kernel: XNU
+== kernel: bootstrap pass for the compile records
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+ 4413 |                 do {
+      |                    ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:9739:48: error: expected 'while' in do/while loop
+ 9739 | OSMetaClassDefineReservedUnused(IOService, 47);
+      |                                                ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:4413:3: note: to match this 'do'
+ 4413 |                 do {
+      |                 ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:9739:48: error: expected '}'
+ 9739 | OSMetaClassDefineReservedUnused(IOService, 47);
+      |                                                ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:4365:50: note: to match this '{'
+ 4365 |             && (nextMatch = matches->getFirstObject())) {
+      |                                                         ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:9739:48: error: expected '}'
+ 9739 | OSMetaClassDefineReservedUnused(IOService, 47);
+      |                                                ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/iokit/Kernel/IOService.cpp:4245:1: note: to match this '{'
+ 4245 | {
+      | ^
+1078 warnings and 219 errors generated.
+make[7]: *** [IOService.cpo] Error 1
+make[6]: *** [build_all] Error 2
+make[5]: *** [do_all] Error 2
+make[4]: *** [build_all] Error 2
+make[3]: *** [build_all_recurse_into_conf] Error 2
+make[2]: *** [build_all_recurse_into_iokit] Error 2
+make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^BCM2837] Error 2
+make: *** [build] Error 2
+build-xnu-4k-baseline.sh: line 866: make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iphoneos}" ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="$XNU_ARCH_STRING" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION -DXNU_TARGET_OS_IOS" DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_VERSION" RC_DARWIN_KERNEL_VERSION="$XNU_DARWIN" RC_ProjectSourceVersion="$XNU_VERSION" BUILD_LTO=0 BOUND_CHECKS=0 BUILD_WERROR="${XNU_BUILD_WERROR:-0}" MAKEJOBS=-j"${JOBS:-4}" CFLAGS_EXTRA="$EXTRA_CFLAGS" "${EXTRA_MAKE_ARGS[@]}" ${XNU_HOST_MAKE_ARGS[@]+"${XNU_HOST_MAKE_ARGS[@]}"} OBJROOT="$ROOT/build/xnu/ios-obj" SYMROOT="$ROOT/build/xnu/ios-sym" DSTROOT="$ROOT/build/xnu/ios-dst" failed
+unixnu: bash failed (2); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/logs/kernel-bootstrap.log
