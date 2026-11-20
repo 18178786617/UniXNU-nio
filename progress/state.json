@@ -1,8 +1,8 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 16:55（★★★★★★★ **机主指出：昨天 15:20 的 543（commit 14d834b）已经到 P1 了 —— 我把能跑的东西改坏了。** 543 的照片：平台专家 `AppleARFPlatform` 启动、`P1`、ArmCpu/NioUfs/AppleARMCPU 都被 probe。\n★ 580：**回退我改坏的三处** —— ① 匹配放回启动线程（`6f087ea` 把它挪到独立线程后与启动并发 ⇒ 撞上别人持有的注册表锁 ⇒ 卡在 m40）；② 恢复按名字匹配（`IONameMatch`）；③ personality 的发布放回 `StartIOKitMatching()`（紧挨匹配，取名字时名字已就位）；④ 撤掉 `doServiceMatch` 里的跳过。**探针全部保留**（正是它们找出了这个）。**）",
- "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
- "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
+ "updated": "2026-11-20 17:00（★★★★★★★ **回退成功！580 的照片与 543 那张几乎逐行相同。** 路标 `w6m5c9r0d5`：w6=启动线程正在跑匹配（顺序跑 ✓）、**m5=候选真的被 probe 了**、**c9=catalogue 里 9 个候选（我们的 personality 进去了）**、根 nub 有名字了（`I22RP` ⇒ 设备树被找到）。照片里 `nio: C NioUfs` / `P:nic: ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"` / `nio: P NioUfs` / `nio: C AppleARMCPU` / `D1..D6` / `nio: cand done AppleARMCPU` **全部回来了**。\n★ **不需要再推 CI**：让它跑一会儿，再拍一张，看 w 是否走到 7/8/9，以及有没有 `nio: bsd_init: calling ...`。**）",
+ "headline": "★★★★★★ **今天最大的教训：先把历史照片摆出来，再决定改什么。** run 543（2026-11-19 15:20）的照片显示匹配当时是通的（平台专家启动、P1、三个驱动被 probe）；破口是我自己 —— commit 6f087ea 把匹配挪到独立线程，与启动并发，卡死在注册表锁上。580 已回退到 543 的行为，接下来只验证它，不再加探针。",
+ "distance": "距用户层还剩 **2 步**：**S1 匹配恢复**（580 回退中，判据＝与 543 照片对照）→ **S2 bsd_init 的相位标记走到 load_init_program()/exec launchd**（38 条标记已在核心里，只等 bsd_init 真的跑起来）。★ 每一轮只看一个东西：**与上一张历史照片对照**，而不是加新探针。",
  "phases": [
   {
    "id": "S0",
@@ -14,19 +14,19 @@
   },
   {
    "id": "S1",
-   "name": "定位两个线程各自停在哪一行（信标 w<n>m<n>）",
-   "status": "current",
-   "criteria": "信标行出现 `w<n>m<n>`：w=启动线程，m=匹配线程",
-   "evidence": "564 照片：`w8m3` ⇒ 启动线程 w8（kperf_init_early → ml_wait_max_cpus，等 IOKit 发布 CPU 数）；匹配线程 m3（进入 probeCandidates）；**D1–D5、S1、S2 全无** ⇒ 候选在进循环体之前被丢掉，而这两种丢弃不经过 NIO_DROP，所以连 R/K 标记都没有。",
-   "next": "565：面板直接画候选的数量(C)/类别(F)/丢弃(N=notifier, X=非字典)；runner 改回 macos-26"
+   "name": "把匹配恢复成 543 的行为（已回退，等照片验证）",
+   "status": "已完成",
+   "criteria": "照片上出现 P1 / \"nio: start> com.apple.driver.AppleARFPlatform\" / \"MT inline\"",
+   "evidence": "580 照片：`w6m5c9r0d5` —— 匹配在启动线程上顺序跑、候选被 probe（m5）、9 个候选（c9）、根 nub 有名字（I22RP）；`nio: P NioUfs` / `ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"` / `D1..D6` 全在。",
+   "next": "让匹配跑完，看 w 走到 7/8/9 与 `nio: bsd_init: calling ...` 相位标记"
   },
   {
    "id": "S2",
-   "name": "让候选走到 probe()（personality 装载）",
-   "status": "blocked",
-   "criteria": "屏幕出现 `P1`（`nio-probe-entry-marks.patch`：Q=通过 personality/模块检查，P1=即将 `inst->probe()`）",
-   "evidence": "552 照片最后一行是 `Q6`，之后什么都没有，`P1` 一次都没出现",
-   "next": "按 S1 拍到的原因修匹配；reason 6 = personality 所在的 kext 没加载（匹配等一个不会来的模块）"
+   "name": "追 bsd_init 的相位标记到用户层（不再加新探针）",
+   "status": "进行中",
+   "criteria": "面板出现 \"nio: bsd_init: calling ...\" 系列标记，直到 load_init_program / exec launchd",
+   "evidence": "内核里已有 38 条 bsd_init 相位标记与三个 exec 标记，只等 bsd_init 真的跑起来",
+   "next": "一条一条读相位标记，定位第一个没走到的调用"
   },
   {
    "id": "S3",
@@ -46,6 +46,27 @@
   }
  ],
  "rounds": [
+  {
+   "run": 581,
+   "time": "17:05",
+   "marker": "（信标可读性：V 数字每 16 次才写一次 + 匹配轮次 q）",
+   "qemu": "macos-26",
+   "result": "**只改可读性**：心跳字母照旧，数字每 16 次写一次；信标加 `q<匹配轮次>` ⇒ 照片能看出匹配在不在推进。"
+  },
+  {
+   "run": 580,
+   "time": "16:52",
+   "marker": "`w6m5c9r0d5`（匹配通了、候选被 probe）",
+   "qemu": "macos-26",
+   "result": "**回退成功**：照片与 543 那张几乎逐行相同 —— `nio: P NioUfs`、`ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"`、`nio: C AppleARMCPU`、`D1..D6` 全在；路标 `w6m5c9`（m5=候选被 probe、c9=9 个候选、根 nub 有名字 I22RP）。"
+  },
+  {
+   "run": 580,
+   "time": "16:29",
+   "marker": "（回退轮：匹配放回启动线程）",
+   "qemu": "macos-26",
+   "result": "**回退轮**：匹配放回启动线程顺序跑、恢复按名字匹配、发布放回 StartIOKitMatching、撤回 NVRAM 跳过；保留资源等待超时与探针。判据：与 543 那张对照（P1 / AppleARFPlatform / MT inline）。"
+  },
   {
    "run": 579,
    "time": "16:07",
@@ -454,14 +475,16 @@
   }
  ],
  "next_actions": [
-  "★ **当前唯一在走的路**（旧 P3 = launchd 主线，拆成 S1–S3）：",
-  "S1 **当前（565）**：候选形状探针。判据：照片上出现 `C<数量>` 与 `F<类别>` / `N` / `X`。",
-  "S2 **下一轮**：按候选的形状修匹配（多半是候选不是 OSDictionary，或类别不是我们的 personality）。判据：屏幕出现 `P1`（候选真的走到 probe）。",
-  "S3 **再下一轮**：匹配成功 → CPU 数发布 → 启动线程过 kperf → bsd_init 相位 → IOBSD → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。",
+  "★ **现在的唯一目标：验证 580 的回退**（不再加新探针、不再改匹配逻辑）。",
+  "判据：与 run 543（11-19 15:20）照片对照 —— 出现 `P1`、`nio: start> com.apple.driver.AppleARFPlatform`、`MT inline` 即为恢复。",
+  "恢复后：追 `nio: bsd_init: calling ...` 相位标记（38 条已在核心里）一路到 `load_init_program()` → `exec /sbin/launchd`。",
+  "★ **纪律一：先比历史照片，再决定改什么。** 探针不是进展，只是找问题的工具。",
+  "★ **纪律二：工具参数里的反斜杠会被吃掉** —— `\\n` 变真换行、行尾续行符消失；一律用 `chr(92)` 在运行时拼。",
   "★ 存储层已定：mockfs RAMDisk，不用 DSU、不用本机 APFS/UFS。",
-  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；推送默认用 macos-26（早上 arm64 有位置；晚上池满时用 macos-15-intel）。"
+  "★ 一轮只推一个 CI；推送用 macos-26（arm64）；构建完直接刷机；早期探针不能依赖时钟。"
  ],
  "notes": [
+  "★★★★★★ **2026-11-20 的教训（今天血的）**\n· **先比历史照片，再决定改什么。** 543 的照片（11-19 15:20）证明匹配当时是通的；\n  我却先改了二十轮（554..579）才去翻它 —— 二十轮全是在坏状态上加探针。\n· **探针不是进展**，只是找问题的工具；找到了就该改，而不是接着加探针。\n· **别把能跑的弄坏**：改并发/改顺序这类结构性东西之前，先确认现状是好的，并记下好的照片。\n· 工具参数里的反斜杠会被吃掉（`\\n`→真换行、行尾续行符消失）；一律用 `chr(92)` 在运行时拼。",
   "★★★★★★ **教训（2026-11-20）：别把能跑的弄坏**\n· 543（2026-11-19 15:20）的照片证明匹配当时是通的：平台专家启动、P1、ArmCpu/NioUfs/AppleARMCPU 都被 probe。\n· 我在 552（=6f087ea）把匹配挪到独立线程 ⇒ 它与启动并发 ⇒ 撞上别人持有的注册表锁 ⇒ 卡死在 `m40`（名字比较）。\n· 之后二十轮都在探针上打转（该做的是回退）。**教训：先比历史照片，再决定改什么。**",
   "★★★★★★ **工具参数里的反斜杠会被吃掉（2026-11-20 反复踩到）**\n· `\\n` 变成真换行 ⇒ 字符串字面量被劈成两行（565）；`\\` 行尾续行符被吃 ⇒ 宏提前结束（569）。\n· **规矩**：凡是补丁/脚本里要出现反斜杠，一律用 `chr(92)` 在运行时拼出来，不要在工具参数里直接写。\n· 检查器已加两条本地检查：**字符串字面量被劈成两行**、**宏体每行都要有续行符**。",
   "★★★★★★ **定时器/时钟在早期启动阶段不工作（2026-11-20 00:50 确认）**\n· `clock_get_uptime()` 在这个阶段返回 0（定时器中断未起）⇒ 任何「每秒/每 N 毫秒」的探针都不会触发。\n· 心跳线程用 `delay()`，所以它只打印一次 `HB 1` 就卡住（信标补丁的注释里早就写着这件事）。\n· 560 的路标写成「每秒打印」，因此一次都没出现 —— **探针不能依赖时钟，要用自己的计数**。\n· 教训：早期启动阶段的探针一律用自旋计数（信标每 200 万次迭代打一个 V 标记）。",
