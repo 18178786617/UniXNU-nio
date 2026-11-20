@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 17:10（★★★★★★ **换账号前的完整交接点。** **当前状态**：580 的回退**已验证有效**（照片与 543 几乎逐行相同：`w6m5c9r0d5`、`nio: P NioUfs`、`ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"`、`D1..D6` 全在）；581 的**视频**又给出决定性证据：**匹配在跑但排不空**（9 秒里 V1938→V20315，同一批 NioUfs/AppleARMCPU 每轮都回来）⇒ `doServiceMatch` 的 `keepGuessing` 无上界 ⇒ **启动线程永远出不来** ⇒ w 停在 6 ⇒ bsd_init 永远轮不到。\n★ 582（已推送，**含 581 的可读性改动**）：**给每个 nub 的匹配轮数加上界（4 轮）** —— 驱动在第一轮就 probe+start，DT 发布出来的节点各自有各自的计数。**\n★ **我要看到的（换账号后照这个读照片即可）**：见看板『下一步要看到什么』一节。**）",
+ "updated": "2026-11-20 17:52（★★★★★★ **583 已刷进手机（17:49:10）** —— 内核 = 582 那版：匹配限 4 轮 + 信标可读性。**等一张照片**：看 `w` 是否从 6 前进、`q` 是否停在 4 附近、有没有 `nio: bsd_init: calling ...`。\n★ 583 打包第一次失败是我自己造成的：上一条被取消的巡场在 fetch 中途被 kill，留下陈旧的 `.git/shallow.lock` ⇒ git 全被挡。清掉锁后重挂巡场即成（**取消巡场任务后要检查 `.git/*.lock`**）。**）",
  "headline": "★★★★★★ **今天最大的教训：先把历史照片摆出来，再决定改什么。** run 543（2026-11-19 15:20）的照片显示匹配当时是通的（平台专家启动、P1、三个驱动被 probe）；破口是我自己 —— commit 6f087ea 把匹配挪到独立线程，与启动并发，卡死在注册表锁上。580 已回退到 543 的行为，接下来只验证它，不再加探针。",
  "distance": "距用户层还剩 **2 步**：**S1 匹配恢复**（580 回退中，判据＝与 543 照片对照）→ **S2 bsd_init 的相位标记走到 load_init_program()/exec launchd**（38 条标记已在核心里，只等 bsd_init 真的跑起来）。★ 每一轮只看一个东西：**与上一张历史照片对照**，而不是加新探针。",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 583,
+   "time": "17:49",
+   "marker": "（= 582 的内核：匹配限 4 轮 + 可读性）",
+   "qemu": "macos-26",
+   "result": "**已刷进手机（17:49:10）**。等照片：w 是否从 6 前进、q 是否停在 4、有没有 bsd_init 相位标记。"
+  },
   {
    "run": 583,
    "time": "17:18",
@@ -496,7 +503,7 @@
   }
  ],
  "next_actions": [
-  "★ **在飞的轮次：583**。**582 从未构建出内核** —— 它被 583 取代时 GitHub 把排队的 run 取消了，`ci-kernel/run-582` 分支不存在 ⇒ 刷不了 582。**583 的内核与 582 逐字相同**（两者之间只差 `progress/state.json` 与 `tools/render-progress.py`，内核相关路径的差异为空）⇒ 刷 583 = 刷 582 的那个内核。**巡场已挂上（task 8PPRxX）**，CI 跑完即自动打包刷机。换账号后若没刷上，手动：`cd /e/nio-unixnu-port && bash tools/watch-round.sh 583`。581 的巡场已放弃、未刷机 ⇒ 手机上还是 580 那一版。",
+  "★ **手机上就是 583**（= 582 的内核：匹配限 4 轮 + 可读性）。**下一步只等一张照片。**换账号后若要继续推进：读照片 → 判读（w / q / bsd_init 相位标记）→ 只改一处 → `python3 device/UniXNU-nio/tools/check-series.py --src .tmp/xnu-8796.101.5` 校验 → 提交推送 → `bash tools/watch-round.sh <新编号>`（**先看有没有陈旧的 .git/*.lock`**）。",
   "★ 刷完 582 拍一张照片，按看板『我要看到什么』一节判读：**w 是否从 6 前进**、有没有 `nio: bsd_init: calling ...`。",
   "★ 若 w 前进到 9 ⇒ 逐条追 bsd_init 相位标记到 `exec /sbin/launchd`（不再加探针）。",
   "★ 若 w 仍停在 6 ⇒ 匹配限轮没生效，把 `nio_rounds` 的上界写进面板再查（面板上会打轮次）。",
@@ -2057,7 +2064,8 @@
    "CI 发布 57MB 内核时可能 HTTP 408 断流 ⇒ 发布步骤已改成重试 5 次、失败即 exit 1（否则 job 绿但内核丢了）。",
    "本地基线树必须是 LF（core.autocrlf=false），否则补丁上下文对不上。",
    "写补丁的 diff 用 `git diff --no-index`；切分描述用 `split('diff --git')`（用 `'--- a/'` 切会把旧 diff 头带进来）。",
-   "机主的手机音量键坏；跑着我们内核时 adb/fastboot 不通，需要机主长按电源键重启。"
+   "机主的手机音量键坏；跑着我们内核时 adb/fastboot 不通，需要机主长按电源键重启。",
+   "· **取消巡场任务后要检查 `.git/*.lock`**（`ls device/UniXNU-nio/.git/*.lock`）：被 kill 的 fetch 会留下`.git/shallow.lock`，下一轮的 git 操作全被挡，报「Another git process seems to be running」。清掉即可。"
   ]
  }
 }
