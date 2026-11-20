@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 13:25（★★★★★★★ **570 照片读出根因了！** `x4 cpurdebug-interface|options-common fAppleRMFabricTrace` ⇒ 被丢的两个候选**都是 donor 的**（AppleRMFabricTrace / AppleARMLightEnLp），它们要的是 Apple 的 nub 名（cpurdebug-interface），我们的 nub 叫 options-common —— 无关。\n★ **真正的发现：我们的静态 personality 压根没进候选集** —— 因为它发布在 `StartIOKitMatching()` 里，而那是**锁存之后**（PE_init_platform 调用）；**锁存期间的扫描（PE_lockdown_iokit，我们 552 把匹配挪到了这里）读的是更早的 catalogue**。\n★ 571：**把 personality 的发布提前到锁存之前**（iokit_post_constructor_init，根 nub attach 之后），两轮扫描都能看到。如果这一轮平台驱动被匹配并 attach，AppleARMSMP/IOCPU 就会发布 CPU 数 ⇒ 启动线程过 kperf ⇒ bsd_init 终于能跑。**）",
+ "updated": "2026-11-20 13:40（★★★ **571 编译失败：`use of undeclared identifier 'rootName'`** —— 我把 `rootName` 的声明搬进了新函数，但留在原地的 DT 报告代码还在用它。已补回声明。\n★ 572 顺带修一个隐患：新函数里**声明在语句之后**（iokit 组件带 `-Werror`，declaration-after-statement 会变成错误）⇒ 已把声明挪到函数开头。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 571,
+   "time": "13:23",
+   "marker": "（编译失败：rootName 未声明）",
+   "qemu": "macos-26",
+   "result": "**编译失败**：rootName 的声明被搬走、报告代码还在用。已补回；并把声明挪到语句之前（iokit 组件带 -Werror）。"
+  },
   {
    "run": 570,
    "time": "12:57",

@@ -1,0 +1,26 @@
+The root nub's name, where the report is
+
+Run 571 did not compile:
+
+  IOStartIOKit.cpp:357:42: error: use of undeclared identifier 'rootName'
+
+The declaration of the root nub's name moved into the publishing function
+with the rest of that block, and the report that prints the name stayed
+behind in StartIOKitMatching().  So the name is declared where the report
+reads it.
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+index 929a91b..c32153b 100644
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -300,6 +300,10 @@ StartIOKitMatching(void)
+ 	nio_publish_static_personalities();
+ 
+ 	{
++		/* nio: the root nub's name, for the report below.  The
++		 * declaration moved into the publishing function, and this
++		 * report stayed here. */
++		const char *rootName = gRootNub->getName();
+ 		/*
+ 		 * What the tree actually holds, now that it is being read
+ 		 * for the first time.

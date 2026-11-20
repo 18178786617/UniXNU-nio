@@ -1,0 +1,36 @@
+The declarations come before the statements
+
+The publishing function opens with a guard and declares its variables after
+it.  The iokit component is built with -Werror, and a declaration after a
+statement is a warning, so the round would have failed on the way in.
+The variables are declared first and the guard stands after them.
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+index c32153b..e668f60 100644
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -215,12 +215,6 @@ static void
+ nio_publish_static_personalities(void)
+ {
+ 	static bool nio_published = false;
+-
+-	if (nio_published) {
+-		return;
+-	}
+-	nio_published = true;
+-
+ 	OSArray      *personalities = OSArray::withCapacity(3);
+ 	OSDictionary *platformExpert = OSDictionary::withCapacity(4);
+ 	OSDictionary *storage        = OSDictionary::withCapacity(3);
+@@ -245,6 +239,11 @@ nio_publish_static_personalities(void)
+ 	OSNumber     *scoreStorage   = OSNumber::withNumber(1000, 32);
+ 	OSNumber     *scoreRoot      = OSNumber::withNumber(500, 32);
+ 
++	if (nio_published) {
++		return;
++	}
++	nio_published = true;
++
+ 	if (personalities && platformExpert && storage && storageRoot &&
+ 	    classPlatform && classStorage && providerExpert && providerDevice &&
+ 	    nameMatch && scorePlatform && scoreStorage && scoreRoot) {
