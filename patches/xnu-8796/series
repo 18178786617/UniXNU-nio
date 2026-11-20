@@ -193,3 +193,4 @@ nio-waypoints-inside-the-matching.patch
 nio-waypoints-inside-the-passive-match.patch
 nio-skip-the-nvram-matching.patch
 nio-skip-where-the-matching-happens.patch
+nio-the-matching-goes-back-to-the-boot-thread.patch
