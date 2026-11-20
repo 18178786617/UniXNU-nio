@@ -187,3 +187,4 @@ nio-publish-personalities-before-lockdown.patch
 nio-root-name-where-the-report-is.patch
 nio-declarations-before-statements.patch
 nio-first-failure-and-root-name.patch
+nio-root-name-declared-here.patch
