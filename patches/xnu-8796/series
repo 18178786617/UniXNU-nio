@@ -200,3 +200,4 @@ nio-the-prelinked-storage-personality-asks-for-its-node.patch
 nio-publish-iobsd-before-the-matching.patch
 nio-skip-the-armcpu-probe-and-publish-the-cpu-count.patch
 nio-run-the-matching-off-the-boot-thread.patch
+nio-declare-no-system-mapper.patch

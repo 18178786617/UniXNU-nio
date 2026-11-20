@@ -1,0 +1,36 @@
+nio: declare no system mapper, so memory allocation can proceed
+
+Run 589 reached bsd_init -- the matching no longer holds the boot
+thread -- and then stopped at a wait with a backtrace:/n
+    waitForSystemMapper
+
+IOMapper::gSystem starts as kUnknown.  checkForSystemMapper()
+(called from the memory-allocation path) waits while that value is
+in the wait state, until a driver calls setMapperRequired(false) to
+declare that the platform has no IOMMU.  This board has no IOMMU and
+no driver here makes that call, so the first kmem_suballoc() in
+bsd_init sleeps for ever and prints the wait and its backtrace.
+
+Set the initial value to kNoMapper instead.  That is the state a
+platform without an IOMMU is supposed to declare: allocations then
+use physical mappings directly and never wait.  One line, at the
+definition of the static, before any allocation can ask.
+
+diff --git a/iokit/Kernel/IOMapper.cpp b/iokit/Kernel/IOMapper.cpp
+index 39ab332..bf0f763 100644
+--- a/iokit/Kernel/IOMapper.cpp
++++ b/iokit/Kernel/IOMapper.cpp
+@@ -60,7 +60,12 @@ OSMetaClassDefineReservedUnused(IOMapper, 13);
+ OSMetaClassDefineReservedUnused(IOMapper, 14);
+ OSMetaClassDefineReservedUnused(IOMapper, 15);
+ 
+-IOMapper * IOMapper::gSystem = (IOMapper *) IOMapper::kUnknown;
++/* nio: this board has no IOMMU.  The default kUnknown makes
++ * checkForSystemMapper() wait for a driver to declare a system
++ * mapper or none; no driver here ever does, so the first
++ * kmem_suballoc() in bsd_init sleeps forever in waitForSystemMapper
++ * (run 589 shows the wait and its backtrace).  Declare none up front. */
++IOMapper * IOMapper::gSystem = (IOMapper *) IOMapper::kNoMapper;
+ 
+ class IOMapperLock {
+ 	IOLock *fWaitLock;
