@@ -111,6 +111,18 @@ def render(state):
                html.escape(str(r.get("result", "")))))
 
     actions = "".join("<li>%s</li>" % html.escape(a) for a in state.get("next_actions", []))
+    guide = ""
+    for title in ("我要看到什么", "给下一个 AI 的说明", "换账号前的交接"):
+        block = state.get(title)
+        if not block:
+            continue
+        guide += "<h2>%s</h2>" % html.escape(title)
+        for sub, items in block.items():
+            guide += "<h3>%s</h3><ul>" % html.escape(sub)
+            for item in items:
+                guide += "<li>%s</li>" % html.escape(item)
+            guide += "</ul>"
+
     notes = "".join("<li>%s</li>" % html.escape(n) for n in state.get("notes", []))
 
     return """<!doctype html>
@@ -129,13 +141,14 @@ def render(state):
 <table><tr><th>轮次</th><th>时间</th><th>标记</th><th>QEMU</th><th>结果</th></tr>%s</table>
 <h2>接下来的动作</h2>
 <ul>%s</ul>
+%s
 <h2>纪律与备注</h2>
 <ul class="notes">%s</ul>
 </body></html>
 """ % (CSS, html.escape(state.get("device", "nio")), html.escape(state.get("updated", "")),
        html.escape(state.get("headline", "")),
        html.escape(state.get("distance", "")), "".join(rail), "".join(phase_rows),
-       "".join(round_rows), actions, notes)
+       "".join(round_rows), actions, guide, notes)
 
 
 def render_md(state):
@@ -157,6 +170,15 @@ def render_md(state):
             r.get("qemu", ""), r.get("result", "")))
     out += ["", "## 接下来的动作", ""]
     out += ["- %s" % a for a in state.get("next_actions", [])]
+    for title in ("我要看到什么", "给下一个 AI 的说明", "换账号前的交接"):
+        block = state.get(title)
+        if not block:
+            continue
+        out += ["", "## %s" % title, ""]
+        for sub, items in block.items():
+            out += ["### %s" % sub, ""]
+            out += ["- %s" % item for item in items]
+            out += [""]
     out += ["", "## 纪律与备注", ""]
     out += ["- %s" % n for n in state.get("notes", [])]
     return "\n".join(out) + "\n"

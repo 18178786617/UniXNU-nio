@@ -1983,5 +1983,74 @@
    "补丁提交：`git -c core.autocrlf=false -c core.safecrlf=false add/commit`，用 `git diff --cached --numstat` 校验行数。",
    "写补丁时用 `git diff --no-index` 生成 diff，描述与 diff 之间只隔一个空行；**切分描述用 `split('diff --git')`**（用 `'--- a/'` 切会带进上一份的 diff 头）。"
   ]
+ },
+ "给下一个 AI 的说明": {
+  "0. 这是什么项目": [
+   "把 iOS 16.5 的 XNU 内核（UniXNU）移植到 MOTO Edge S (XT2125-4, 骁龙 870/SM8250)，UEFI 引导刷机。",
+   "目标：内核起来 → 匹配到平台驱动 → CPU 数发布 → bsd_init → mockfs 根 → exec /sbin/launchd。",
+   "机主是中文用户；所有对外文字用中文；照片是唯一的现场证据。"
+  ],
+  "1. 我要干什么（下一步）": [
+   "**先等 582 的 CI 跑完并刷机**：",
+   "    cd /e/nio-unixnu-port && bash tools/watch-round.sh 582",
+   "  （581 的巡场会自动放弃 —— 新构建取代旧构建；只刷 582。）",
+   "然后让机主拍一张照片，按下面第 3 节判读：w 是否从 6 前进、有没有 `nio: bsd_init: calling ...`。",
+   "**若 w 到了 9**：逐条读 bsd_init 相位标记（38 条已在核心里）：",
+   "    bsd_bufferinit → vfsinit → throttle_init → copyright → mountroot → load_init_program → exec /sbin/launchd",
+   "  第一个没走到的调用就是下一个卡点 ⇒ 只改那一处 ⇒ 再推一轮。",
+   "**若 w 停在 8**：卡在 ml_wait_max_cpus()（等 IOKit 发布 CPU 数）⇒ 查 AppleARMSCP/ArmCpu 有没有 attach。",
+   "**若 w 停在 6**：匹配限轮没生效 ⇒ 把上界值打到面板上再查。",
+   "**不要**再往内核里加探针，除非有一个具体问题要定位。探针不是进展。"
+  ],
+  "2. 需要什么工具、在哪个目录": [
+   "工作根目录：`E://nio-unixnu-port`（Git Bash 下是 `/e/nio-unixnu-port`）",
+   "仓库（改动都在这里）：`E://nio-unixnu-port//device//UniXNU-nio`（GitHub `18178786617/UniXNU-nio`）",
+   "补丁系列：`device/UniXNU-nio/patches/xnu-8796/series`（一行一个补丁名，按顺序应用）",
+   "本地基线树（LF）：`E://nio-unixnu-port//.tmp//xnu-8796.101.5`",
+   "刷机用的 adb/fastboot：`E://nio-unixnu-port//platform-tools//adb.exe` / `fastboot.exe`",
+   "刷机脚本（根目录 tools/）：`tools/watch-round.sh`（巡场+打包+刷机）、`tools/round-image.sh`（出 out/Mu-nio-0.img）、`tools/fb-go.sh`（fastboot boot）",
+   "仓库工具：`tools/check-series.py`（校验补丁系列）、`tools/render-progress.py`（渲染看板）、`tools/check-driver.py`（驱动括号/位宽）",
+   "CI 配置：`device/UniXNU-nio/.github/workflows/kernel.yml`（runner 默认 macos-26；发布内核的步骤要重试 5 次）",
+   "产物与日志：`E://nio-unixnu-port//out//`（kernel.macho、Mu-nio-0.img、watch-<n>.log、ci-logs-<n>/、frames/）",
+   "IPSW 输入：`E://nio-unixnu-port//ios165//`（kernelcache、root 等）",
+   "python3：`C://Users//Administrator//.workbuddy//binaries//python//versions//3.13.12//python3.EXE`（已在 PATH）",
+   "git：PortableGit（已在 PATH）",
+   "ffmpeg（抽视频帧用，PATH 里没有，用全路径）：",
+   "    C://Users//Administrator//.dsh//dsh-runtimes//dsh-primary-runtime//dependencies//python//Lib//site-packages//imageio_ffmpeg//binaries//ffmpeg-win-x86_64-v7.1.exe",
+   "  用法：`ffmpeg -ss <秒> -i <mp4> -frames:v 1 -vf crop=720:900:0:200 -y out/frames/f<秒>.png`",
+   "（视频 720x1280，屏幕在画面上部；裁 crop=720:900:0:200 能看清信标行）"
+  ],
+  "3. 照片/视频怎么读": [
+   "**信标行**（最重要）：`V128 w6m5c9q4 ...`",
+   "   V=心跳（每 16 拍才写一次数字，照片能读）、w=启动线程路标、m=匹配路标、c=候选个数、q=匹配轮次",
+   "   w 的含义：1..5=早期引导，6=正在跑匹配，7=过了锁存，8=vm_set_restrictions 之后，9=正要调 bsd_init()，10..14=bsd_init 内部",
+   "**面板逐行的 `nio: C <类名>` / `nio: P <类名>` / `D1..D6`** = 匹配的进展（候选被 probe 被 detach 被放进 start list）",
+   "**`nio: bsd_init: calling ...`** = bsd_init 的相位标记（38 条），逐条出现就是逐条走过",
+   "视频比照片强：抽 3~5 帧对比 V 的数字与新增行，能直接判断『在跑』还是『卡住』。"
+  ],
+  "4. 判读纪律（今天血的）": [
+   "**先比历史照片，再决定改什么。** 543（2026-11-19 15:20，commit 14d834b）是已知的好状态：",
+   "  平台专家 AppleARFPlatform 启动、P1、ArmCpu/NioUfs/AppleARMCPU 都被 probe。",
+   "  今天的教训：我在那之后把匹配挪到独立线程（6f087ea）⇒ 并发 ⇒ 匹配卡死 ⇒ 二十轮都在坏状态上加探针。",
+   "**工具参数里的反斜杠会被吃掉**：`\\n` 变真换行、行尾续行符消失 ⇒ 字符串被劈开/宏提前结束 ⇒ 编译失败。",
+   "  规矩：补丁/脚本里要出现反斜杠，一律用 `chr(92)` 在运行时拼出来。",
+   "**同一份『期望值』不写两遍**；探针的写入端与校验端公式不能漂移。",
+   "**console 打印会永久卡住**，关键进度一律走面板（fbMark/信标）。"
+  ],
+  "5. 一轮的标准流程": [
+   "1. 读上一张照片 ⇒ 写下**一个**具体问题",
+   "2. 改代码（补丁追加到 series 末尾，描述与 diff 之间空一行）",
+   "3. 本地校验：`python3 device/UniXNU-nio/tools/check-series.py --src .tmp/xnu-8796.101.5`（必须 patches=N applied=N failed=0 且括号平衡）",
+   "4. 提交：`git -c core.autocrlf=false -c core.safecrlf=false add/commit`（用 `git diff --cached --numstat` 校验行数）",
+   "5. 推送 ⇒ 等 CI 编号（ci-started/run-<n> 分支）",
+   "6. `bash tools/watch-round.sh <编号>` 后台跑 ⇒ 成功即自动打包刷机",
+   "7. 看照片 ⇒ 回到 1。一次只推一个 CI；CI 编号 ≠ 轮次号。"
+  ],
+  "6. 已知的坑": [
+   "CI 发布 57MB 内核时可能 HTTP 408 断流 ⇒ 发布步骤已改成重试 5 次、失败即 exit 1（否则 job 绿但内核丢了）。",
+   "本地基线树必须是 LF（core.autocrlf=false），否则补丁上下文对不上。",
+   "写补丁的 diff 用 `git diff --no-index`；切分描述用 `split('diff --git')`（用 `'--- a/'` 切会把旧 diff 头带进来）。",
+   "机主的手机音量键坏；跑着我们内核时 adb/fastboot 不通，需要机主长按电源键重启。"
+  ]
  }
 }
