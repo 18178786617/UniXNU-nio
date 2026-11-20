@@ -1,0 +1,95 @@
+The door the candidates were turned away at
+
+Run 567's beacon said w8m3c2r0 OSDictionary: the matching was given two
+candidates, they are dictionaries, and they were not turned away before the
+loop's body.  So they went in and were turned away inside it -- and the
+reasons for that live in NIO_DROP, on the panel, once.
+
+A mark written once is gone by the time the console text catches up with
+it, so the reason rides with the beacon now: d is the reason of the last
+door the candidates were turned away at, zero when none has been, and the
+class after it is the personality that was turned away.  The numbers are
+the matching's own:
+
+  1  the candidate is a dext and dexts are off
+  2  a dext relaunch is needed and the budget is spent
+  3  the match category was consumed by another client
+  4  the properties could not be copied
+  5  the nub does not match the personality
+  6  the kext that holds the personality is not loaded
+  7  the client is being terminated for replacement
+  8  the match category was consumed
+  9  the personality is not the one being rematched
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index a3b6916..0b5f42a 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -502,10 +502,14 @@ volatile int nio_match_waypoint = 0;
+  *
+  * c is the number of candidates the matching was given, r why the
+  * last one was turned away (0 is none, 1 a notifier, 2 something
+- * that is not a dictionary) and f the class of that candidate.
++ * that is not a dictionary), d the reason the last one inside the
++ * loop was turned away (0 is none, 1 to 9 are the reasons of the
++ * matching's own doors), and after them the class of the personality
++ * that was turned away.
+  */
+ volatile unsigned int nio_cand_count = 0;
+ volatile unsigned int nio_cand_reason = 0;
++volatile unsigned int nio_drop_reason = 0;
+ char nio_cand_class[32] = "?";
+ 
+ /* nio: a beacon that never sleeps.  The heartbeat thread below uses delay(),
+@@ -538,6 +542,8 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 				nio_dc_putu(nio_cand_count);
+ 				nio_dc_puts("r");
+ 				nio_dc_putu(nio_cand_reason);
++				nio_dc_puts("d");
++				nio_dc_putu(nio_drop_reason);
+ 				nio_dc_puts(" ");
+ 				nio_dc_puts(nio_cand_class);
+ 				nio_dc_puts(" ");
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index ffa248a..e820039 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -3,6 +3,7 @@
+ extern volatile int nio_match_waypoint;
+ extern volatile unsigned int nio_cand_count;
+ extern volatile unsigned int nio_cand_reason;
++extern volatile unsigned int nio_drop_reason;
+ extern char nio_cand_class[32];
+ 
+ /*
+@@ -4064,6 +4065,23 @@ nio_reason_rank(int reason)
+ 			nio_best_rank = nio_reason_rank(n); \
+ 			nio_class_name(match, nio_best_name, 24); \
+ 		} \
++		/* nio: the reason and the class, for the beacon.
++
++		 * A mark written once is gone when the console text
++
++		 * catches up with it, and the beacon is written every
++
++		 * fourth mark, so the last reason is always on the
++
++		 * screen. */ \
++		nio_drop_reason = (unsigned int)(n); \
++		nio_class_name(match, nio_cand_class, 32); \
++		/* nio: the reason and the class, for the beacon.
++		 * A mark written once is gone when the console text
++		 * catches up with it, and the beacon is written every
++		 * fourth mark, so the last reason is always on the
++		 * screen. */ \
++		nio_class_name(match, nio_cand_class, 32); \
+ 		nio_nreasons++; \
+ 		/* nio: the same reason on the panel.  The console is where the boot \
+ 		 * went silent, so the summary below never arrived on the screen; \
+@@ -4219,6 +4237,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 	 * are always on the screen. */
+ 	nio_cand_count = matches ? matches->getCount() : 0;
+ 	nio_cand_reason = 0;
++	nio_drop_reason = 0;
+ 	/* nio: how many candidates this call was given, on the panel.
+ 	 *
+ 	 * The matching runs, the M marks count its rounds, and the panel
