@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 17:00（★★★★★★★ **回退成功！580 的照片与 543 那张几乎逐行相同。** 路标 `w6m5c9r0d5`：w6=启动线程正在跑匹配（顺序跑 ✓）、**m5=候选真的被 probe 了**、**c9=catalogue 里 9 个候选（我们的 personality 进去了）**、根 nub 有名字了（`I22RP` ⇒ 设备树被找到）。照片里 `nio: C NioUfs` / `P:nic: ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"` / `nio: P NioUfs` / `nio: C AppleARMCPU` / `D1..D6` / `nio: cand done AppleARMCPU` **全部回来了**。\n★ **不需要再推 CI**：让它跑一会儿，再拍一张，看 w 是否走到 7/8/9，以及有没有 `nio: bsd_init: calling ...`。**）",
+ "updated": "2026-11-20 17:20（★★★★★★★ **视频给出决定性证据：匹配在跑，但永远排不空。** 0.5s 帧 `V1938`、9.5s 帧 `V20315` ⇒ 每秒约 2000 拍；两次都出现同样的 `nio: C NioUfs` / `ufs probe #26 provider=cpu7 compatible=\"qcom,kryo\"` / `nio: P NioUfs` ⇒ **同一批候选每轮都回来**。\n★ 根因：`doServiceMatch` 的 `keepGuessing` 只要服务又被要求配置就一直为真 ⇒ 同一个 nub 被无限重匹配 ⇒ **启动线程（现在在跑匹配）永远出不来** ⇒ w 停在 6 ⇒ bsd_init 永远轮不到。\n★ 582：**给每个 nub 的匹配轮数加上界（4 轮）** —— 驱动在第一轮就 probe+start，DT 发布出来的节点各自有各自的计数。这一轮同时含 581 的可读性改动（V 数字每 16 拍写一次 + 信标带 `q<匹配轮次>`）。**）",
  "headline": "★★★★★★ **今天最大的教训：先把历史照片摆出来，再决定改什么。** run 543（2026-11-19 15:20）的照片显示匹配当时是通的（平台专家启动、P1、三个驱动被 probe）；破口是我自己 —— commit 6f087ea 把匹配挪到独立线程，与启动并发，卡死在注册表锁上。580 已回退到 543 的行为，接下来只验证它，不再加探针。",
  "distance": "距用户层还剩 **2 步**：**S1 匹配恢复**（580 回退中，判据＝与 543 照片对照）→ **S2 bsd_init 的相位标记走到 load_init_program()/exec launchd**（38 条标记已在核心里，只等 bsd_init 真的跑起来）。★ 每一轮只看一个东西：**与上一张历史照片对照**，而不是加新探针。",
  "phases": [
@@ -22,11 +22,11 @@
   },
   {
    "id": "S2",
-   "name": "追 bsd_init 的相位标记到用户层（不再加新探针）",
+   "name": "让匹配有上界，boot 线程走出匹配",
    "status": "进行中",
-   "criteria": "面板出现 \"nio: bsd_init: calling ...\" 系列标记，直到 load_init_program / exec launchd",
-   "evidence": "内核里已有 38 条 bsd_init 相位标记与三个 exec 标记，只等 bsd_init 真的跑起来",
-   "next": "一条一条读相位标记，定位第一个没走到的调用"
+   "criteria": "w 从 6 走到 7/8/9，并出现 \"nio: bsd_init: calling ...\" 相位标记",
+   "evidence": "581 视频：匹配每轮重复同一批候选 ⇒ keepGuessing 无上界 ⇒ 582 限 4 轮",
+   "next": "限轮后看 w 是否前进；前进即追 bsd_init 相位标记"
   },
   {
    "id": "S3",
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 581,
+   "time": "16:58",
+   "marker": "视频：V1938→V20315，同一批候选每轮都回来",
+   "qemu": "macos-26",
+   "result": "**视频证明匹配在跑但排不空**（同一批 NioUfs/AppleARMCPU 每轮都回来）⇒ `keepGuessing` 无上界 ⇒ 启动线程永远出不来。582：每个 nub 的匹配限 4 轮。"
+  },
   {
    "run": 581,
    "time": "17:05",

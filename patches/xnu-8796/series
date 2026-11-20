@@ -195,3 +195,4 @@ nio-skip-the-nvram-matching.patch
 nio-skip-where-the-matching-happens.patch
 nio-the-matching-goes-back-to-the-boot-thread.patch
 nio-a-photograph-can-read-the-beacon.patch
+nio-the-matching-has-a-number-of-rounds.patch
