@@ -1,0 +1,83 @@
+Publish IOBSD before the matching starts
+
+Two personalities on this board ask for the IOBSD resource:
+
+    'IOClass'         = NativeAES;
+    'IOProviderClass' = IOResources;
+    'IOResourceMatch' = IOBSD;
+
+    'IOClass'         = NativeRamBlock;
+    'IOProviderClass' = IOResources;
+    'IOResourceMatch' = IOBSD;
+
+A driver that asks for a resource waits for it in startCandidate(), and
+that wait is the "nio: WAIT IOBSD" line on the panel.  The resource is
+published by IOKitBSDInit(), which bsd_init() calls -- and bsd_init() runs
+at waypoint 9, after the matching, which runs at waypoint 6.  So the two
+wait for each other: the matching waits for a resource that only comes
+after the matching, and the boot never gets past it.  The photographs of
+every round since 549 show that wait, and the board stops there.
+
+The resource does not have to mean what it means on a Mac.  It says that the
+BSD side of IOKit is up.  This board's root filesystem is not on a BSD
+volume at all: it is the mockfs image in RAM that the loader puts into the
+device tree, and the rootfs.img in it carries the real launchd and the real
+dyld.  Nothing on the path to the userland needs the storage driver to
+bring a real BSD volume up, and the storage driver on this board never
+publishes the resource anyway -- it matches for observation only and does
+not touch the controller.
+
+So the resource is published here, before the matching, and the two
+personalities that wait for it walk straight past it.  The wait ends
+immediately, because checkResource() looks the resource up first and
+returns as soon as it is there.  It is published again by IOKitBSDInit()
+when bsd_init() runs, which is the genuine publication and the one that
+matters; this one only lets the matching finish.
+
+The line on the panel says the resource was published, and that it was
+published early, so a photograph says which boot published it.
+
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -317,6 +317,41 @@ StartIOKitMatching(void)
+ 	 * the way out: a panel that shows match go and no match ret is still
+ 	 * matching, one that shows both has moved on to bsd_init. */
+ 	printf("\nnio: IOKit match go");
++	/*
++	 * nio: publish IOBSD before the matching starts.
++	 *
++	 * Two personalities on this board ask for the IOBSD resource:
++	 * NativeAES and NativeRamBlock, both with 'IOResourceMatch' =
++	 * IOBSD and 'IOProviderClass' = IOResources.  A driver that asks
++	 * for a resource waits for it in startCandidate(), and that wait
++	 * is the "nio: WAIT IOBSD" line on the panel.
++	 *
++	 * The resource is published by IOKitBSDInit(), which bsd_init()
++	 * calls -- and bsd_init() runs at waypoint 9, after the matching,
++	 * which runs at waypoint 6.  So the two wait for each other: the
++	 * matching waits for a resource that only comes after the
++	 * matching, and the boot never gets past it.  The photographs of
++	 * every round since 549 show that wait, and the board stops
++	 * there.
++	 *
++	 * The resource does not have to mean what it means on a Mac.  It
++	 * says that the BSD side of IOKit is up.  This board's root
++	 * filesystem is not on a BSD volume: it is the mockfs image in
++	 * RAM that the loader puts into the device tree, and the
++	 * rootfs.img in it carries the real launchd and the real dyld.
++	 * Nothing on the path to the userland needs the storage driver
++	 * to bring a real BSD volume up, and the storage driver on this
++	 * board never publishes the resource anyway -- it matches for
++	 * observation only and does not touch the controller.
++	 *
++	 * So it is published here, before the matching, and the two
++	 * personalities that wait for it walk straight past it.  It is
++	 * published again by IOKitBSDInit() when bsd_init() runs, which
++	 * is the genuine publication and the one that matters; this one
++	 * only lets the matching finish.
++	 */
++	IOService::publishResource("IOBSD");
++	printf("\nnio: IOBSD published early");
+ 	/*
+ 	 * nio: publish the personalities of the drivers that are linked into
+ 	 * this kernel as static archives.

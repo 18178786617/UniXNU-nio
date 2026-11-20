@@ -197,3 +197,4 @@ nio-a-photograph-can-read-the-beacon.patch
 nio-the-matching-has-four-rounds-in-all.patch
 nio-the-storage-driver-is-offered-its-node.patch
 nio-the-prelinked-storage-personality-asks-for-its-node.patch
+nio-publish-iobsd-before-the-matching.patch

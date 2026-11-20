@@ -113,11 +113,39 @@ def main():
             cpu_regs = tuple(cpu["affinity"] for cpu in hardware["cpus"])
         else:
             cpu_regs = tuple(int(v, 0) for v in args.cpu_regs.split(","))
+        # nio: the root volume's UUID, when the command line does not name it.
+        #
+        # The kernel mounts the root volume by UUID: it reads
+        # /chosen/root-matching out of the device tree, finds the IOMedia
+        # whose UUID property matches, and mounts that one.  Without that
+        # node the kernel has nothing to match against, so it mounts
+        # nothing and never starts launchd -- and it says nothing about it
+        # either, because the node that would have told it is the one that
+        # is missing.
+        #
+        # The board knows which volume it wants.  board.toml names it under
+        # [payload.adt] as root_match_volume_uuid, and that is the UUID of
+        # the OS window in the userdata image this board writes: the
+        # volume in out/userdata/userdata-root.img with that UUID is
+        # "SydneyF20F66.D22D221OS", 4.89 GiB, read out of the image with
+        # tools/apfs-volumes.py.
+        #
+        # The value was in board.toml all along and nothing carried it into
+        # the tree, because the step that generates the ADT passed only
+        # --output and --dram-size.  So it is read from board.toml here,
+        # and the command line still wins.
+        root_uuid = args.root_match_volume_uuid
+        if root_uuid is None:
+            board = tomllib.loads((REPO / "board.toml").read_text())
+            root_uuid = board.get("payload", {}).get("adt", {}).get(
+                "root_match_volume_uuid")
+            if root_uuid:
+                print("nio ADT: root volume UUID %s from board.toml" % root_uuid)
         tree = build_tree(
             hardware, dram_size=args.dram_size,
             cpu_regs=cpu_regs,
             psci_method=args.psci_method, owned_memory_size=args.owned_memory_size,
-            root_match_volume_uuid=args.root_match_volume_uuid,
+            root_match_volume_uuid=root_uuid,
             unique_chip_id=args.unique_chip_id, chip_id=args.chip_id,
             data_ramdisk=args.data_ramdisk, packed_data_ramdisk=args.packed_data_ramdisk,
             trust_cache=args.trust_cache, ipad_identity=args.ipad_identity)
