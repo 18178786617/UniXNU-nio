@@ -1,0 +1,88 @@
+Skip the ArmCpu probe, publish the CPU count here
+
+The photograph of run 587 says where the boot stops.  The panel reads
+
+    1215  nio: C ArmCpu
+    1216  P1
+
+and no "nio: P" line follows it.  P1 is written immediately before a
+driver's probe() is called; "nio: P" is written immediately after it
+returns.  Eight rounds in a row (580..587) stop at the same place, so
+the boot thread -- which runs the matching -- is inside that probe and
+never comes out.
+
+The same photograph says two earlier fixes worked.  "S1" is on the
+panel, which means startCandidate() was reached; before the IOBSD
+publication was moved ahead of the matching, the boot stopped before
+that mark in a two-second resource wait.  And "D3 D4" follows the
+AppleARMCPU candidate, which means its probe returned a driver.
+
+The userland does not need ArmCpu.  The root filesystem this board
+boots is the mockfs image in RAM, and the CPU count the kernel needs is
+already in the machine topology: ml_parse_cpu_topology() has read the
+eight CPUs out of /cpus before this point.  So the probe is not called,
+and the count is published directly instead of waiting for a driver to
+publish it.
+
+That second change closes the gate the board recorded at run 564.
+The boot thread got past the matching then and stopped at w8m3, inside
+kperf_init_early(), whose first act is ml_wait_max_cpus().  That call
+sleeps until some driver calls ml_set_max_cpus().  On Apple hardware it
+is AppleARMSMP, which is not in this kernel; here it is
+IOCPUInterruptController::initCPUInterruptController(), reached only
+from ArmCpu::start() -- the driver whose probe we have just skipped.
+Waiting for it would be waiting for a count nobody can publish.
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index b60f2ec..3784969 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4652,6 +4652,22 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ #endif
+ 				nio_u_mark("\nP1");
+ 				nio_match_waypoint = 4;
++				/* nio: this board's ArmCpu driver never returns from probe():
++				 * its start() waits on the GIC/CPU topology that the loader does
++				 * not provide, and the boot thread -- which runs the matching --
++				 * parks here forever (photographs 580..587 all stop at "P1" with
++				 * no "nio: P" after it).  The userland does not need it: the root
++				 * is the mockfs RAMDisk and the CPU count is published in
++				 * startup.c below.  Do not call it. */
++				if (symbol && !strcmp(symbol->getCStringNoCopy(), "ArmCpu")) {
++					nio_u_mark("\nSKIP ArmCpu probe");
++					newInst = NULL;
++					nio_match_waypoint = 5;
++					inst->detach( this );
++					nio_u_mark("\nD1");
++					nio_u_mark("\nD2");
++					continue;
++				}
+ 				newInst = inst->probe( this, &score );
+ 				nio_match_waypoint = 5;
+ 				nio_u_mark("\nnio: P ");
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index d7e06a9..5c4ff34 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -1101,6 +1101,21 @@ kernel_bootstrap_thread(void)
+ 	vm_set_restrictions(machine_info.max_cpus);
+ 	nio_boot_waypoint = 8;
+ 
++	/* nio: publish the CPU count here rather than waiting for IOKit.
++	 *
++	 * ml_wait_max_cpus() (the first thing kperf_init_early() does) sleeps
++	 * until some driver calls ml_set_max_cpus().  On Apple hardware that is
++	 * AppleARMSMP, which is not in this kernel.  Here it is
++	 * IOCPUInterruptController::initCPUInterruptController(), reached only
++	 * from ArmCpu::start() -- the driver whose probe we just skipped because
++	 * it never returns.  Otherwise the boot thread waits for a count nobody
++	 * can publish, exactly as run 564 showed (w8m3).
++	 *
++	 * The topology is parsed from /cpus by now: 8 CPUs, one "running".
++	 * Publish that count. */
++	extern void ml_set_max_cpus(unsigned int);
++	ml_set_max_cpus((unsigned int)(ml_get_max_cpu_number() + 1));
++	nio_dc_puts("\nnio: CPU count published");
+ 
+ #if KPERF
+ 	kperf_init_early();

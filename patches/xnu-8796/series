@@ -198,3 +198,4 @@ nio-the-matching-has-four-rounds-in-all.patch
 nio-the-storage-driver-is-offered-its-node.patch
 nio-the-prelinked-storage-personality-asks-for-its-node.patch
 nio-publish-iobsd-before-the-matching.patch
+nio-skip-the-armcpu-probe-and-publish-the-cpu-count.patch
