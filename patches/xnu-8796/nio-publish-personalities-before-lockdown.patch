@@ -1,0 +1,200 @@
+The personalities are published before the lockdown
+
+Run 570's panel said d5: the candidates were turned away by the passive
+match, the one that asks whether the nub is the thing the personality
+wants.  The two candidates were the donor's -- AppleRMFabricTrace and
+AppleARMLightEnLp -- and the name they wanted was cpurdebug-interface
+against a nub called options-common.  That is what the donor's
+personalities ask for, and it is not what this board is.
+
+Our own personalities were not among the candidates at all, and that is the
+whole of it: they were published into the catalogue too late.
+
+There are two matching sweeps.  PE_lockdown_iokit() runs during the
+lockdown, before bsd_init(), and this board's matching thread runs it.
+StartIOKitMatching() runs after the lockdown, from PE_init_platform().  The
+static personalities were published from the second one, into a catalogue
+that the first one had already read.  So the lockdown sweep saw only the
+donor's personalities, the platform driver was never matched, no driver
+attached, the CPU count was never published -- and the boot thread waits
+for that count in ml_wait_max_cpus(), for ever.
+
+So the publication moves earlier: it happens from iokit_post_constructor_init,
+right after the root nub is attached and long before the lockdown.  The
+sweep that comes after the lockdown still finds them there, so it is
+published once and the second sweep reads the same catalogue.
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+index f3eda27..929a91b 100644
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -57,6 +57,7 @@ extern "C" {
+ void InitIOKit(void *dtTop);
+ void ConfigureIOKit(void);
+ void StartIOKitMatching(void);
++static void nio_publish_static_personalities(void);
+ void IORegistrySetOSBuildVersion(char * build_version);
+ void IORecordProgressBackbuffer(void * buffer, size_t size, uint32_t theme);
+ 
+@@ -162,6 +163,12 @@ InitIOKit(void *dtTop)
+ 	}
+ 	gRootNub->attach(NULL);
+ 
++	/* nio: the personalities go into the catalogue before the
++	 * lockdown, because the sweep during the lockdown reads the
++	 * catalogue as it is then, and that sweep is the one that has
++	 * to match the platform driver. */
++	nio_publish_static_personalities();
++
+ 	/* If the bootstrap segment set up a function to record startup
+ 	 * extensions, call it now.
+ 	 */
+@@ -177,6 +184,91 @@ ConfigureIOKit(void)
+ 	gRootNub->configureDefaults();
+ }
+ 
++/* nio: publish the personalities of the drivers that are linked into this
++ * kernel as static archives.
++ *
++ * A personality is normally published by OSKext, out of the kext's own info
++ * dictionary.  A static archive has no info dictionary: it is not a bundle,
++ * it is not in the prelink record, and there is no OSKext object for it, so
++ * nothing ever read the IOKitPersonalities in its Info.plist.  The two
++ * drivers on this board that matter -- the platform expert which reads the
++ * device tree, and the storage driver which talks to the UFS controller --
++ * were therefore never matched, their start() was never called, and their
++ * Info.plist files described wishes nobody heard.
++ *
++ * The catalogue is the one OSKext publishes into, and this is the moment to
++ * use it: the matching sweep reads what is in the catalogue when it starts.
++ *
++ * nio: and the moment is not this one any more.  The sweep that runs during
++ * the lockdown -- PE_lockdown_iokit() -- runs before bsd_init(), and this
++ * function is called from PE_init_platform(), which is after the lockdown.
++ * So the personalities were published into a catalogue that the sweep had
++ * already read: the lockdown sweep saw only the donor's personalities, the
++ * platform driver was never matched, no driver attached, the CPU count was
++ * never published, and the boot thread waited for it for ever.
++ *
++ * So the publication happens earlier -- from iokit_post_constructor_init(),
++ * right after the root nub is attached and long before the lockdown -- and
++ * this function calls it too, for the sweep that comes after the lockdown.
++ */
++static void
++nio_publish_static_personalities(void)
++{
++	static bool nio_published = false;
++
++	if (nio_published) {
++		return;
++	}
++	nio_published = true;
++
++	OSArray      *personalities = OSArray::withCapacity(3);
++	OSDictionary *platformExpert = OSDictionary::withCapacity(4);
++	OSDictionary *storage        = OSDictionary::withCapacity(3);
++	OSDictionary *storageRoot    = OSDictionary::withCapacity(3);
++	OSString     *classPlatform  = OSString::withCString("ArmDTPlatform");
++	OSString     *classStorage   = OSString::withCString("NioUfs");
++	OSString     *providerExpert = OSString::withCString("IOPlatformExpertDevice");
++	OSString     *providerDevice = OSString::withCString("IOPlatformDevice");
++	/*
++	 * The root nub takes its name from the device tree's root
++	 * node, and the kernel replaces that name with the first
++	 * string of the node's compatible property.  This board
++	 * forges the identity of another device, so that first string
++	 * is the board name and not the generic "device-tree" the
++	 * upstream driver was written against.  Taking the name from
++	 * the nub itself matches whatever the tree says, and the line
++	 * below says out loud what it was.
++	 */
++	const char   *rootName      = gRootNub->getName();
++	OSString     *nameMatch      = OSString::withCString(rootName ? rootName : "device-tree");
++	OSNumber     *scorePlatform  = OSNumber::withNumber(5000, 32);
++	OSNumber     *scoreStorage   = OSNumber::withNumber(1000, 32);
++	OSNumber     *scoreRoot      = OSNumber::withNumber(500, 32);
++
++	if (personalities && platformExpert && storage && storageRoot &&
++	    classPlatform && classStorage && providerExpert && providerDevice &&
++	    nameMatch && scorePlatform && scoreStorage && scoreRoot) {
++		platformExpert->setObject("IOClass", classPlatform);
++		platformExpert->setObject("IOProviderClass", providerExpert);
++		platformExpert->setObject("IONameMatch", nameMatch);
++		platformExpert->setObject("IOProbeScore", scorePlatform);
++		personalities->setObject(platformExpert);
++
++		storage->setObject("IOClass", classStorage);
++		storage->setObject("IOProviderClass", providerDevice);
++		storage->setObject("IOProbeScore", scoreStorage);
++		personalities->setObject(storage);
++
++		storageRoot->setObject("IOClass", classStorage);
++		storageRoot->setObject("IOProviderClass", providerExpert);
++		storageRoot->setObject("IOProbeScore", scoreRoot);
++		personalities->setObject(storageRoot);
++
++		printf("\nnio: publishing %d static personalities",
++		       (int) personalities->getCount());
++		gIOCatalogue->addDrivers(personalities, false);
++	}}
++
+ void
+ StartIOKitMatching(void)
+ {
+@@ -205,55 +297,9 @@ StartIOKitMatching(void)
+ 	 * moment to use it: the matching sweep starts in the call below and
+ 	 * reads what is in the catalogue when it starts.
+ 	 */
+-	{
+-		OSArray      *personalities = OSArray::withCapacity(3);
+-		OSDictionary *platformExpert = OSDictionary::withCapacity(4);
+-		OSDictionary *storage        = OSDictionary::withCapacity(3);
+-		OSDictionary *storageRoot    = OSDictionary::withCapacity(3);
+-		OSString     *classPlatform  = OSString::withCString("ArmDTPlatform");
+-		OSString     *classStorage   = OSString::withCString("NioUfs");
+-		OSString     *providerExpert = OSString::withCString("IOPlatformExpertDevice");
+-		OSString     *providerDevice = OSString::withCString("IOPlatformDevice");
+-		/*
+-		 * The root nub takes its name from the device tree's root
+-		 * node, and the kernel replaces that name with the first
+-		 * string of the node's compatible property.  This board
+-		 * forges the identity of another device, so that first string
+-		 * is the board name and not the generic "device-tree" the
+-		 * upstream driver was written against.  Taking the name from
+-		 * the nub itself matches whatever the tree says, and the line
+-		 * below says out loud what it was.
+-		 */
+-		const char   *rootName      = gRootNub->getName();
+-		OSString     *nameMatch      = OSString::withCString(rootName ? rootName : "device-tree");
+-		OSNumber     *scorePlatform  = OSNumber::withNumber(5000, 32);
+-		OSNumber     *scoreStorage   = OSNumber::withNumber(1000, 32);
+-		OSNumber     *scoreRoot      = OSNumber::withNumber(500, 32);
+-
+-		if (personalities && platformExpert && storage && storageRoot &&
+-		    classPlatform && classStorage && providerExpert && providerDevice &&
+-		    nameMatch && scorePlatform && scoreStorage && scoreRoot) {
+-			platformExpert->setObject("IOClass", classPlatform);
+-			platformExpert->setObject("IOProviderClass", providerExpert);
+-			platformExpert->setObject("IONameMatch", nameMatch);
+-			platformExpert->setObject("IOProbeScore", scorePlatform);
+-			personalities->setObject(platformExpert);
+-
+-			storage->setObject("IOClass", classStorage);
+-			storage->setObject("IOProviderClass", providerDevice);
+-			storage->setObject("IOProbeScore", scoreStorage);
+-			personalities->setObject(storage);
+-
+-			storageRoot->setObject("IOClass", classStorage);
+-			storageRoot->setObject("IOProviderClass", providerExpert);
+-			storageRoot->setObject("IOProbeScore", scoreRoot);
+-			personalities->setObject(storageRoot);
+-
+-			printf("\nnio: publishing %d static personalities",
+-			       (int) personalities->getCount());
+-			gIOCatalogue->addDrivers(personalities, false);
+-		}
++	nio_publish_static_personalities();
+ 
++	{
+ 		/*
+ 		 * What the tree actually holds, now that it is being read
+ 		 * for the first time.

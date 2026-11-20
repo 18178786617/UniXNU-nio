@@ -183,3 +183,4 @@ nio-drop-reason-rides-the-beacon.patch
 nio-which-check-said-no.patch
 nio-first-dropped-candidate.patch
 nio-drop-macro-whole-again.patch
+nio-publish-personalities-before-lockdown.patch
