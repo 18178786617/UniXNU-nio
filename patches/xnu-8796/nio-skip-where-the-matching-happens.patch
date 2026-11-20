@@ -1,0 +1,80 @@
+The skip goes where the matching happens
+
+Run 578's panel said w8m40 again, and there was no SKIP on it at all: the
+skip never ran.  It could not have.  The skip list was in startMatching(),
+and the matching does not go through startMatching(): the config thread
+takes a job off the queue and calls doServiceMatch() on the nub in it.
+startMatching() is what a service calls when it registers, and the matching
+of the nub that registered is done here, later, from the job queue.
+
+So the skip moves to doServiceMatch(), where the matching actually
+happens, and the name of the nub being matched is written to the panel so
+that which one it is can be read off a photograph.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index b931f58..d7111f6 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -534,6 +534,7 @@ volatile unsigned int nio_first_fail = 0;
+ char nio_first_want[24] = "-";
+ char nio_first_have[24] = "-";
+ char nio_root_name[32] = "-";
++char nio_match_nub[24] = "-";
+ 
+ /* nio: a beacon that never sleeps.  The heartbeat thread below uses delay(),
+  * which needs working timers; it prints HB 1 and stops, and that tells us
+@@ -581,6 +582,8 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 				nio_dc_puts(nio_first_class);
+ 				nio_dc_puts(" N");
+ 				nio_dc_puts(nio_root_name);
++				nio_dc_puts(" n");
++				nio_dc_puts(nio_match_nub);
+ 				nio_dc_puts(" ");
+ 			}
+ 		}
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index ad01dc1..5291eb2 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -7,6 +7,7 @@ extern volatile unsigned int nio_drop_reason;
+ extern volatile unsigned int nio_match_fail;
+ extern char nio_match_want[24];
+ extern char nio_match_have[24];
++extern char nio_match_nub[24];
+ extern char nio_first_class[24];
+ extern volatile unsigned int nio_drop_count;
+ extern volatile unsigned int nio_first_fail;
+@@ -5878,6 +5879,33 @@ IOService::canTerminateForReplacement(IOService * client)
+ void
+ IOService::doServiceMatch( IOOptionBits options )
+ {
++	/* nio: which nub is being matched, on the panel, and the
++	 * names that are not matched at all.
++	 *
++	 * The matching runs from here: the config thread takes a job
++	 * and calls doServiceMatch on the nub in it.  The skip list
++	 * that lived in startMatching() never saw it -- that function
++	 * is called when a service registers, and the matching of the
++	 * nub that was registered is what is done here.  So the skip
++	 * is here now, where the matching actually happens.
++	 */
++	{
++		const char *nio_name = getName();
++		strlcpy(nio_match_nub, nio_name ? nio_name : "-", sizeof(nio_match_nub));
++		const char *nio_skip_names[] = {
++			"AppleMobileFileIntegrity",
++			"IOHIDResource",
++			"options-common",
++			"options-system",
++		};
++		for (unsigned nio_i = 0; nio_i < 4; nio_i++) {
++			if (nio_name && !strcmp(nio_name, nio_skip_names[nio_i])) {
++				nio_u_mark("\nSKIP ");
++				nio_u_mark(nio_skip_names[nio_i]);
++				return;
++			}
++		}
++	}
+ 	_IOServiceNotifier * notify;
+ 	OSIterator *        iter;
+ 	OSOrderedSet *      matches;

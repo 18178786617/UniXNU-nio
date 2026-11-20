@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 16:00（★★★★★★ **577 照片：`w8m40` ⇒ 卡在 `compareNames()`（名字比较）里 —— 那里同样要拿 nub 的注册表锁。** ⇒ 结论一致：**匹配线程在等某个 nub 的注册表递归锁**，而那个 nub 是 **NVRAM 服务（options-common）**。\n★ 578：**把 NVRAM 的匹配也跳过**（跟 AppleMobileFileIntegrity / IOHIDResource 同一套路；板子的启动参数是从 DT 读的，不需要 Apple 的 NVRAM 驱动）⇒ 匹配线程越过这个堵点，**根 nub 的匹配终于能排上队** ⇒ 我们的 platform personality 才有机会被提供。**）",
+ "updated": "2026-11-20 16:25（★★★★★★★ **578 照片：还是 `w8m40`，而且面板上根本没有 `SKIP` ⇒ 跳过从未生效。** 查明：匹配**不走 `startMatching()`** —— config 线程从任务队列取 job 后调 **`doServiceMatch()`**；`startMatching()` 只是「服务注册时」调的。⇒ 我们的跳过名单放错了函数。\n★ 579：**跳过挪进 `doServiceMatch()`**（匹配真正发生的地方），并把**当前正在匹配的 nub 名字**挂到信标上（`n<名字>`）。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 578,
+   "time": "16:02",
+   "marker": "`w8m40c2r0d5 AppleARMLightEnLp x0 -|- f- N-`（无 SKIP）",
+   "qemu": "macos-26",
+   "result": "**还是 m40，且面板上没有 SKIP** ⇒ 跳过从未生效：匹配不走 startMatching()，而是 config 线程调 `doServiceMatch()`。579：跳过挪进去 + 信标显示正在匹配的 nub 名字。"
+  },
   {
    "run": 577,
    "time": "15:37",
