@@ -80,17 +80,16 @@ on:
         description: >-
           Runner image. Any label works here, so a runner of our own on a Mac
           can be used by naming its label (nio-macos); that is the way out
-          when the hosted macOS machines are all busy. macos-15-intel is the
-          x86_64 image and it is scheduled without a wait while the arm64
-          pool is full; a round takes more than twenty minutes on it.
-          macos-26 is the arm64 image, the pair UniXNU develops against, and
-          it builds in about nine minutes when it is scheduled; the macOS
-          arm64 pool runs out of capacity at times, and a job that waits for
-          a runner can be cancelled before it starts a single step
-          (run-393: "The job was not acquired by Runner of type hosted even
-          after multiple attempts").
+          when the hosted macOS machines are all busy.  Leave it empty and
+          the clock decides: macos-26 (the arm64 image, the pair UniXNU
+          develops against, about nine minutes a round) between six in the
+          morning and ten at night in Asia/Shanghai, and macos-15-intel (the
+          x86_64 image, scheduled without a wait while the arm64 pool is
+          full, more than twenty minutes a round) after ten at night.
+          macos-15-intel can also be asked for by hand when the arm64 pool
+          is full in the daytime.
         required: false
-        default: "macos-26"
+        default: ""
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -186,7 +185,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'by-the-hour' }}
   cancel-in-progress: false
 
 env:
@@ -199,13 +198,45 @@ defaults:
     shell: bash
 
 jobs:
+  # The image is chosen by the clock, not by preference.
+  #
+  # The owner asked on 2026-11-20 for macos-26 between six in the morning
+  # and ten at night, and for macos-15-intel after ten at night: the arm64
+  # pool has room by day and is full at night, and the Intel image is
+  # scheduled without a wait when the arm64 pool is full.
+  #
+  # The hours are the owner's, Asia/Shanghai.  The step asks the runner
+  # for the time in that zone and reads the hour out of it, so the choice
+  # does not depend on where the runner happens to be.
+  #
+  # An explicit runner input still wins: naming an image by hand is how a
+  # round is asked for on a machine whose label is not one of these.
+  choose-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    steps:
+      - id: pick
+        name: Pick the image by the hour
+        run: |
+          hour=$(TZ=Asia/Shanghai date +%H)
+          hour=$((10#$hour))
+          if [ "$hour" -ge 22 ] || [ "$hour" -lt 6 ]; then
+            echo "runner=macos-15-intel" >> "$GITHUB_OUTPUT"
+          else
+            echo "runner=macos-26" >> "$GITHUB_OUTPUT"
+          fi
+          echo "hour in Asia/Shanghai: $hour" >> "$GITHUB_STEP_SUMMARY"
+
   kernel:
+    needs: choose-runner
     # macos-26 is the arm64 image, the architecture UniXNU develops against,
     # and the one the owner asked for on 2026-11-18: the macos-15 pool had
     # begun to queue, so the default moved here. The flag-matching step below
     # trims the -Wno-* options this image's clang does not know, which is what
     # stopped the older macos-26 builds from producing a kernel.
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || needs.choose-runner.outputs.runner }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device

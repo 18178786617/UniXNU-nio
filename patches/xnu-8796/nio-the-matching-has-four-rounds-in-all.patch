@@ -1,0 +1,162 @@
+The matching has four rounds in all, and the rounds of one nub ride the beacon
+
+The video of run 581 says what the board is doing.  The heartbeat went from
+V1938 to V20315 in nine seconds, and the same two lines came back in the
+meantime: the NioUfs probe with its provider and its compatible string,
+and the AppleARMCPU candidate done.  The matching was running, round after
+round, over the same candidates.
+
+It had no end.  keepGuessing stays true while the service keeps asking to be
+configured, so the nub is matched again and again -- and the boot thread,
+which runs the matching now, never comes out of it.  That is why the
+waypoint stayed at 6 and bsd_init never came.
+
+So the matching has four rounds.  Four rounds in all, and not four for each
+nub in it.  That distinction is the whole of this patch, and it cost twenty
+rounds to find.
+
+The bound that run 583 added was per nub: every nub the platform expert
+publishes got four rounds of its own, each round probing every candidate
+again, and every candidate's start() waiting two seconds for a resource
+that is never going to come (978387b gave that wait an end).  So the time
+the matching took was the number of nubs in the tree times four rounds
+times nine candidates times two seconds.  The machine does not have that
+long: it is taken away about a hundred seconds into every round by the
+hardware watchdog, which the board's own note about the ten second
+watchdog records, and the measurement of the phone's window says 104
+seconds from the kernel's first mark to the reset.  So the matching never
+finished, the boot thread never left it, and every photograph since has
+shown the same first round -- the panel's last line is D5, the mark every
+candidate that reached the loop leaves behind, and the line numbers run in
+one direction without a break.
+
+Counted over the whole tree, four rounds is what the matching needs.  The
+first round probes the candidates and starts the driver, and the nubs the
+platform expert publishes are matched in that same round, because the count
+is shared.  After the fourth round the boot thread leaves the matching, the
+waypoint moves on past the lockdown, and the panel finally shows what is
+behind the matching.
+
+The count is bumped where the rounds are counted and not in
+probeCandidates(), because that is called only when the candidate list is
+not empty: a nub with no candidates still costs a round, and a bound
+counted there would not count it.
+
+Two round counters ride the beacon now, because they are not the same
+number.  The letter q is the rounds of the whole matching, and the letter u
+is the rounds of the nub being matched, which is what the bound applies to.
+Before this the letter q was bumped in probeCandidates(), so it counted the
+times the candidate loop was entered over the whole tree; the board read it
+as the rounds of one nub and waited for it to stop near four, and it could
+not have stopped there whatever the bound did.  A photograph now says which
+of the two it is looking at.
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 04a9f50..b60f2ec 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -9,6 +9,7 @@ extern char nio_match_want[24];
+ extern char nio_match_have[24];
+ extern char nio_match_nub[24];
+ volatile unsigned int nio_match_rounds = 0;
++volatile unsigned int nio_nub_rounds = 0;
+ extern char nio_first_class[24];
+ extern volatile unsigned int nio_drop_count;
+ extern volatile unsigned int nio_first_fail;
+@@ -4254,10 +4255,6 @@ void
+ IOService::probeCandidates( OSOrderedSet * matches )
+ {
+ 	nio_match_waypoint = 3;
+-	/* nio: how many rounds the matching has been through, for the
+-	 * beacon: the matching runs on the boot thread now, and a
+-	 * photograph has to say whether it is moving. */
+-	nio_match_rounds++;
+ 	/* nio: the candidates, for the beacon to carry.
+ 	 * The panel is a scrolling window: a mark written once is gone
+ 	 * by the time the console text catches up, and run 566 lost the
+@@ -5897,6 +5894,7 @@ IOService::doServiceMatch( IOOptionBits options )
+ //    job->nub->deliverNotification( gIOPublishNotification,
+ //                              kIOServiceRegisteredState, 0xffffffff );
+ 
++	unsigned nio_rounds = 0;
+ 	while (keepGuessing) {
+ 		matches = gIOCatalogue->findDrivers( this, &catalogGeneration );
+ 		nio_u_mark("\nnio: DSMi ");
+@@ -5975,12 +5973,55 @@ IOService::doServiceMatch( IOOptionBits options )
+ 			nio_u_mark(getName() ? getName() : "?");
+ 		}
+ 
++		nio_rounds++;
++		/* nio: the round of the whole matching, and the round of this
++		 * nub.  The bound is on the first: it is counted over the tree
++		 * and not per nub, because the tree is what makes the matching
++		 * long.  The second is what the beacon writes, so a photograph
++		 * says whether the bound held for the nub being matched.
++		 *
++		 * The count is bumped here rather than in probeCandidates(),
++		 * because that is called only when the candidate list is not
++		 * empty: a nub with no candidates still costs a round, and a
++		 * bound counted there would not count it. */
++		nio_match_rounds++;
++		nio_nub_rounds = nio_rounds;
+ 		lockForArbitration();
+ 		reRegistered = (0 != (__state[1] & kIOServiceNeedConfigState));
+ 		keepGuessing =
+ 		    (reRegistered || (catalogGeneration !=
+ 		    gIOCatalogue->getGenerationCount()))
+-		    && (0 == (__state[0] & kIOServiceInactiveState));
++		    && (0 == (__state[0] & kIOServiceInactiveState))
++		    /* nio: and the matching has a number of rounds.
++		     * It had none: while the service keeps asking to be
++		     * configured, the same candidates come back every round,
++		     * and the boot thread -- which runs the matching now --
++		     * never comes out of it.  The photograph of run 581 shows
++		     * it: the same NioUfs probe and the same AppleARMCPU
++		     * round after round, and the heartbeat two thousand marks
++		     * further on.
++		     *
++		     * Four rounds is what the matching needs, and the count is
++		     * of the whole matching and not of each nub in it.  Run 583
++		     * bounded each nub separately, and the photographs after it
++		     * showed the first round every time and nothing else: the
++		     * bound was four rounds per nub, and every nub the
++		     * platform expert publishes has four rounds of its own,
++		     * each round probing every candidate again and every
++		     * candidate's start() waiting two seconds for a resource
++		     * that is not coming -- so the matching took far longer than
++		     * the hundred seconds the machine stays alive, and the
++		     * hardware watchdog took it away before the second round
++		     * was over.
++		     *
++		     * Counted over the whole tree, the first round probes the
++		     * candidates and starts the driver, and the nubs the
++		     * platform expert publishes are matched in that same round,
++		     * because the count is shared.  After the fourth round the
++		     * boot thread leaves the matching and the panel shows what
++		     * is behind it.
++		     */
++		    && (nio_match_rounds < 4);
+ 
+ 		if (keepGuessing) {
+ 			/* nio: this loop is the one that repeats.  Say which nub
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index f2b4887..d7e06a9 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -536,6 +536,7 @@ char nio_first_have[24] = "-";
+ char nio_root_name[32] = "-";
+ char nio_match_nub[24] = "-";
+ extern volatile unsigned int nio_match_rounds;
++extern volatile unsigned int nio_nub_rounds;
+ 
+ /* nio: a beacon that never sleeps.  The heartbeat thread below uses delay(),
+  * which needs working timers; it prints HB 1 and stops, and that tells us
+@@ -575,6 +576,8 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 				nio_dc_putu(nio_cand_count);
+ 				nio_dc_puts("q");
+ 				nio_dc_putu(nio_match_rounds);
++				nio_dc_puts("u");
++				nio_dc_putu(nio_nub_rounds);
+ 				nio_dc_puts("r");
+ 				nio_dc_putu(nio_cand_reason);
+ 				nio_dc_puts("d");
