@@ -1,0 +1,110 @@
+The storage driver is offered its node by name
+
+The photograph of run 584 says where the storage driver is.  The panel
+reads
+
+    nio: ufs probe #26 provider=cpu7 compatible="qcom,kryo"
+
+and the NioUfs candidate carries the marks D1 and D2 but not D3 and D4.
+D1 and D2 are what a probe leaves behind when it found nothing; D3 and D4
+are what it leaves when it found something.  So the driver was offered a
+CPU node, twenty-six times over, and said no every time.
+
+That is not the driver's fault.  The personality that matches it says
+
+    'IOClass'         = NioUfs;
+    'IOProviderClass' = IOPlatformDevice;
+    'IOProbeScore'    = 1000:32;
+
+and nothing else.  With no name in it, the matching offers the driver every
+IOPlatformDevice in the tree: the eight CPU nodes and every node under
+/arm-io.  A CPU node says "qcom,kryo" and the UFS node says "qcom,ufshc",
+and the driver knows only the second, so every one of them is a no.
+
+The name is the check the matching is built for.  IORegistryEntry::compareName()
+compares the node's name for exact equality and does not look at
+"compatible" at all, and the personality above it -- the platform expert --
+already asks for the root nub that way.  This board's tree builder writes
+the UFS host controller as the node "ufs" (scripts/nio_adt.py), so that is
+the string the storage personality asks for now.
+
+Why it matters is the whole of the rest of the port.  The official boot
+chain says the platform expert matches the ADT root node, the storage
+driver publishes the userdata partition, the partition scheme publishes OS
+and SystemOS, and the kernel matches the root volume by its UUID and
+mounts it and starts launchd.  Every one of those steps after the first
+depends on the storage driver being matched, and it never was: no userdata
+partition, no IOMedia carrying the root volume, no root, no launchd.  The
+twenty rounds of photographs that never went past the first round were all
+looking at this one thing, and the waypoint never moved because the thread
+that moves it was still inside the matching, offering the same driver the
+same twenty-six providers.
+
+The other personality for the same driver is left as it was: it matches
+the platform expert, and the platform expert is the one that publishes the
+tree's nodes in the first place.
+
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -222,6 +222,16 @@ nio_publish_static_personalities(void)
+ 	OSString     *classStorage   = OSString::withCString("NioUfs");
+ 	OSString     *providerExpert = OSString::withCString("IOPlatformExpertDevice");
+ 	OSString     *providerDevice = OSString::withCString("IOPlatformDevice");
++	/*
++	 * nio: the name of the storage node in this board's device tree.
++	 *
++	 * The tree builder writes the UFS host controller as the node
++	 * "ufs" (scripts/nio_adt.py), and the kernel compares that name
++	 * for exact equality when a personality asks for one by name --
++	 * IORegistryEntry::compareName() does not look at "compatible".
++	 * So this is the string the storage driver has to be offered.
++	 */
++	OSString     *nameStorage   = OSString::withCString("ufs");
+ 	/*
+ 	 * The root nub takes its name from the device tree's root node,
+ 	 * and the kernel replaces that name with the first string of the
+@@ -244,6 +254,7 @@ nio_publish_static_personalities(void)
+ 
+ 	if (personalities && platformExpert && storage && storageRoot &&
+ 	    classPlatform && classStorage && providerExpert && providerDevice && nameMatch &&
++	    nameStorage &&
+ 	    scorePlatform && scoreStorage && scoreRoot) {
+ 		platformExpert->setObject("IOClass", classPlatform);
+ 		platformExpert->setObject("IOProviderClass", providerExpert);
+@@ -253,6 +264,36 @@ nio_publish_static_personalities(void)
+ 
+ 		storage->setObject("IOClass", classStorage);
+ 		storage->setObject("IOProviderClass", providerDevice);
++		/*
++		 * nio: and the storage personality asks for its node by
++		 * name.
++		 *
++		 * Without this the personality matched every
++		 * IOPlatformDevice in the tree, and the driver was handed
++		 * the eight CPU nodes and every node under /arm-io, one
++		 * after another, and said no to all of them: a CPU node
++		 * says "qcom,kryo" and the UFS node says "qcom,ufshc",
++		 * and the driver only knows the latter.  The photograph of
++		 * run 584 reads "nio: ufs probe #26 provider=cpu7
++		 * compatible=\"qcom,kryo\"" and the NioUfs candidate has
++		 * the marks D1 and D2 but not D3 and D4, which is what a
++		 * probe that found nothing leaves behind.
++		 *
++		 * Twenty-six probes that all say no is the whole of the
++		 * reason this port has not reached the userland: the
++		 * storage driver never starts, so no userdata partition is
++		 * published, so no IOMedia carries the root volume, so
++		 * there is no root to mount and no launchd to run.  The
++		 * official boot chain says the storage driver publishes
++		 * the userdata partition and the kernel matches the root
++		 * volume by its UUID, and none of that can happen while
++		 * the driver is never matched.
++		 *
++		 * The name is the check the matching is built for, and the
++		 * platform expert personality above already asks for the
++		 * root nub the same way.
++		 */
++		storage->setObject("IONameMatch", nameStorage);
+ 		storage->setObject("IOProbeScore", scoreStorage);
+ 		personalities->setObject(storage);
+ 
