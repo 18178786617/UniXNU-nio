@@ -190,3 +190,4 @@ nio-first-failure-and-root-name.patch
 nio-root-name-declared-here.patch
 nio-match-the-platform-on-class.patch
 nio-waypoints-inside-the-matching.patch
+nio-waypoints-inside-the-passive-match.patch
