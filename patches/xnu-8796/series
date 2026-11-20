@@ -186,3 +186,4 @@ nio-drop-macro-whole-again.patch
 nio-publish-personalities-before-lockdown.patch
 nio-root-name-where-the-report-is.patch
 nio-declarations-before-statements.patch
+nio-first-failure-and-root-name.patch
