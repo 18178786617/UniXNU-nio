@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 10:40（★★★★★★ **564 照片有突破：`w8m3`。** w8 = 启动线程仍卡在 `kperf_init_early()`→`ml_wait_max_cpus()`（等 IOKit 发布 CPU 数）；**m3 = 匹配线程进了 `probeCandidates`**；而 **D1–D5、S1、S2 一个都没出现** —— D5 是每个走到循环体的候选必打的 ⇒ **候选在进循环体之前就被全部丢掉**（要么是 notifier，要么根本不是 OSDictionary），这两种丢弃不经过 NIO_DROP，所以连 R/K 标记都没有。★ 565：面板上直接画出候选的**数量（C）**、**类别（F）**、以及两种丢弃（**N**=notifier、**X**=不是字典）；同时按机主要求把默认 runner 改回 **macos-26**（arm64）。**）",
+ "updated": "2026-11-20 11:35（★★★★★ **565 编译失败：又是转义被吃掉。** 补丁里 `nio_u_mark(\"\\nC\")` 的 `\\n` 变成了**真换行** ⇒ C 源码被劈成 `nio_u_mark(\"` + `C\");` ⇒ IOService.cpo 4 个错误、整轮作废。\n★ 已修（用 `chr(92)` 在运行时拼出反斜杠，绕开转义被吃）；并给本地检查器加了**「字符串字面量被劈成两行」的检查**（这类错误本地就能发现）。★ 566 = 候选形状探针（C/F/N/X）原样重发，runner macos-26。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 565,
+   "time": "10:49",
+   "marker": "（编译失败：补丁里的 \\n 变成真换行）",
+   "qemu": "macos-26",
+   "result": "**IOService.cpo 4 个编译错误**：补丁里的转义被写成了真换行，字符串字面量被劈成两行。已修并给检查器加了同类检查（本地可发现）。"
+  },
   {
    "run": 564,
    "time": "10:27",

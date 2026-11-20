@@ -315,6 +315,45 @@ def main(argv):
                 advisories.append("%s: %s is used on line %d but declared on line %d"
                                   % (rel, name, first_use, first_decl))
 
+
+
+    # A string literal that was split over two lines does not compile, and
+    # the compiler says so about a line that looks innocent.  Run 565 lost
+    # a round to it: the escape in a patch was written as a real newline,
+    # so a mark whose text begins with a newline became a line that ends
+    # with an opening quote and a line that starts with the rest of it.
+    for path in sorted(SCRATCH.rglob('*')):
+        if path.suffix not in ('.c', '.cpp', '.h', '.m'):
+            continue
+        try:
+            text_lines = path.read_text(encoding='utf-8', errors='replace').split(chr(10))
+        except OSError:
+            continue
+        for number, line in enumerate(text_lines, 1):
+            text = line.rstrip()
+            if text.endswith('"') and not text.lstrip().startswith('*') and '"' in text \
+                    and text.count('"') % 2 == 1:
+                problems.append("%s:%d: a string literal is split over two lines"
+                                % (path.relative_to(SCRATCH), number))
+
+    # A string literal that was split over two lines does not compile, and
+    # the compiler says so about a line that looks innocent.  Run 565 lost
+    # a round to it: the escape in a patch was written as a real newline,
+    # so a mark whose text begins with a newline became a line that ends
+    # with an opening quote and a line that starts with the rest of it.
+    for path in sorted(SCRATCH.rglob('*')):
+        if path.suffix not in ('.c', '.cpp', '.h', '.m'):
+            continue
+        try:
+            text_lines = path.read_text(encoding='utf-8', errors='replace').split(chr(10))
+        except OSError:
+            continue
+        for number, line in enumerate(text_lines, 1):
+            text = line.rstrip()
+            if (text.endswith('"') and not text.lstrip().startswith('*')
+                    and '"' in text and text.count('"') % 2 == 1):
+                problems.append("%s:%d: a string literal is split over two lines"
+                                % (path.relative_to(SCRATCH), number))
     if advisories:
         # Advisory only.  The rule is a heuristic -- a name declared on the
         # line after its type, or one that only ever appears in a comment,

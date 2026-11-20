@@ -330,6 +330,11 @@ def main(argv):
                     help="say where the kernel stopped")
     ap.add_argument("--trace-exceptions", action="store_true",
                     help="ask QEMU to log every exception the guest takes")
+    ap.add_argument("--fake-ufs", action="store_true",
+                    help="place a block of ordinary memory where the UFS host controller "
+                         "is, so that the driver's reads return zero and its writes are "
+                         "accepted.  There is no UFS hardware in QEMU; this is enough to "
+                         "watch how far the driver's recipe gets, on the host, in seconds.")
     args = ap.parse_args(argv)
 
     if shutil.which(args.qemu) is None:
@@ -378,6 +383,16 @@ def main(argv):
     ba_path = work / "bootargs.bin"
     ba_path.write_bytes(ba)
     loaders.append((str(ba_path), ba_pa))
+
+    if args.fake_ufs:
+        # The UFS host controller's registers, as a block of ordinary memory:
+        # reads of it return zero and writes to it are accepted and kept.
+        # The driver maps this address, so the recipe runs and every step it
+        # takes is visible on the panel without any hardware behind it.
+        ufs_path = work / "fake-ufs.bin"
+        ufs_path.write_bytes(b"\0" * 0x3000)
+        loaders.append((str(ufs_path), 0x1d84000))
+        print("fake UFS host at 0x1d84000 (12 KiB of ordinary memory)")
 
     print("virt_base 0x%x  phys_base 0x%x  entry va 0x%x pa 0x%x"
           % (virt_base, KERNEL_PHYS_BASE, entry, entry_pa))
