@@ -1,0 +1,43 @@
+The NVRAM's matching is skipped too
+
+Run 577's panel said w8m40: the matching thread is inside the name
+comparison of the passive match, which takes the nub's own registry lock.
+Somebody holds that lock and does not let go, so the thread never comes
+back -- and the root nub's matching, the one our platform personality
+belongs to, is behind it in the queue and never comes round.  That is why
+the board has made no progress for so long: not our personality, not the
+name, but a queue that never gets to us.
+
+The NVRAM service's matching is the one it is stuck in.  The service is
+called options-common, its driver is an Apple one this kernelcache does
+not need, and the board reads its boot arguments from the device tree.
+So its matching is skipped the way the other two are.
+
+Skipping is reversible: the names are in one list, and the panel says
+which one was skipped.
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 246d443..ad01dc1 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -1174,8 +1174,19 @@ IOService::startMatching( IOOptionBits options )
+ 		const char * nio_skip_names[] = {
+ 			"AppleMobileFileIntegrity",
+ 			"IOHIDResource",
++			/* nio: and the NVRAM.  Its matching is where the matching
++		 * thread stops: it waits for the NVRAM service's own
++		 * registry lock, in the name comparison of the passive
++		 * match, and whoever holds that lock does not let go.  The
++		 * root nub's matching -- the one our platform personality
++		 * belongs to -- is behind it in the queue and never comes
++		 * round.  The NVRAM's own driver is an Apple one this
++		 * kernelcache does not need; the board reads its boot
++		 * arguments from the device tree. */
++			"options-common",
++			"options-system",
+ 		};
+-		for (unsigned nio_i = 0; nio_i < 2; nio_i++) {
++		for (unsigned nio_i = 0; nio_i < 5; nio_i++) {
+ 			if (!strcmp(getName(), nio_skip_names[nio_i])) {
+ 				nio_u_mark("\nSKIP ");
+ 				nio_u_mark(nio_skip_names[nio_i]);
