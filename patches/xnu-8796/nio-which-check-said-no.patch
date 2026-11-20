@@ -1,0 +1,123 @@
+Which check of the passive match said no
+
+The candidates are turned away by the passive match -- the one that asks
+whether the nub is the thing the personality wants.  It asks in four places:
+the name, the location, the properties and the existence of a property.
+Which of them said no is the difference between a personality that wanted
+another board and one that wanted this one and was asked for the wrong name.
+
+So the match says which check said no: x is its number (0 is none, 4 the
+name, 6 the properties), and after it what was wanted and what the nub is
+called.  The name is the one that matters here: the board takes the name
+of its device tree, and a personality written for another board asks for
+that other name.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index 0b5f42a..6ade0e8 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -512,6 +512,23 @@ volatile unsigned int nio_cand_reason = 0;
+ volatile unsigned int nio_drop_reason = 0;
+ char nio_cand_class[32] = "?";
+ 
++/* nio: which check of the passive match said no.
++ *
++ * The candidates are turned away by the passive match -- the one that
++ * asks whether the nub is the thing the personality wants.  It asks
++ * in four places: the name, the location, the properties and the
++ * existence of a property.  Which of them said no is the difference
++ * between a personality that wanted another board and one that wanted
++ * this one and was asked for the wrong name.
++ *
++ * x is the number of the check that said no (0 is none, 4 the name,
++ * 5 the location, 6 the properties, 7 the existence of a property),
++ * and after it what was wanted and what the nub is called.
++ */
++volatile unsigned int nio_match_fail = 0;
++char nio_match_want[24] = "-";
++char nio_match_have[24] = "-";
++
+ /* nio: a beacon that never sleeps.  The heartbeat thread below uses delay(),
+  * which needs working timers; it prints HB 1 and stops, and that tells us
+  * nothing about whether the kernel is alive.  This one spins on its own and
+@@ -546,6 +563,14 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 				nio_dc_putu(nio_drop_reason);
+ 				nio_dc_puts(" ");
+ 				nio_dc_puts(nio_cand_class);
++				if (nio_match_fail) {
++					nio_dc_puts("x");
++					nio_dc_putu(nio_match_fail);
++					nio_dc_puts(" ");
++					nio_dc_puts(nio_match_want);
++					nio_dc_puts("|");
++					nio_dc_puts(nio_match_have);
++				}
+ 				nio_dc_puts(" ");
+ 			}
+ 		}
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index e820039..85cec83 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4,6 +4,9 @@ extern volatile int nio_match_waypoint;
+ extern volatile unsigned int nio_cand_count;
+ extern volatile unsigned int nio_cand_reason;
+ extern volatile unsigned int nio_drop_reason;
++extern volatile unsigned int nio_match_fail;
++extern char nio_match_want[24];
++extern char nio_match_have[24];
+ extern char nio_cand_class[32];
+ 
+ /*
+@@ -8188,6 +8191,21 @@ IOService::matchInternal(OSDictionary * table, uint32_t options, uint32_t * did)
+ 			done++;
+ 			match = compareNames( obj, changesOK ? &matched : NULL );
+ 			if (!match) {
++				/* nio: which check said no, and what it wanted.
++				 * The name is the one that matters here: the board
++				 * takes the name of its device tree, and a
++				 * personality written for another board asks for
++				 * that other name. */
++				nio_match_fail = 4;
++				{
++					OSString *nio_want = OSDynamicCast(OSString, obj);
++					strlcpy(nio_match_want,
++					    nio_want ? nio_want->getCStringNoCopy() : "-",
++					    sizeof(nio_match_want));
++					strlcpy(nio_match_have,
++					    getName() ? getName() : "-",
++					    sizeof(nio_match_have));
++				}
+ 				break;
+ 			}
+ 			if (changesOK && matched) {
+@@ -8246,10 +8264,13 @@ IOService::matchInternal(OSDictionary * table, uint32_t options, uint32_t * did)
+ 					iter->release();
+ 				}
+ 			}
++			if (!match) {
++				nio_match_fail = 6;
++			}
+ 			if ((!match) || (done == count)) {
+ 				break;
+ 			}
+-		}
++			}
+ 
+ 		obj = table->getObject( gIOPropertyExistsMatchKey );
+ 		if (obj) {
+@@ -8282,10 +8303,13 @@ IOService::matchInternal(OSDictionary * table, uint32_t options, uint32_t * did)
+ 					iter->release();
+ 				}
+ 			}
++			if (!match) {
++				nio_match_fail = 6;
++			}
+ 			if ((!match) || (done == count)) {
+ 				break;
+ 			}
+-		}
++			}
+ 
+ 		str = OSDynamicCast( OSString, table->getObject( gIOPathMatchKey ));
+ 		if (str) {

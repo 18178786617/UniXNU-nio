@@ -180,3 +180,5 @@ nio-boot-waypoints.patch
 nio-candidate-shape-on-panel.patch
 nio-candidates-ride-the-beacon.patch
 nio-drop-reason-rides-the-beacon.patch
+nio-which-check-said-no.patch
+nio-first-dropped-candidate.patch
