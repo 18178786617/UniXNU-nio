@@ -1,0 +1,38 @@
+nio: put the root-device name and mount result on the panel
+
+The photograph of run 591 shows bsd_init reaching setconf and then
+stopping with no panic, no wait message and no further phase.
+The next step in the source is vfs_mountroot(), inside a loop that
+retries for ever when mounting fails; its only report goes through
+printf, which is frozen by this point, so a failed mount is silent.
+
+Put direct-to-framebuffer marks around that call: the root device
+name before the mount, and OK or FAIL after it.  These use nio_bmark,
+the same unbuffered writer that produces the phase lines on the
+panel, so the next photograph will say exactly which root device was
+tried and whether the mount succeeded.  No behaviour changes.
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 86ce659..37b0174 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1048,7 +1048,11 @@ bsd_init(void)
+ 
+ 		bsd_init_kprintf("vfs_mountroot\n");
+ 		boot_progress_stage("vfs_mountroot enter");
++		nio_bmark("\nnio: ROOT pre-mount rootdev=[");
++		nio_bmark(rootdevice);
++		nio_bmark("]");
+ 		if (0 == (err = vfs_mountroot())) {
++			nio_bmark("\nnio: ROOT mount OK");
+ 			boot_progress_stage("vfs_mountroot mounted; authentication pending");
+ 			break;
+ 		}
+@@ -1066,6 +1070,7 @@ bsd_init(void)
+ 			/*NOTREACHED*/
+ 		}
+ #endif
++		nio_bmark("\nnio: ROOT mount FAIL retry");
+ 		printf("cannot mount root, errno = %d\n", err);
+ 	}
+ 

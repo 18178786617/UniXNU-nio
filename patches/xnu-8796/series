@@ -202,3 +202,4 @@ nio-skip-the-armcpu-probe-and-publish-the-cpu-count.patch
 nio-run-the-matching-off-the-boot-thread.patch
 nio-declare-no-system-mapper.patch
 nio-do-not-wait-for-dlil-threads.patch
+nio-report-the-root-mount-on-the-panel.patch
