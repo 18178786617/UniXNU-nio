@@ -496,7 +496,7 @@
   }
  ],
  "next_actions": [
-  "★ **在飞的轮次**：**583**（含 582 的内核改动『匹配限 4 轮』+ 581 的可读性）。**巡场已挂上（本会话的 task zuA7LG）**，CI 一跑完就自动打包刷机。换账号后若这轮没刷上，手动跑：`cd /e/nio-unixnu-port && bash tools/watch-round.sh 583`。581 的巡场已放弃、未刷机 ⇒ 手机上还是 580 那一版。",
+  "★ **在飞的轮次：583**。**582 从未构建出内核** —— 它被 583 取代时 GitHub 把排队的 run 取消了，`ci-kernel/run-582` 分支不存在 ⇒ 刷不了 582。**583 的内核与 582 逐字相同**（两者之间只差 `progress/state.json` 与 `tools/render-progress.py`，内核相关路径的差异为空）⇒ 刷 583 = 刷 582 的那个内核。**巡场已挂上（task 8PPRxX）**，CI 跑完即自动打包刷机。换账号后若没刷上，手动：`cd /e/nio-unixnu-port && bash tools/watch-round.sh 583`。581 的巡场已放弃、未刷机 ⇒ 手机上还是 580 那一版。",
   "★ 刷完 582 拍一张照片，按看板『我要看到什么』一节判读：**w 是否从 6 前进**、有没有 `nio: bsd_init: calling ...`。",
   "★ 若 w 前进到 9 ⇒ 逐条追 bsd_init 相位标记到 `exec /sbin/launchd`（不再加探针）。",
   "★ 若 w 仍停在 6 ⇒ 匹配限轮没生效，把 `nio_rounds` 的上界写进面板再查（面板上会打轮次）。",
