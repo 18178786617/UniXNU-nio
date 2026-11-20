@@ -1,0 +1,58 @@
+The drop macro is a macro again
+
+Run 569 did not compile.  The macro that records why a candidate was turned
+away had lost the continuation backslashes from the lines this series added
+to it, so the macro ended in the middle of the block and the rest of it
+became code at the place where the macro is used:
+
+  IOService.cpp:9739:48: error: expected 'while' in do/while loop
+
+Every line of the macro is written out again here, with the continuations
+where they belong.  The behaviour is the one that was meant: the reason and
+the class of the personality that was turned away, the class of the first
+one as well, and the mark on the panel.
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 1ed4c6b..6a79407 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4072,32 +4072,16 @@ nio_reason_rank(int reason)
+ 			nio_best_rank = nio_reason_rank(n); \
+ 			nio_class_name(match, nio_best_name, 24); \
+ 		} \
+-		/* nio: the reason and the class, for the beacon.
+-
+-		 * A mark written once is gone when the console text
+-
+-		 * catches up with it, and the beacon is written every
+-
+-		 * fourth mark, so the last reason is always on the
+-
+-		 * screen. */ \
++		/* nio: the reason and the class, for the beacon.\
++		 * A mark written once is gone when the console text catches\
++		 * up with it, and the beacon is written every fourth mark, so\
++		 * the last reason and the first class are always on the screen. */ \
+ 		nio_drop_reason = (unsigned int)(n); \
+-		if (nio_drop_count == 0) {
+-			nio_class_name(match, nio_first_class, 24);
+-		}
+-		nio_drop_count++; \
+-		if (nio_drop_count == 0) {
+-			nio_class_name(match, nio_first_class, 24);
+-		}
++		if (nio_drop_count == 0) { \
++			nio_class_name(match, nio_first_class, 24); \
++		} \
+ 		nio_drop_count++; \
+ 		nio_class_name(match, nio_cand_class, 32); \
+-		/* nio: the reason and the class, for the beacon.
+-		 * A mark written once is gone when the console text
+-		 * catches up with it, and the beacon is written every
+-		 * fourth mark, so the last reason is always on the
+-		 * screen. */ \
+-		nio_class_name(match, nio_cand_class, 32); \
+-		nio_nreasons++; \
+ 		/* nio: the same reason on the panel.  The console is where the boot \
+ 		 * went silent, so the summary below never arrived on the screen; \
+ 		 * the reasons are what say which door the candidates were turned \

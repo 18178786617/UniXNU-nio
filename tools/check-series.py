@@ -354,6 +354,32 @@ def main(argv):
                     and '"' in text and text.count('"') % 2 == 1):
                 problems.append("%s:%d: a string literal is split over two lines"
                                 % (path.relative_to(SCRATCH), number))
+    # A macro whose continuation backslashes were lost ends in the middle of
+    # the block, and the rest of it becomes code where the macro is used.
+    # Run 569 did not compile for that reason.
+    for path in sorted(SCRATCH.rglob('*')):
+        if path.suffix not in ('.c', '.cpp', '.h'):
+            continue
+        try:
+            text_lines = path.read_text(encoding='utf-8', errors='replace').split(chr(10))
+        except OSError:
+            continue
+        inside = False
+        for number, line in enumerate(text_lines, 1):
+            head = line.rstrip().rstrip(chr(92)).rstrip()
+            if line.startswith('#define ') and head.endswith('do {'):
+                inside = True
+                continue
+            if not inside:
+                continue
+            stripped = line.lstrip()
+            if stripped.startswith('} while') or stripped.startswith('#undef'):
+                inside = False
+                continue
+            if not line.rstrip().endswith(chr(92)):
+                problems.append("%s:%d: a macro line has no continuation backslash"
+                                % (path.relative_to(SCRATCH), number))
+
     if advisories:
         # Advisory only.  The rule is a heuristic -- a name declared on the
         # line after its type, or one that only ever appears in a comment,

@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 13:00（★★★★★★★ **568 照片：`w8m3c2r0d5 AppleARMLightEnLp` —— 根因基本锁死。** d5 = `matchPassive()` 失败 ⇒ **DT 发布的 nub 匹配不上 personality**；被丢的是 **AppleARMLightEnLp**（donor 里的 Apple 平台 personality）。我们的静态 personality（ArmDTPlatform / NioUfs，score 5000）也在这 2 个候选里，但信标只显示**最后一个**被丢的类别。★ 569：信标加两样 —— `x<检查号> <想要的>|<nub 的名字>`（被动匹配是哪一关没过：4=名字、6=属性）和 `f<第一个被丢的类别>`（第一个就是我们的）。**）",
+ "updated": "2026-11-20 13:55（★★★ **569 编译失败：`IOService.cpp:9739 expected 'while' in do/while loop`。** 又是续行符被吃：这次是 **NIO_DROP 宏**里新增的行丢了行尾的 `\\`，宏提前结束 ⇒ 后半截变成真代码。★ 570：把整个宏逐行重写（续行符用 `chr(92)` 在运行时拼出），并加了本地校验：**宏的每一行（除最后一行）都必须以续行符结尾**。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 569,
+   "time": "12:32",
+   "marker": "（编译失败：NIO_DROP 宏的续行符被吃）",
+   "qemu": "macos-26",
+   "result": "**编译失败**：宏体新增行丢了续行符，宏提前结束 → `expected 'while' in do/while loop`。570 把宏整个重写，并加本地校验（每行都要有续行符）。"
+  },
   {
    "run": 568,
    "time": "12:06",
@@ -385,6 +392,7 @@
   "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；推送默认用 macos-26（早上 arm64 有位置；晚上池满时用 macos-15-intel）。"
  ],
  "notes": [
+  "★★★★★★ **工具参数里的反斜杠会被吃掉（2026-11-20 反复踩到）**\n· `\\n` 变成真换行 ⇒ 字符串字面量被劈成两行（565）；`\\` 行尾续行符被吃 ⇒ 宏提前结束（569）。\n· **规矩**：凡是补丁/脚本里要出现反斜杠，一律用 `chr(92)` 在运行时拼出来，不要在工具参数里直接写。\n· 检查器已加两条本地检查：**字符串字面量被劈成两行**、**宏体每行都要有续行符**。",
   "★★★★★★ **定时器/时钟在早期启动阶段不工作（2026-11-20 00:50 确认）**\n· `clock_get_uptime()` 在这个阶段返回 0（定时器中断未起）⇒ 任何「每秒/每 N 毫秒」的探针都不会触发。\n· 心跳线程用 `delay()`，所以它只打印一次 `HB 1` 就卡住（信标补丁的注释里早就写着这件事）。\n· 560 的路标写成「每秒打印」，因此一次都没出现 —— **探针不能依赖时钟，要用自己的计数**。\n· 教训：早期启动阶段的探针一律用自旋计数（信标每 200 万次迭代打一个 V 标记）。",
   "★★★★★★ **CI 规矩（机主 2026-11-19 22:40 与 23:14）**\n· **晚上 arm64 池会满**：默认 runner 改成 `macos-15-intel`（不用等），一轮 20 多分钟而不是 9 分钟；arm64 有位置时再改回 `macos-26`。\n· **CI 里不再跑 QEMU**（机主：「没有用，CI 上就把他取消了，浪费时间」）：原来那一步会 brew 装 QEMU 再跑 90 秒，而它的结论从来没有被采信过。**\n· **探针必须挂在活着的线程上**：心跳用 `delay()`（定时器未工作）只打印一次 HB 1 就停；信标是自旋的，一直在写。556 的路标挂在心跳上，白跑一轮。",
   "★★★★★★ **真因（2026-11-19 22:05）：探针写进了编译器不走的分支 / 走的是会丢的通道**\n· 554 的硬数据：`bsd/DEVELOPMENT/bsd_init.o` mtime 13:02:57、`iokit/DEVELOPMENT/IOService.cpo` 13:00:09、`osfmk/.../startup.o` 13:01:47，源码 12:59:16 ⇒ **三个组件每轮都重编**，S1 旧前提（组件不进内核）是错的，已作废。\n· bsd 的相位标记：`nio-bsd-init-phases-direct.patch` 把 `#define bsd_init_kprintf` 插进 `#if DEBUG_BSDINIT` 的 **#else 分支**；而 `nio-bsdinit-narrates.patch` 把 `DEBUG_BSDINIT` 从 0 改成 1 ⇒ #else 是死分支 ⇒ 我们的定义从未编译。内核证据：`bsd_init: ` ×43（XNU 自己的）、`nio: bsd_init: ` ×0。\n· iokit 的丢弃原因：`NIO_DROP` 记了原因，但汇总只走 `printf` → console 环 → 环满即丢（546 面板就是证据：只有 iokit 的标记、没有 bsd_init 的相位）。\n· 555 的做法：相位标记 `#undef` 后放在 `#endif` 之后（必赢）；丢弃原因改用 `nio_u_mark` 直接上屏（R=原因、K=personality 类别）；指纹打印发布内核里全部 `nio:` 标记清单（一眼看清什么真的进去了）。\n\n★★★★★★ **工程卫生三修（否则补丁永远写不对）**\n· 本地 `tools/check-series.py` 改用 `git apply`（与 CI 的 patches.py 同法）。`patch` 会把 hunk 落到第一个匹配的偏移，CI 不会。\n· 本地基线树 `.tmp/xnu-8796.101.5` 之前是 CRLF（Windows 检出），CI 是 LF ⇒ 补丁上下文对不上、落点乱跳。已 `core.autocrlf=false` 重新检出为 LF。\n· 仓库里 10 个 `.patch` 文件在工作树中是 CRLF，已归一化为 LF（.gitattributes 早已声明 `*.patch text eol=lf`）。\n· 另：本地基线树里混进了 3 个 CI 没有的文件（source_pthread_bootstrap.c / kpc.c / boot_progress.h），已删除。",
