@@ -1,0 +1,57 @@
+Where inside the matching the thread is
+
+Run 575's panel said w8m3c2r0d5 AppleARMLightEnLp x0 -|- f- N-.
+
+x0 means the passive match never refused anything, and f- means our own
+personality was never turned away at all: it was never offered.  The nub in
+that round was called options-common, which is the NVRAM service, so the
+matching thread is inside the NVRAM service's matching and the root nub's
+matching -- the one our personality belongs to -- has not come round yet.
+
+The thread does not move: m3 has said the same thing for every round since
+it was set.  It is inside probeCandidates and it is not in probe(), because
+the waypoint before the probe would say 4.
+
+So the waypoints go inside probeCandidates now:
+
+  31  a candidate was taken out of the set
+  32  it is a dictionary and not a notifier
+  33  about to ask the passive match
+  34  the passive match said yes
+
+Which one it stands on is the line it is stuck in.
+
+diff --git a/iokit/Kernel/IOService.cpp b/iokit/Kernel/IOService.cpp
+index 3b19343..13477ab 100644
+--- a/iokit/Kernel/IOService.cpp
++++ b/iokit/Kernel/IOService.cpp
+@@ -4360,6 +4360,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 	assert( matches );
+ 	while (!needReloc
+ 	    && (nextMatch = matches->getFirstObject())) {
++		nio_match_waypoint = 31;
+ 		nextMatch->retain();
+ 		matches->removeObject(nextMatch);
+ 
+@@ -4397,6 +4398,7 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 			nextMatch = NULL;
+ 			continue;
+ 		}
++		nio_match_waypoint = 32;
+ 
+ 		props = NULL;
+ #if IOMATCHDEBUG
+@@ -4452,10 +4454,13 @@ IOService::probeCandidates( OSOrderedSet * matches )
+ 			props->setCapacityIncrement(1);
+ 
+ 			// check the nub matches
++			nio_match_waypoint = 33;
+ 			if (false == matchPassive(props, kIOServiceChangesOK | kIOServiceClassDone)) {
+ 				NIO_DROP(5);
+ 				break;
+ 			}
++			nio_match_waypoint = 34;
++			nio_match_waypoint = 34;
+ 			if (isReplacementCandidate) {
+ 				if (canTerminateForReplacement(client)) {
+ 					client->terminate(kIOServiceTerminateNeedWillTerminate | kIOServiceTerminateWithRematch);
