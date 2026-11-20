@@ -178,3 +178,4 @@ nio-drop-reasons-on-panel.patch
 nio-console-no-lock-wait.patch
 nio-boot-waypoints.patch
 nio-candidate-shape-on-panel.patch
+nio-candidates-ride-the-beacon.patch
