@@ -20,8 +20,13 @@ name: Build nio kernel
 # asked for that switch on 2026-11-19 at 22:40, and cancelled the round
 # that was waiting for an arm64 runner.
 #
-# The runner input still names any image, so macos-26 can be asked for by
-# hand when the arm64 pool has room in it.
+# In the morning the arm64 pool has room again, and the owner asked on
+# 2026-11-20 for macos-15 or macos-26 to be used for the pushes.  macos-26
+# is the default: it is the image UniXNU develops against, and a round
+# takes about nine minutes on it.
+#
+# The runner input still names any image, so macos-15-intel can be asked
+# for by hand when the arm64 pool is full.
 #
 # Upstream develops against macos-26 (arm64) with the Xcode 26 line, and it
 # says so in its own workflow:
@@ -85,7 +90,7 @@ on:
           (run-393: "The job was not acquired by Runner of type hosted even
           after multiple attempts").
         required: false
-        default: "macos-15-intel"
+        default: "macos-26"
       xcode:
         description: Xcode version, or "auto" for the newest installed on the image
         required: false
@@ -181,7 +186,7 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
-  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-15-intel' }}
+  group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'macos-26' }}
   cancel-in-progress: false
 
 env:
@@ -200,7 +205,7 @@ jobs:
     # begun to queue, so the default moved here. The flag-matching step below
     # trims the -Wno-* options this image's clang does not know, which is what
     # stopped the older macos-26 builds from producing a kernel.
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 360
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device

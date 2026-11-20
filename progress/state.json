@@ -1,6 +1,6 @@
 {
  "device": "MOTO Edge S (XT2125-4) / SM8250-AC (kona, 骁龙 870, Adreno 650)",
- "updated": "2026-11-20 03:20（★★★★★ **563 在 GitHub 上是全绿的，但内核没发布出来** —— 原因是**推 57MB 内核时网络超时**：`RPC failed; HTTP 408 ... send-pack: unexpected disconnect`。发布步骤带 `set +e`，所以推送失败只打了注解、不判失败 ⇒ job 绿、但 `ci-kernel/run-563` 分支不存在 ⇒ 我们的巡场误报成「构建失败」。★ 已修：发布步骤把 `http.postBuffer` 提到 512MB、放开 lowSpeedLimit、**推送最多重试 5 次**（每次间隔 20 秒），失败则 `exit 1`；巡场也改成用公开 API 区分「绿但没发布内核」与「真失败」。★ 564 = 重新构建并发布（内核内容与 563 相同：启动线程路标 w1..w14 + 匹配线程路标 m1..m5）。**）",
+ "updated": "2026-11-20 10:40（★★★★★★ **564 照片有突破：`w8m3`。** w8 = 启动线程仍卡在 `kperf_init_early()`→`ml_wait_max_cpus()`（等 IOKit 发布 CPU 数）；**m3 = 匹配线程进了 `probeCandidates`**；而 **D1–D5、S1、S2 一个都没出现** —— D5 是每个走到循环体的候选必打的 ⇒ **候选在进循环体之前就被全部丢掉**（要么是 notifier，要么根本不是 OSDictionary），这两种丢弃不经过 NIO_DROP，所以连 R/K 标记都没有。★ 565：面板上直接画出候选的**数量（C）**、**类别（F）**、以及两种丢弃（**N**=notifier、**X**=不是字典）；同时按机主要求把默认 runner 改回 **macos-26**（arm64）。**）",
  "headline": "★★★★★★ **卡点收窄到一行：启动线程在 `bsd_init()` 调用之前就停了。**\n· 555 照片：控制台最后一行 `nio: MT thread`；**零条 `nio: bsd_init:` 相位标记**（相位标记先写屏再写 console，所以不是标记没写出来）。\n· 555 内核：`nio: bsd_init: ` ×38、exec 三个标记全在 ⇒ 标记确实进了内核。\n· ⇒ 启动线程卡在 `startup.c` 的 `R4 iokit lockdown` 与 `bsd_init()` 之间（中间只有 `vm_set_restrictions()` 与 `kperf_init_early()`），或在 bsd_init 里 `throttle_init()`/`printf(copyright)` 之前。\n· **556 的路标**：心跳每秒打 `w0..w7`，照片一眼看出停在哪一行。",
  "distance": "距用户层还剩 **3 步**，顺序固定：\n\n**S1 让 bsd/iokit 的改动进内核**（当前，554 在跑）—— 没有它，探针看不见、改不动。\n**S2 让候选走到 `probe()`**—— 现在 Q2..Q6 之后没有 P1，没有任何 personality 装载。\n**S3 拿到 IOBSD → 挂 mockfs 根 → exec `/sbin/launchd`**—— 内核里 mockfs=73 处、launchd=16 处、N4KROOT=1 处，路径本身是通的，只差前面的门。\n\n★ 每一轮只看一个东西：\n· 内核里有没有 `nio: bsd_init: `（① 的判据）\n· 屏幕上有没有 `P1`（② 的判据）\n· 屏幕上有没有 launchd 痕迹（③ 的判据）",
  "phases": [
@@ -17,8 +17,8 @@
    "name": "定位两个线程各自停在哪一行（信标 w<n>m<n>）",
    "status": "current",
    "criteria": "信标行出现 `w<n>m<n>`：w=启动线程，m=匹配线程",
-   "evidence": "561 照片：`w8` ⇒ 启动线程卡在 `kperf_init_early()` → `ml_wait_max_cpus()`；而 CPU 数只由 IOKit（AppleARMSMP/IOCPU）发布 ⇒ 匹配不成功则启动线程永远等下去。",
-   "next": "562：匹配线程路标 m1..m5（PE_lockdown_iokit / probeCandidates 入口 / probe 前 / probe 后）"
+   "evidence": "564 照片：`w8m3` ⇒ 启动线程 w8（kperf_init_early → ml_wait_max_cpus，等 IOKit 发布 CPU 数）；匹配线程 m3（进入 probeCandidates）；**D1–D5、S1、S2 全无** ⇒ 候选在进循环体之前被丢掉，而这两种丢弃不经过 NIO_DROP，所以连 R/K 标记都没有。",
+   "next": "565：面板直接画候选的数量(C)/类别(F)/丢弃(N=notifier, X=非字典)；runner 改回 macos-26"
   },
   {
    "id": "S2",
@@ -46,6 +46,13 @@
   }
  ],
  "rounds": [
+  {
+   "run": 564,
+   "time": "10:27",
+   "marker": "`w8m3`",
+   "qemu": "macos-15-intel",
+   "result": "**`w8m3`**：启动线程卡在 ml_wait_max_cpus（等 IOKit 发布 CPU 数）；匹配线程进了 probeCandidates，但 D1–D5/S1/S2 全无 ⇒ 候选在循环体之前被丢掉。565 把候选的数量/类别/丢弃原因画到面板上。"
+  },
   {
    "run": 563,
    "time": "02:48",
@@ -343,11 +350,11 @@
  ],
  "next_actions": [
   "★ **当前唯一在走的路**（旧 P3 = launchd 主线，拆成 S1–S3）：",
-  "S1 **当前（562）**：信标同时打 w（启动线程）与 m（匹配线程）路标。判据：照片上 `w<n>m<n>`。",
-  "S2 **下一轮**：按 m<n> 找到匹配停在哪一步（多半在 personality 的 match/probe），修它。判据：屏幕出现 `P1`（候选真的走到 probe）。",
-  "S3 **再下一轮**：匹配成功 → CPU 数发布 → 启动线程过 kperf → bsd_init 相位标记 → IOBSD → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。判据：屏幕出现 launchd 痕迹。",
+  "S1 **当前（565）**：候选形状探针。判据：照片上出现 `C<数量>` 与 `F<类别>` / `N` / `X`。",
+  "S2 **下一轮**：按候选的形状修匹配（多半是候选不是 OSDictionary，或类别不是我们的 personality）。判据：屏幕出现 `P1`（候选真的走到 probe）。",
+  "S3 **再下一轮**：匹配成功 → CPU 数发布 → 启动线程过 kperf → bsd_init 相位 → IOBSD → mountroot(mockfs/N4KROOT) → `load_init_program()` → exec `/sbin/launchd`。",
   "★ 存储层已定：mockfs RAMDisk，不用 DSU、不用本机 APFS/UFS。",
-  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；早期启动的探针不能依赖时钟（时钟不 tick）。"
+  "★ 纪律：一轮只推一个 CI；先读照片再改代码；构建完直接刷机；推送默认用 macos-26（早上 arm64 有位置；晚上池满时用 macos-15-intel）。"
  ],
  "notes": [
   "★★★★★★ **定时器/时钟在早期启动阶段不工作（2026-11-20 00:50 确认）**\n· `clock_get_uptime()` 在这个阶段返回 0（定时器中断未起）⇒ 任何「每秒/每 N 毫秒」的探针都不会触发。\n· 心跳线程用 `delay()`，所以它只打印一次 `HB 1` 就卡住（信标补丁的注释里早就写着这件事）。\n· 560 的路标写成「每秒打印」，因此一次都没出现 —— **探针不能依赖时钟，要用自己的计数**。\n· 教训：早期启动阶段的探针一律用自旋计数（信标每 200 万次迭代打一个 V 标记）。",
