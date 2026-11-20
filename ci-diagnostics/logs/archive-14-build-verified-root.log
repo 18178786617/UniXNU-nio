@@ -1,0 +1,9 @@
+PASS: real VerifiedRoot crypto + empty policy table -> libVerifiedRoot.a
+      root verification is disabled: no signed policy bundle exists for this board
+PASS: DEVELOPMENT_ARM64_BCM2837 holds 857 .o, 120 .cpo, 0 archives, 9 file lists, core absent
+PASS: DEVELOPMENT_ARM64_BCM2837 holds 0 .o, 0 .cpo, 0 archives, 0 file lists, core absent
+PASS: removed the core image, the file lists and 987 build products
+PASS: 115 patched sources carry a fresh mtime
+  bsd/kern/bsd_init.c: mtime 06:46:52, carries 'nio: bsd_init:'
+  iokit/Kernel/IOService.cpp: mtime 06:46:52, carries 'nio: S1'
+  bsd/kern/kern_exec.c: mtime 06:46:52, carries 'nio: exec: load_init_program enter'
