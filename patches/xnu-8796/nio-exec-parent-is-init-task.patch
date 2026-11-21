@@ -1,0 +1,32 @@
+nio: use the init task as the parent of the launchd exec
+
+The launchd exec runs on the boot thread, where current_task() is
+kernel_task.  __mac_execve() takes old_task = current_task() and passes
+it to cloneproc() as the new task's parent; when the exec then fails the
+cleanup calls task_terminate_internal(old_task) on kernel_task, tripping
+task.c:3126 assert(task != kernel_task) (runs 613/614 far=0xfffffff...).
+
+XNU reaches load_init_program() on the init thread, where old_task is
+already the init task.  Reproduce that here: when old_task is kernel_task,
+use proc_find(1)'s task as the exec parent instead, so the fork and any
+failure path operate on the init task.  A mark confirms the swap.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -4949,5 +4949,15 @@ __mac_execve(proc_t p, struct __mac_execve_args *uap, int32_t *retval __unused)
+ 	struct uthread  *uthread = NULL;
+ 	task_t old_task = current_task();
++	/* nio: init exec runs on the boot thread where current_task() is
++	 * kernel_task; exec cloneproc-s from it and halts it on failure
++	 * (task.c assert).  Use the real init task as the exec parent. */
++	if (old_task == kernel_task) {
++		proc_t initp = proc_find(1);
++		if (initp != PROC_NULL) {
++			old_task = proc_task(initp);
++			nio_emark("\nnio: exec: old_task <- init task");
++		}
++	}
+ 	task_t new_task = NULL;
+ 	boolean_t should_release_proc_ref = FALSE;
+ 	boolean_t exec_done = FALSE;
