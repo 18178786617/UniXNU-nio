@@ -1,0 +1,21 @@
+nio: make the launchd exec marks use printf so they land in the core
+
+Run 620 applied nio-mark-launchd-exec-steps.patch (status.txt patch 227),
+but none of its three marks reached the kernel: nio_emark()'s string
+constants are optimised away in this compile unit, while printf strings
+(load_init_program: attempting to load) do land.  Replace the three marks
+with printf so the next photograph can show which step stalls.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7903,6 +7903,6 @@ load_init_program_at_path(proc_t p, user_addr_t scratch_addr, const char* path,
+-	nio_emark("\nnio: LD pre-security-token");
++	printf("nio: LD pre-security-token\n");
+ 	set_security_token(p);
+-	nio_emark("\nnio: LD post-security-token");
++	printf("nio: LD post-security-token\n");
+ 
+-	nio_emark("\nnio: LD pre-execve");
++	printf("nio: LD pre-execve\n");
+ 	return execve(p, &init_exec_args, retval);
