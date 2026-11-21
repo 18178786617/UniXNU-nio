@@ -410,7 +410,7 @@ timeout = -1
 # itself in initCPU; alioth qualified the three as a set.  Our pinned ArmCpu
 # (xVanTuring/ArmCpu @ a9c4585 in feeds.toml) implements all three, so no
 # kernel change is involved -- this is a board-level boot argument only.
-kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
+kernel_args = ["-v", "keepsyms=1", "kt_fixed_zones=120", "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-diagnostics=1", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
