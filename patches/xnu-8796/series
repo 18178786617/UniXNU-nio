@@ -227,3 +227,4 @@ nio-skip-phash-replace-on-boot-exec.patch
 nio-mark-launchd-exec-steps.patch
 nio-launchd-marks-use-printf.patch
 nio-mark-the-ast-chain.patch
+nio-mark-the-exec-copyouts.patch

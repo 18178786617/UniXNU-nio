@@ -1,0 +1,71 @@
+nio: mark every copyout in load_init_program_at_path
+
+The panel stops at "load_init_program: attempting to load" and shows none of
+the LD printf marks that are compiled into load_init_program_at_path (pre/post
+security-token, pre-execve).  That places the stall before set_security_token,
+in one of the copyouts that build the fake execve argument block.  nio_emark
+strings are optimised away in this translation unit, so printf is used here.
+
+Put a printf mark immediately before and after each copyout:
+
+  nio: LDX enter <path>        function reached
+  nio: LDX pre/post-path-copyout err=N    copy of the program name
+  nio: LDX pre/post-arg-copyout err=N     copy of the "-s" argument
+  nio: LDX pre/post-argv64-copyout err=N  copy of the 64-bit argv array
+  nio: LDX pre/post-argv32-copyout err=N  copy of the 32-bit argv array
+
+The last "pre-" without a matching "post-" names the copyout that never
+returns.  Diagnosis only: no change to the exec path itself.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7855,15 +7855,16 @@
+ 	assert(scratch_addr);
+ 	assert(path);
+ 
+-	nio_emark("\nnio: exec: load_init_program_at_path ");
+-	nio_emark(path);
++	printf("\nnio: LDX enter %s\n", path);
+ 
+ 	/*
+ 	 * Copy out program name.
+ 	 */
+ 	size_t path_length = strlen(path) + 1;
+ 	argv0 = scratch_addr;
++	printf("nio: LDX pre-path-copyout\n");
+ 	error = copyout(path, argv0, path_length);
++	printf("nio: LDX post-path-copyout err=%d\n", error);
+ 	if (error) {
+ 		return error;
+ 	}
+@@ -7879,7 +7880,9 @@
+ 		size_t init_args_length = strlen(init_args) + 1;
+ 
+ 		argv1 = scratch_addr;
++		printf("nio: LDX pre-arg-copyout\n");
+ 		error = copyout(init_args, argv1, init_args_length);
++		printf("nio: LDX post-arg-copyout err=%d\n", error);
+ 		if (error) {
+ 			return error;
+ 		}
+@@ -7894,7 +7897,9 @@
+ 		argv64bit[1] = argv1;
+ 		argv64bit[2] = USER_ADDR_NULL;
+ 
++		printf("nio: LDX pre-argv64-copyout\n");
+ 		error = copyout(argv64bit, scratch_addr, sizeof(argv64bit));
++		printf("nio: LDX post-argv64-copyout err=%d\n", error);
+ 		if (error) {
+ 			return error;
+ 		}
+@@ -7905,7 +7910,9 @@
+ 		argv32bit[1] = (user32_addr_t)argv1;
+ 		argv32bit[2] = USER_ADDR_NULL;
+ 
++		printf("nio: LDX pre-argv32-copyout\n");
+ 		error = copyout(argv32bit, scratch_addr, sizeof(argv32bit));
++		printf("nio: LDX post-argv32-copyout err=%d\n", error);
+ 		if (error) {
+ 			return error;
+ 		}
