@@ -1,0 +1,42 @@
+nio: mark the steps inside bsdinit_task
+
+Run 606 confirms the init thread now reaches bsdinit_task through bsd_ast
+("defer bsdinit_task to init thread AST" is on the panel), and the earlier
+fatal is gone.  But "CHK before load_init" never appears, so bsdinit_task
+is stuck before load_init_program().  The swapfile messages are from an
+unrelated background thread, not this path.
+
+Put panel marks around process_name(), ux_handler_setup() and
+vm_init_before_launchd() so the next photograph names the exact call that
+does not return.  Diagnosis only, no behaviour change.
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index c4bb930..8d62245 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1310,18 +1310,25 @@ native_owner_root_checkpoint(int apple, int owner, dev_t device)
+ void
+ bsdinit_task(void)
+ {
++	nio_bmark("\nnio: BT enter");
+ 	proc_t p = current_proc();
+ 
+ 	process_name("init", p);
+ 
++	nio_bmark("\nnio: BT pre-ux_handler");
+ 	/* Set up exception-to-signal reflection */
+ 	ux_handler_setup();
++	nio_bmark("\nnio: BT post-ux_handler");
++
+ 
+ #if CONFIG_MACF
+ 	mac_cred_label_associate_user(proc_ucred(p));
+ #endif
+ 
++	nio_bmark("\nnio: BT pre-vm_init");
+ 	vm_init_before_launchd();
++	nio_bmark("\nnio: BT post-vm_init");
++
+ 
+ #if CONFIG_XNUPOST
+ 	int result = bsd_list_tests();
