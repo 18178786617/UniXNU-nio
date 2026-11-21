@@ -1,0 +1,26 @@
+nio: skip old-task termination on the boot's first exec
+
+The launchd exec now gets past load_machfile (the halt there is skipped
+on the boot thread), but __mac_execve's success cleanup still calls
+task_terminate_internal(old_task).  The boot exec's old_task was retargeted
+to the init task, which still holds the not-yet-scheduled cloneproc thread,
+so termination blocks waiting for that thread just like task_complete_halt
+did.
+
+There is no previous task to reap on the boot's first exec.  Skip this
+cleanup when running on the boot thread (current_task is kernel_task);
+normal user execs still terminate their old task.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -4666,6 +4666,8 @@ __mac_execve(proc_t p, struct __mac_execve_args *uap, int32_t *retval __unused)
+ 	 * result in loosing the SIGKILL status.
+ 	 */
+-	if (task_did_exec(old_task)) {
++	/* nio: boot's first exec has no old task to reap; terminating the init
++	 * task would block on its unscheduled thread. */
++	if (task_did_exec(old_task) && current_task() != kernel_task) {
+ 		/* Terminate the current task, since exec will start in new task */
+ 		task_terminate_internal(old_task);
+ 	}
