@@ -674,14 +674,29 @@ jobs:
           # so one dropped connection costs the whole round.  Three attempts:
           # the first one warms the feeds cache, and a retry after a partial
           # clone usually finds it already in place.
+          # nio: a kernel.macho left by an earlier build is NOT a result: runs
+          # 606/608 "succeeded" on such a file and published a core with none of
+          # the round's marks.  Remove any pre-existing core so the loop below
+          # can only succeed on a kernel this round actually linked.
+          find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
+
+          # The mark the current series adds to bsdinit_task(); its presence in
+          # the linked kernel is the verdict that this round's objects were used.
+          ROUND_MARK='nio: BT enter'
           attempt=1
           while [ "$attempt" -le 3 ]; do
             echo "### build attempt $attempt"
             ./unixnu build kernel 2>&1 | tee "$RUNNER_TEMP/build-console.log" || true
-            if find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1 | grep -q .; then
-              echo "### the kernel is there"
+            kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
+            if [ -n "$kernel" ] && LC_ALL=C grep -a -q "$ROUND_MARK" "$kernel" 2>/dev/null; then
+              echo "### the kernel is there and carries '$ROUND_MARK'"
               break
             fi
+            echo "### attempt $attempt: no kernel carrying '$ROUND_MARK'; the link used stale objects"
+            # Drop the stale core and the file lists that name stale objects so
+            # the next attempt regenerates them from the patched tree.
+            find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
+            find out -path '*/ios-obj/*' -type f \( -name '*.filelist' -o -name '*.libfilelist' -o -name 'link.filelist' -o -name 'nonltolink.filelist' -o -name 'ltolink.filelist' -o -name 'mach.development.bcm2837*' \) -delete 2>/dev/null || true
             attempt=$((attempt + 1))
             [ "$attempt" -le 3 ] && sleep 20
           done

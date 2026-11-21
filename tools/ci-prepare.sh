@@ -118,6 +118,18 @@ before = (
     '\t    -delete 2>/dev/null || true\n'
     '\techo "nio: cleared every object for the bootstrap pass"\n'
     'fi\n'
+    '# nio: the final pass must LINK the objects this series just rebuilt.\n'
+    '# MakeInc.kernel names a component only by its <component>.filelist; an\n'
+    '# object that was deleted but is still named by a filelist that exists is\n'
+    '# never asked for, so runs 606/608 linked a core with no BT mark although\n'
+    '# bsd_init.o was rebuilt this round.  Drop the file lists and the core\n'
+    '# image in the final pass so make regenerates both from the patched tree.\n'
+    '# The bootstrap pass above keeps them (its archive builders read them).\n'
+    'if [ "${XNU_BOOTSTRAP:-0}" != 1 ]; then\n'
+    '\tfind "$ROOT/build/xnu/ios-obj" -type f \\( -name "*.filelist" -o -name "*.libfilelist" -o -name "link.filelist" -o -name "nonltolink.filelist" -o -name "ltolink.filelist" -o -name "mach.development.bcm2837*" \\) \\\n'
+    '\t    -delete 2>/dev/null || true\n'
+    '\techo "nio: final pass -- dropped file lists and core image, forcing a relink"\n'
+    'fi\n'
     'nio_trace "before make"\n'
 )
 text = text.replace(make_anchor, before + make_anchor, 1)
