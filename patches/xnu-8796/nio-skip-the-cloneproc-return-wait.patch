@@ -1,0 +1,24 @@
+nio: skip the cloneproc return-wait handshake
+
+The run-599 panel stops at "CP pre-fork_create_child" with no "post",
+so boot is stuck inside fork_create_child().  The new thread's
+continuation is task_wait_to_return(), which blocks on the return-wait
+turnstile until task_clear_return_wait() wakes it.  On this board new
+threads cannot be scheduled this early, so the wakeup never arrives and
+the booting thread never gets control back.
+
+Pass no return-wait flags to task_create_internal(): task_wait_to_return()
+then skips the turnstile block and goes straight to thread_bootstrap_return().
+The initial assert_wait is still released by the existing
+task_clear_return_wait(..., TCRW_CLEAR_ALL_WAIT) after cloneproc returns.
+No behaviour change for normal forks; bring-up diagnostic only.
+
+diff --git a/bsd/kern/kern_fork.c b/bsd/kern/kern_fork.c
+index 8d7a803..0000000 100644
+--- a/bsd/kern/kern_fork.c
++++ b/bsd/kern/kern_fork.c
+@@ -478,3 +478,3 @@ fork_create_child(task_t parent_task, coalition_t *parent_coalitions, proc_t par
+ 	    in_exec ? TPF_EXEC_COPY : TPF_NONE,                        /* Mark the task exec copy if in execve */
+-	    (TRW_LRETURNWAIT | TRW_LRETURNWAITER),                     /* All created threads will wait in task_wait_to_return */
++	    0,                                                         /* nio: skip return-wait; new threads do not schedule this early */
+ 	    child_task);
