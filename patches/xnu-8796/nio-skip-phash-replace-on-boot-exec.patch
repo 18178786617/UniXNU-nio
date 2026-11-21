@@ -1,0 +1,30 @@
+nio: skip the pid-hash replace on the boot's first exec
+
+Run 618's NULL deref was located by symbol lookup: pc 0xfffffff0076dae0c
+is _phash_replace_locked, called from __mac_execve -> proc_exec_switch_task.
+The chain is bsdinit_task -> load_init_program -> __mac_execve.
+
+phash_replace_locked(old_proc, new_proc) replaces old_proc's entry in the
+pid hash with new_proc.  On the boot thread old_proc is kernproc, a static
+process that was never inserted into the pid hash, so its p_hash entry is
+invalid and smr_hash_serialized_replace dereferences it -> data abort
+far=0.  XNU only ever execs from a real hashed process (initproc).
+
+The boot's first exec has no hashed old proc to replace.  Skip the replace
+when current_task() is kernel_task; new_proc remains a valid process and
+launchd can start.  Normal user execs still replace their hash entry.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -4837,5 +4837,9 @@ proc_exec_switch_task(proc_t old_proc, proc_t new_proc, task_t old_task,
+ 
+ 		/* Switch proc in pid hash */
+-		phash_replace_locked(old_proc, new_proc);
++		/* nio: boot's first exec has old_proc == kernproc, which is not
++		 * hashed; replacing its p_hash dereferences NULL. */
++		if (current_task() != kernel_task) {
++			phash_replace_locked(old_proc, new_proc);
++		}
+ 
+ 		/* Transfer the shadow flag to old proc */
