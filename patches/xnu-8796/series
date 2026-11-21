@@ -207,3 +207,4 @@ nio-do-not-stall-on-iobsd-before-root.patch
 nio-skip-the-secure-root-check.patch
 nio-mark-the-last-bsd-init-steps.patch
 nio-call-bsdinit-task-directly.patch
+nio-mark-the-init-clone-steps.patch
