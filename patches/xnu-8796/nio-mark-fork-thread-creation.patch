@@ -1,0 +1,35 @@
+nio: put the fork main-thread marks on printf
+
+The panel reaches execve (LD pre-execve) and stops at "FC pre-main_thread"
+with no following mark.  The FC marks use the direct framebuffer writer and
+can be scrolled off the 40-line panel, so this round switches the two
+main-thread marks to printf -- the writer proven to survive in kern_exec.c:
+
+  nio: FX pre-main-thread          before main_thread_create_waiting
+  nio: FX post-main-thread err=N   after it, with the return code
+
+If pre shows without post, main_thread_create_waiting() is the blocking call;
+the existing task_create marks (FC pre/post-task_create) stay as-is.
+Diagnosis only: no behaviour change.
+
+diff --git a/bsd/kern/kern_fork.c b/bsd/kern/kern_fork.c
+--- a/bsd/kern/kern_fork.c
++++ b/bsd/kern/kern_fork.c
+@@ -515,7 +515,7 @@
+ 	 *
+ 	 * The new thread is waiting on the event triggered by 'task_clear_return_wait'
+ 	 */
+-	nio_fmark("\nnio: FC pre-main_thread");
++	printf("\nnio: FX pre-main-thread\n");
+ 	result = main_thread_create_waiting(child_task,
+ 	    (thread_continue_t)task_wait_to_return,
+ 	    task_get_return_wait_event(child_task),
+@@ -528,7 +528,7 @@
+ 		child_task = NULL;
+ 	}
+ 
+-	nio_fmark("\nnio: FC post-main_thread");
++	printf("\nnio: FX post-main-thread err=%d\n", result);
+ 
+ 	/*
+ 	 * Tag thread as being the first thread in its task.
