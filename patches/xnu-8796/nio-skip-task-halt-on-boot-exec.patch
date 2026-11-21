@@ -1,0 +1,27 @@
+nio: skip the old-task halt on the boot's first exec
+
+Run 616 removed the kernel_task assert by halting the init task, but the
+panel then stopped at load_init_program with no further progress:
+task_complete_halt() waits for task->thread_count to drop to 1, and the
+init task still holds the not-yet-scheduled cloneproc thread, so it blocks
+forever.
+
+The boot's first exec has no previous launchd task to tear down -- the
+task is being created for the first time.  The halt sequence is only
+meaningful when execing from a running user task.  Skip it when the exec
+runs on the boot thread (current_task is kernel_task), which is exactly
+the init/launchd case, so load_init_program can proceed.
+
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -669,6 +669,8 @@ load_machfile(
+ 	 * task is not yet running, and it makes no sense.
+ 	 */
+-	if (in_exec) {
++	/* nio: boot's first exec has no old task to halt; halting here waits
++	 * on the unscheduled init thread forever. */
++	if (in_exec && current_task() != kernel_task) {
+ 		proc_t p = current_proc();
+ 		/*
+ 		 * Mark the task as halting and start the other
