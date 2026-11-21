@@ -205,3 +205,4 @@ nio-do-not-wait-for-dlil-threads.patch
 nio-report-the-root-mount-on-the-panel.patch
 nio-do-not-stall-on-iobsd-before-root.patch
 nio-skip-the-secure-root-check.patch
+nio-mark-the-last-bsd-init-steps.patch
