@@ -1,0 +1,23 @@
+nio: mark the last steps before launchd's execve
+
+Run 619 no longer panics (the phash fix cleared the NULL deref) but the
+panel stops at "load_init_program: attempting to load" with no further
+progress.  There is no panic pc to resolve, so put panel marks directly
+in load_init_program_at_path -- in kern_exec.c, a file whose edits reach
+the kernel -- around the final steps before execve.  The next photograph
+will name exactly which call does not return.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7900,6 +7900,9 @@ load_init_program_at_path(proc_t p, user_addr_t scratch_addr, const char* path,
+ 	/*
+ 	 * So that init task is set with uid,gid 0 token
+ 	 */
++	nio_emark("\nnio: LD pre-security-token");
+ 	set_security_token(p);
++	nio_emark("\nnio: LD post-security-token");
+ 
++	nio_emark("\nnio: LD pre-execve");
+ 	return execve(p, &init_exec_args, retval);
+ }
