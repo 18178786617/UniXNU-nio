@@ -1,0 +1,84 @@
+nio: mark the AST chain to see if the init thread ever returns to user mode
+
+The boot stalls at load_init_program's copyout on the boot thread (kernel_task),
+after eight patches that all exist because the cloned init thread (pid 1) is
+never scheduled.  The assumed root cause is a missing timer interrupt: without
+a tick there is no preemption, the new thread never takes an AST, and bsd_ast()
+never calls bsdinit_task()->exec launchd, so the original path was bypassed by
+calling bsdinit_task() directly on the boot thread.
+
+Mark the standard AST handoff chain, straight to the framebuffer through
+cons_ops[1].putc (no console lock, no ring -- the CP marks proved this path
+lands on the panel), so the next photograph can say exactly where the chain
+breaks:
+
+  nio: AM enter        a thread called ast_taken_user (returned to user mode)
+  nio: AM reasons=HEX  which AST bits arrived; AST_BSD is the bit that leads
+                       to bsd_ast()->bsdinit_task()->exec launchd
+  nio: BM enter        bsd_ast() was reached (AST_BSD was set and consumed)
+  nio: BI fire         bsd_init_done was still 0, so bsdinit_task() was called
+                       by the AST on a real init thread
+
+Reading the chain:
+  no AM enter                 -> no thread ever returned to user mode; the init
+                                 thread is not scheduled (root cause confirmed)
+  AM enter, no AM reasons     -> ast_taken_user early-returned (null thread/task/tro)
+  AM reasons=<hex> no BSD bit -> AST arrived but AST_BSD was never requested
+  BM enter, no BI fire        -> bsd_ast ran but bsd_init_done was already 1
+  BI fire                     -> the init thread DID trigger bsdinit_task via AST
+                                 (the direct-call workaround can be removed)
+
+Diagnosis only: no behaviour change to scheduling or exec.
+
+diff --git a/osfmk/kern/ast.c b/osfmk/kern/ast.c
+--- a/osfmk/kern/ast.c
++++ b/osfmk/kern/ast.c
+@@ -158,6 +158,11 @@
+ {
+ 	assert(ml_get_interrupts_enabled() == FALSE);
+ 
++	/* nio: direct-to-panel mark, no console lock and no ring.  cons_ops[1]
++	 * is the entry the console blob replaced with a framebuffer writer. */
++	extern struct nio_ast_cons { void (*putc)(char, bool); int (*getc)(bool); } cons_ops[];
++	{ const char *s = "\nnio: AM enter"; while (*s) cons_ops[1].putc(*s++, true); }
++
+ 	/*
+ 	 * nio: early in boot the thread exists but thread->task does not, so
+ 	 * get_threadtask hands back NULL and the AST path dereferences zero.
+@@ -230,6 +235,15 @@
+ 	 * TODO: Why are AST_DTRACE and AST_KPERF not per-thread ASTs?
+ 	 */
+ 	ast_t reasons = ast_consume(AST_PER_THREAD | AST_KPERF | AST_DTRACE);
++
++	/* nio: show which AST bits arrived.  Bit AST_BSD is the one that
++	 * calls bsd_ast() -> bsdinit_task() -> exec launchd. */
++	{ static const char hx[] = "0123456789abcdef"; unsigned long r = (unsigned long)reasons;
++	  const char *s = "\nnio: AM reasons=";
++	  while (*s) cons_ops[1].putc(*s++, true);
++	  if (r == 0) { cons_ops[1].putc('0', true); }
++	  else { char b[16]; int i = 0; while (r) { b[i++] = hx[r & 0xf]; r >>= 4; }
++	         while (i) cons_ops[1].putc(b[--i], true); } }
+ 
+ 	ml_set_interrupts_enabled(TRUE);
+ 
+diff --git a/bsd/kern/kern_sig.c b/bsd/kern/kern_sig.c
+--- a/bsd/kern/kern_sig.c
++++ b/bsd/kern/kern_sig.c
+@@ -3286,6 +3286,8 @@
+ void
+ bsd_ast(thread_t thread)
+ {
++	extern struct nio_ast_cons_b { void (*putc)(char, bool); int (*getc)(bool); } cons_ops[];
++	{ const char *s = "\nnio: BM enter"; while (*s) cons_ops[1].putc(*s++, true); }
+ 	proc_t p = current_proc();
+ 	struct uthread *ut = get_bsdthread_info(thread);
+ 	int     signum;
+@@ -3391,6 +3393,8 @@
+ 
+ 	if (!bsd_init_done) {
+ 		bsd_init_done = 1;
++		{ extern struct nio_ast_cons_c { void (*putc)(char, bool); int (*getc)(bool); } cons_ops[];
++		  const char *s = "\nnio: BI fire"; while (*s) cons_ops[1].putc(*s++, true); }
+ 		bsdinit_task();
+ 	}
+ }
