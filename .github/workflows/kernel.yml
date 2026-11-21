@@ -693,10 +693,15 @@ jobs:
               break
             fi
             echo "### attempt $attempt: no kernel carrying '$ROUND_MARK'; the link used stale objects"
-            # Drop the stale core and the file lists that name stale objects so
-            # the next attempt regenerates them from the patched tree.
+            # Drop only the stale core.  Do NOT touch any .filelist here: on a
+            # retry the framework finds the tree already prepared and starts at
+            # the archive builders, which need link.filelist (run-609 died with
+            # "No XNU symbol names: run a kernel pass first" when it was gone).
+            # The final pass inside build-xnu-4k-baseline.sh (ci-prepare.sh)
+            # already drops the per-component lists at the right point -- after
+            # the archives and immediately before make -- so a single attempt
+            # links this round's objects.
             find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
-            find out -path '*/ios-obj/*' -type f \( -name '*.filelist' -o -name '*.libfilelist' -o -name 'link.filelist' -o -name 'nonltolink.filelist' -o -name 'ltolink.filelist' -o -name 'mach.development.bcm2837*' \) -delete 2>/dev/null || true
             attempt=$((attempt + 1))
             [ "$attempt" -le 3 ] && sleep 20
           done
