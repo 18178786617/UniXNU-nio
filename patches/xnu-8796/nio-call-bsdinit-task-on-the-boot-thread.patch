@@ -1,0 +1,27 @@
+nio: call bsdinit_task directly again; the deferred AST never fires
+
+Runs 607 through 612 deferred bsdinit_task() to the init thread's bsd_ast
+and every photo stopped at "defer bsdinit_task to init thread AST".  The
+init thread is created (UT post-cloneproc / post-procfind appear) but is
+never scheduled early enough to take an AST, so the call never happens and
+exec /sbin/launchd is never reached.
+
+The only path that ever reached exec was the direct call: runs 603-605
+showed load_init_program / exec marks when bsdinit_task() was called at
+the end of bsd_init().  load_init_program now also switches to initproc's
+map (the 217 patch), so restore that direct call.  A distinct panel mark
+confirms this round took this path.
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1226,6 +1226,8 @@ bsd_init(void)
+ 	 * reached), so let the normal bsd_ast() trigger run bsdinit_task() on the
+ 	 * real init thread, where current_proc/task/map are all correct. */
+-	nio_bmark("\nnio: defer bsdinit_task to init thread AST");
++	/* nio: the deferred AST never fires on this board (607..612); call it. */
++	nio_bmark("\nnio: call bsdinit_task directly (613)");
++	bsdinit_task();
+ }
+ 
+ #if defined(XNU_OWNER_ROOT_AUDIT) && XNU_OWNER_ROOT_AUDIT

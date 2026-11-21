@@ -217,3 +217,4 @@ nio-fix-init-map-accessor.patch
 nio-use-initproc-map-for-exec.patch
 nio-defer-bsdinit-to-init-thread.patch
 nio-mark-the-bsdinit-task-steps.patch
+nio-call-bsdinit-task-on-the-boot-thread.patch
