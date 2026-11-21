@@ -215,3 +215,4 @@ nio-skip-the-fork-yield.patch
 nio-switch-to-init-map-before-exec.patch
 nio-fix-init-map-accessor.patch
 nio-use-initproc-map-for-exec.patch
+nio-defer-bsdinit-to-init-thread.patch
