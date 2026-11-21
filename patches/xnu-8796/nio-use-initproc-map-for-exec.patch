@@ -1,0 +1,34 @@
+nio: switch to pid 1's map, not the kernel task's map
+
+Run 604 still fails with errno 14 (EFAULT) and a kernel far address.
+The map switch added in run 603/604 used get_task_map(proc_task(p)),
+but load_init_program() is called from bsdinit_task() on the boot thread,
+where p = current_proc() is kernproc.  proc_task(kernproc) is the kernel
+task and its map is kernel_map, so the "switch" was kernel_map -> kernel_map
+(a no-op) and scratch_addr still landed in kernel space.
+
+Use proc_find(1) -- the init process created by cloneproc -- and switch
+to that task's map.  Rename the mark to "switched to initproc map" so the
+panel confirms the switch actually happened.  Diagnosis only.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 75cd530..ed7a19b 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7960,10 +7960,14 @@ load_init_program(proc_t p)
+ 	 * task has its own (empty) user map. Switch to it so scratch_addr and
+ 	 * the execve filename are real user addresses (else EFAULT). */
+ 	{
+-		vm_map_t init_map = get_task_map(proc_task(p));
++		/* nio: p here is kernproc (boot thread), so proc_task(p) is the
++		 * kernel task and its map is kernel_map -- switching to it is a no-op.
++		 * The real init process is pid 1 (created by cloneproc). */
++		proc_t initp = proc_find(1);
++		vm_map_t init_map = initp ? get_task_map(proc_task(initp)) : VM_MAP_NULL;
+ 		if (init_map != VM_MAP_NULL) {
+ 			(void) vm_map_switch(init_map);
+-			nio_emark("\nnio: exec: switched to init map");
++			nio_emark("\nnio: exec: switched to initproc map");
+ 		}
+ 	}
+ 	vm_map_t map = current_map();
