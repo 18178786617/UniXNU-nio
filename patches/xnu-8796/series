@@ -218,3 +218,4 @@ nio-use-initproc-map-for-exec.patch
 nio-defer-bsdinit-to-init-thread.patch
 nio-mark-the-bsdinit-task-steps.patch
 nio-call-bsdinit-task-on-the-boot-thread.patch
+nio-exec-launchd-as-initproc.patch
