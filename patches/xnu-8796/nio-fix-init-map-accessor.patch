@@ -1,0 +1,21 @@
+nio: use get_task_map accessor for the init map switch
+
+Run 603 failed to build: kern_exec.c:7963 "incomplete definition of
+type 'struct task'".  Direct field access proc_get_task_raw(p)->map
+needs the full task definition, which this translation unit does not
+have.  Use the standard accessor get_task_map(proc_task(p)) instead --
+the same idiom kern_aio.c and kern_cs.c use.  Behaviour unchanged.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 1ad597a..75cd530 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7960,7 +7960,7 @@ load_init_program(proc_t p)
+ 	 * task has its own (empty) user map. Switch to it so scratch_addr and
+ 	 * the execve filename are real user addresses (else EFAULT). */
+ 	{
+-		vm_map_t init_map = proc_get_task_raw(p)->map;
++		vm_map_t init_map = get_task_map(proc_task(p));
+ 		if (init_map != VM_MAP_NULL) {
+ 			(void) vm_map_switch(init_map);
+ 			nio_emark("\nnio: exec: switched to init map");
