@@ -220,3 +220,4 @@ nio-mark-the-bsdinit-task-steps.patch
 nio-call-bsdinit-task-on-the-boot-thread.patch
 nio-exec-launchd-as-initproc.patch
 nio-exec-parent-is-init-task.patch
+nio-machfile-halt-init-task.patch

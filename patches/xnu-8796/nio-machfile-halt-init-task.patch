@@ -1,0 +1,30 @@
+nio: halt the init task, not kernel_task, in load_machfile
+
+Runs 613-615 reach exec /sbin/launchd but end at task.c:3126
+assert(task != kernel_task).  load_machfile() takes
+task = current_task() and, on an exec, calls task_start_halt(task);
+the launchd exec runs on the boot thread, so current_task() is
+kernel_task and halting it asserts.
+
+XNU reaches load_init_program on the init thread, where current_task()
+is the init task.  Reproduce that here: when the exec task is
+kernel_task, use proc_find(1)'s task for the halt.  printf confirms it.
+
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -460,5 +460,14 @@ load_machfile(
+ 	int in_exec = (imgp->ip_flags & IMGPF_EXEC);
+ 	task_t task = current_task();
++	/* nio: the init exec runs on the boot thread, so current_task() is
++	 * kernel_task and task_start_halt() would assert.  Use the init task. */
++	if (in_exec && task == kernel_task) {
++		proc_t initp = proc_find(1);
++		if (initp != PROC_NULL) {
++			task = proc_task(initp);
++			printf("nio: machfile: halt init task, not kernel_task\n");
++		}
++	}
+ 	int64_t                 aslr_page_offset = 0;
+ 	int64_t                 dyld_aslr_page_offset = 0;
+ 	int64_t                 aslr_section_size = 0;
