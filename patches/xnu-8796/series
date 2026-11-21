@@ -203,3 +203,4 @@ nio-run-the-matching-off-the-boot-thread.patch
 nio-declare-no-system-mapper.patch
 nio-do-not-wait-for-dlil-threads.patch
 nio-report-the-root-mount-on-the-panel.patch
+nio-do-not-stall-on-iobsd-before-root.patch
