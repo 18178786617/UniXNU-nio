@@ -77,7 +77,7 @@ diff --git a/bsd/kern/kern_sig.c b/bsd/kern/kern_sig.c
  
  	if (!bsd_init_done) {
  		bsd_init_done = 1;
-+		{ extern struct nio_ast_cons_c { void (*putc)(char, bool); int (*getc)(bool); } cons_ops[];
++		{
 +		  const char *s = "\nnio: BI fire"; while (*s) cons_ops[1].putc(*s++, true); }
  		bsdinit_task();
  	}
