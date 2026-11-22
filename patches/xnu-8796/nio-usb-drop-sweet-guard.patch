@@ -1,0 +1,24 @@
+nio: drop the SWEET board guard that made nio_usb.c compile to nothing
+
+Runs 657 and 658 both failed to link with _nio_usb_gadget_start undefined.
+The ECM full-file patch carried sweet's `#if defined(ARM64_BOARD_CONFIG_SWEET)`
+around the whole file, but nio never defines that macro, so nio_usb.c built
+to an empty object and no symbol was emitted.  Remove the guard.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -10,7 +10,6 @@
+  * DWC3 / PHY register blocks only when the GCC status registers say their
+  * power domain and clocks are on (an access to a gated block would hang).
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <kern/clock.h>
+@@ -885,4 +884,3 @@ nio_usb_gadget_start(vm_offset_t dwc)
+ 		thread_deallocate(thread);
+ 	}
+ }
+-#endif /* ARM64_BOARD_CONFIG_SWEET */
+
