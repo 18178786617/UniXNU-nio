@@ -1,0 +1,97 @@
+nio: remember whether the cloned PID1 thread was ever scheduled
+
+CI 637 read PATH flags=0 and no URET/TWR after COMP done, so the new
+init thread never reached task_wait_to_return.  The open question is now
+which scheduling step it misses.  Add three more sticky bits (no
+behaviour change) so the next photo names the step:
+
+  bit 4  task_clear_return_wait(..., TCRW_CLEAR_INITIAL_WAIT) ran,
+         i.e. the initial wakeup was attempted
+  bit 5  thread_setrun() was called with the cloned PID1 thread,
+         i.e. it was made runnable
+  bit 6  pset_commit_processor_to_new_thread() committed that thread
+         to a processor, i.e. the scheduler actually chose it
+
+The thread pointer is recorded in bsd_utaskbootstrap() right after
+cloneproc() returns.  The existing summary line in bsd_init prints the
+combined PATH flags after execve, where the panel is guaranteed to show
+it.  Combined with the earlier bits, one photo separates "wakeup never
+attempted", "runnable but never chosen", "chosen but continuation never
+ran", and "user return reached".  No exec or SMP behaviour changes.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 04ea84b..effd176 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1449,6 +1449,10 @@ bsd_utaskbootstrap(void)
+ 	nio_bmark("\nnio: UT pre-cloneproc");
+ 	thread = cloneproc(TASK_NULL, NULL, kernproc, CLONEPROC_FLAGS_MEMSTAT_INTERNAL);
+ 	nio_bmark("\nnio: UT post-cloneproc");
++	{
++		extern thread_t nio_pid1_thread;
++		nio_pid1_thread = thread;
++	}
+ 
+ 	/* Hold the reference as it will be dropped during shutdown */
+ 	nio_bmark("\nnio: UT post-procfind");
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index 8e29586..f124044 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -384,6 +384,12 @@ sched_realtime_timebase_init(void);
+ static void
+ sched_timer_deadline_tracking_init(void);
+ 
++/* nio: sticky scheduler flags for the cloned PID1 thread.  No behaviour
++ * change: just remember whether it was ever made runnable and committed
++ * to a processor, so bsd_init's PATH summary can tell us where it stopped. */
++extern thread_t nio_pid1_thread;
++extern volatile unsigned int nio_user_path_flags;
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
+@@ -2266,6 +2272,10 @@ pset_commit_processor_to_new_thread(processor_set_t pset, processor_t processor,
+ {
+ 	pset_assert_locked(pset);
+ 
++	if (nio_pid1_thread != THREAD_NULL && new_thread == nio_pid1_thread) {
++		nio_user_path_flags |= 0x20;
++	}
++
+ 	if (processor->state == PROCESSOR_DISPATCHING || processor->state == PROCESSOR_IDLE) {
+ 		assert(current_thread() == processor->idle_thread);
+ 
+@@ -5622,6 +5632,10 @@ thread_setrun(
+ 	processor_t                     processor = PROCESSOR_NULL;
+ 	processor_set_t         pset;
+ 
++	if (nio_pid1_thread != THREAD_NULL && thread == nio_pid1_thread) {
++		nio_user_path_flags |= 0x10;
++	}
++
+ 	assert((thread->state & (TH_RUN | TH_WAIT | TH_UNINT | TH_TERMINATE | TH_TERMINATE2)) == TH_RUN);
+ 	assert(thread->runq == PROCESSOR_NULL);
+ 
+diff --git a/osfmk/kern/task.c b/osfmk/kern/task.c
+index df14c40..8a00506 100644
+--- a/osfmk/kern/task.c
++++ b/osfmk/kern/task.c
+@@ -756,6 +756,8 @@ void
+ task_clear_return_wait(task_t task, uint32_t flags)
+ {
+ 	if (flags & TCRW_CLEAR_INITIAL_WAIT) {
++		extern volatile unsigned int nio_user_path_flags;
++		nio_user_path_flags |= 0x40;
+ 		thread_wakeup(task_get_return_wait_event(task));
+ 	}
+ 
+@@ -788,6 +790,7 @@ task_clear_return_wait(task_t task, uint32_t flags)
+  * before execve and can be gone from the panel by the time we look.  The
+  * flags survive, and bsd_init prints the summary after execve. */
+ volatile unsigned int nio_user_path_flags = 0;
++thread_t nio_pid1_thread;
+ 
+ /* clang expands a constant string in a putc loop into immediates; "used"
+  * keeps the bytes in the kernel so the build can be verified. */
