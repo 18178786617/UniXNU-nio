@@ -1,0 +1,32 @@
+nio: keep the PID1 priority boost inside the run queue bounds
+
+CI 644 panicked in _run_queue_enqueue+0x44 (lr
+_sched_amp_processor_enqueue+0x3c) after BOOST.  The boost set
+sched_pri/base_pri to MAXPRI_KERNEL + 1 = 96, but the non-realtime run
+queue is indexed by sched_pri with NRQS = BASEPRI_REALTIME = 96, so the
+legal indices are 0..95; rq->queues[96] is out of bounds and produced
+the data abort (FAR=0).
+
+Use MAXPRI_KERNEL (95), the highest legal index, which still outranks
+the boot thread.  No other behaviour change.
+
+
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index 84f7270..e67b66c 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -401,8 +401,12 @@ nio_boost_pid1_and_preempt(void)
+ 	if (nio_pid1_thread == THREAD_NULL) {
+ 		return;
+ 	}
+-	nio_pid1_thread->sched_pri = MAXPRI_KERNEL + 1;
+-	nio_pid1_thread->base_pri = MAXPRI_KERNEL + 1;
++	/* CI 644 used MAXPRI_KERNEL + 1 (96), but the non-realtime run
++	 * queue has indices 0..95; run_queue_enqueue() indexed
++	 * rq->queues[96] and took a data abort.  MAXPRI_KERNEL (95) is
++	 * the highest legal index and still outranks the boot thread. */
++	nio_pid1_thread->sched_pri = MAXPRI_KERNEL;
++	nio_pid1_thread->base_pri = MAXPRI_KERNEL;
+ 	ast_on(AST_PREEMPT | AST_URGENT);
+ }
+ 
