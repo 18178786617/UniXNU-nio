@@ -1,0 +1,56 @@
+nio: mark the steps inside thread_create_waiting_internal
+
+The boot's first execve stalls in main_thread_create_waiting():
+"FX pre-main-thread" is the last mark, with no "FX post-main-thread".
+That wrapper only calls thread_create_waiting_internal, whose body has
+several calls that could block this early (thread_create_internal, the
+thread mutex, thread_start_in_assert_wait, the task/global unlocks).
+Put printf marks between them so the next panel names the exact call:
+
+  nio: TW pre/post-thread-create err=N
+  nio: TW pre/post-mtx          around thread_mtx_lock
+  nio: TW pre/post-assert-wait  around thread_start_in_assert_wait
+  nio: TW post-unlock-mtx / TW done
+
+The last "pre-" without its "post-" is the blocking call. Diagnosis only.
+
+diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
+--- a/osfmk/kern/thread.c
++++ b/osfmk/kern/thread.c
+@@ -1745,8 +1745,10 @@
+ 		return KERN_INVALID_ARGUMENT;
+ 	}
+ 
++	printf("\nnio: TW pre-thread-create\n");
+ 	result = thread_create_internal(task, -1, continuation, NULL,
+ 	    options, &thread);
++	printf("nio: TW post-thread-create err=%d\n", result);
+ 	if (result != KERN_SUCCESS) {
+ 		return result;
+ 	}
+@@ -1757,7 +1759,9 @@
+ 		thread_hold(thread);
+ 	}
+ 
++	printf("nio: TW pre-mtx\n");
+ 	thread_mtx_lock(thread);
++	printf("nio: TW post-mtx\n");
+ 	thread_set_pending_block_hint(thread, block_hint);
+ 	if (options & TH_OPTION_WORKQ) {
+ 		thread->static_param = true;
+@@ -1765,11 +1769,15 @@
+ 	} else if (options & TH_OPTION_MAINTHREAD) {
+ 		wait_interrupt = THREAD_UNINT;
+ 	}
++	printf("nio: TW pre-assert-wait\n");
+ 	thread_start_in_assert_wait(thread, event, wait_interrupt);
++	printf("nio: TW post-assert-wait\n");
+ 	thread_mtx_unlock(thread);
++	printf("nio: TW post-unlock-mtx\n");
+ 
+ 	task_unlock(task);
+ 	lck_mtx_unlock(&tasks_threads_lock);
++	printf("nio: TW done\n");
+ 
+ 	*new_thread = thread;
+ 
