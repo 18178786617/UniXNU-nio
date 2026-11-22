@@ -1,0 +1,60 @@
+nio: reboot the board automatically after 150 seconds
+
+The owner wants the full loop hands-free: boot the XNU core, let it write
+the console into ramoops, then come back to the rooted Android without
+pressing the power key.  On this board the PID1 stall leaves USB dead with
+the watchdog off, so physical long-press was the only way out.
+
+Start a kernel thread alongside the heartbeat.  It watches clock_get_uptime
+and calls PEHaltRestartInternal(kPERestartCPU) after 150 s.  A panel mark
+says when the reset fires.  Diagnostic only; no boot-path behaviour change
+before the timeout.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index 8fecfd2..12709c3 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -604,6 +604,32 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 	}
+ }
+ 
++/* nio: automatic reboot so the owner never has to press the power key.
++ * The KEXT-free boot reaches the PID1 stall and sits there with the
++ * watchdog off, so USB goes dead and the only way back to Android was
++ * a physical long-press.  Reset the CPU after AUTO_REBOOT_SECS so the
++ * board comes back to the patched (rooted) Android boot by itself.
++ * The console is mirrored into ramoops as it is written, so the log of
++ * this run survives the reset for the rooted-side reader. */
++extern int PEHaltRestartInternal(unsigned int type, uint32_t details);
++static void
++nio_auto_reboot_thread(void *arg, wait_result_t wr)
++{
++#define NIO_AUTO_REBOOT_NS 150000000000ULL   /* 150 seconds */
++	uint64_t start_ns = 0, now_ns = 0;
++	clock_get_uptime(&start_ns);
++	for (;;) {
++		delay(100);
++		clock_get_uptime(&now_ns);
++		if (now_ns > start_ns &&
++		    (now_ns - start_ns) >= NIO_AUTO_REBOOT_NS) {
++			nio_dc_puts("\nnio: AUTO-REBOOT now");
++			PEHaltRestartInternal(1 /* kPERestartCPU */, 0);
++			for (;;) { delay(1000); }
++		}
++	}
++}
++
+ static void
+ nio_heartbeat_thread(void *arg, wait_result_t wr)
+ {
+@@ -693,6 +719,10 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 			thread_deallocate(th);
+ 			printf("nio: beacon thread started\n");
+ 		}
++		if (kernel_thread_start(nio_auto_reboot_thread, NULL, &th) == KERN_SUCCESS) {
++			thread_deallocate(th);
++			printf("nio: auto-reboot thread started\n");
++		}
+ 	}
+ 
+ 	assert(startup_phase < upto);
