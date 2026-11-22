@@ -250,3 +250,4 @@ nio-usb-probe-map-mmio.patch
 nio-usb-state-in-pid1-marks.patch
 nio-usb-gadget-driver.patch
 nio-usb-gadget-start.patch
+nio-auto-reboot-1200s.patch

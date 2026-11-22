@@ -1,0 +1,25 @@
+nio: give the USB gadget 20 minutes before the automatic reset
+
+Run 651 brought up the DWC3 USB gadget, but the 150 s PSCI auto-reset
+fires before the host can enumerate it, photograph the panel, or (once
+live-log lands) stream a console.  The reset is a cold boot, so the
+ramoops console is lost with it.
+
+Keep the automatic reset -- it is what returns the phone to rooted
+Android without a power-key press -- but move it out to 20 minutes so
+the gadget has time to enumerate and the owner can read the panel.  A
+boot-arg overrides it when a shorter cycle is wanted.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -530,4 +530,8 @@ nio_auto_reboot_thread(void *arg, wait_result_t wr)
+ {
+-#define NIO_AUTO_REBOOT_NS 150000000000ULL   /* 150 seconds */
++	/* nio: 150 s was too short -- the USB gadget needs time to enumerate
++	 * and the panel needs to be readable before the cold reset. */
++	int nio_reboot_secs = 1200;
++	PE_parse_boot_argn("nioreboot", &nio_reboot_secs, sizeof(nio_reboot_secs));
++#define NIO_AUTO_REBOOT_NS ((uint64_t)nio_reboot_secs * 1000000000ULL)
+ 	uint64_t start_ns = 0, now_ns = 0;
+ 	clock_get_uptime(&start_ns);
