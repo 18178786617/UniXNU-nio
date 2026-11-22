@@ -1,0 +1,31 @@
+nio: reset via PSCI SMC, not PEHaltRestartInternal
+
+Run 646 carried the AUTO-REBOOT thread but the phone never came back:
+PEHaltRestartInternal() calls into gIOPlatform, which is never constructed
+in this KEXT-free boot, so it is a no-op and the thread just spins.
+
+Use the ARM64 PSCI SYSTEM_RESET SMC call (0x84000009) directly.  Trusted
+firmware at EL3 performs the reset without any IOKit object.  Same 150 s
+timer, new panel mark so the photograph names which reset path ran.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index 12709c3..dd30134 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -623,8 +623,14 @@ nio_auto_reboot_thread(void *arg, wait_result_t wr)
+ 		clock_get_uptime(&now_ns);
+ 		if (now_ns > start_ns &&
+ 		    (now_ns - start_ns) >= NIO_AUTO_REBOOT_NS) {
+-			nio_dc_puts("\nnio: AUTO-REBOOT now");
+-			PEHaltRestartInternal(1 /* kPERestartCPU */, 0);
++			nio_dc_puts("\nnio: AUTO-REBOOT now via PSCI");
++			/* PEHaltRestartInternal needs gIOPlatform, never created in this
++			 * KEXT-free boot.  Use the ARM64 PSCI SMC SYSTEM_RESET call;
++			 * trusted firmware at EL3 performs the reset. */
++			{
++				register uint64_t x0 __asm__("x0") = 0x84000009ULL;
++				__asm__ volatile("smc #0" : "+r"(x0) : : "memory");
++			}
+ 			for (;;) { delay(1000); }
+ 		}
+ 	}
