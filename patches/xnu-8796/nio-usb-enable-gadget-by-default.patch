@@ -1,0 +1,17 @@
+nio: start the USB gadget by default (enabled 1 -> 2)
+
+Run 659 finally compiled the ECM/live-log code, but sweet's port defaults
+`enabled = 1` (probe only) and only starts the gadget at niousb=2.  nio's
+boot args do not pass niousb=2, so no USB device ever appears.  Default to
+2 so the gadget and its live-log UDP stream start on every boot, matching
+the earlier 526-line driver.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -73,4 +73,4 @@ nio_usb_gadget_probe(void)
+ {
+-	int enabled = 1;
++	int enabled = 2;
+ 	uint32_t gdscr, cbcr[sizeof(usb_cbcr) / sizeof(usb_cbcr[0])];
+ 	bool clocks_on = true;
