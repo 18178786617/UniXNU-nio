@@ -1,0 +1,81 @@
+nio: map MMIO before reading USB registers
+
+Run 648 proved nio has no linear physical mapping: a raw read of GCC+GDSCR
+(0x10f004) data-aborted at kernel_startup_initialize_upto+0x68 (FAR 0x10f004).
+Use ml_io_map() on the GCC and DWC3 windows, exactly as ios-v60 sweet 0072
+does.  Read-only; the probe still prints the same panel marks.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index 6d3702f..ccbd7fc 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -604,40 +604,51 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 	}
+ }
+ 
+-/* nio: read-only USB/DWC3 state probe (from ios-v60 sweet 0072, ported to
+- * SM8250).  ABL leaves this controller configured for fastboot; after a
+- * `fastboot boot` it may still be powered and in device mode, which would
+- * let us stream the console live instead of photographing the panel.
+- * This only READS registers, and only touches DWC3 when GCC says the
+- * power domain and clocks are on (a gated access would hang). */
+-#define NIO_GCC_PA        0x00100000ull
++/* nio: read-only USB/DWC3 state probe (from ios-v60 sweet 0072).
++ * Run 648 proved physical addresses are NOT linearly mapped here: a raw
++ * read of GCC+GDSCR (0x10f004) data-aborted.  Map the MMIO windows with
++ * ml_io_map() exactly as sweet 0072 does.  Read-only, no side effects. */
++extern vm_offset_t ml_io_map(vm_offset_t pa, vm_size_t size);
++#define NIO_GCC_PA        0x00100000u
++#define NIO_GCC_SIZE      0x00090000u
+ #define NIO_GDSCR        0x0f004u
+-#define NIO_DWC3_PA      0x0a600000ull
++#define NIO_DWC3_PA      0x0a600000u
++#define NIO_DWC3_SIZE    0x0000d000u
+ #define NIO_CLK_OFF      (1u << 31)
+-static inline uint32_t nio_usb_rd(uint64_t a) {
+-	uint32_t v = *(volatile uint32_t *)a;
++static inline uint32_t nio_usb_rd(volatile uint32_t *a) {
++	uint32_t v = *a;
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	return v;
+ }
+ static void nio_usb_probe(void)
+ {
+-	uint32_t gdscr = nio_usb_rd(NIO_GCC_PA + NIO_GDSCR);
++	vm_offset_t gcc = ml_io_map(NIO_GCC_PA, NIO_GCC_SIZE);
++	if (gcc == 0) {
++	nio_dc_puts("\nnio: USB GCC map failed");
++		return;
++	}
++	uint32_t gdscr = nio_usb_rd((volatile uint32_t *)(gcc + NIO_GDSCR));
+ 	nio_dc_puts("\nnio: USB GDSC ");
+ 	nio_dc_putu(gdscr);
+ 	nio_dc_puts(gdscr & (1u<<31) ? " on" : " off");
+-	uint32_t mst = nio_usb_rd(NIO_GCC_PA + 0x0f010u);
+-	uint32_t noc = nio_usb_rd(NIO_GCC_PA + 0x0502cu);
++	uint32_t mst = nio_usb_rd((volatile uint32_t *)(gcc + 0x0f010u));
++	uint32_t noc = nio_usb_rd((volatile uint32_t *)(gcc + 0x0502cu));
+ 	nio_dc_puts("\nnio: USB clk mst ");
+ 	nio_dc_putu(mst); nio_dc_puts(" noc "); nio_dc_putu(noc);
+ 	if (!(gdscr & (1u<<31)) || (mst & NIO_CLK_OFF) || (noc & NIO_CLK_OFF)) {
+-	nio_dc_puts("\nnio: USB gated, DWC3 not read");
++		nio_dc_puts("\nnio: USB gated, DWC3 not read");
++		return;
++	}
++	vm_offset_t dwc = ml_io_map(NIO_DWC3_PA, NIO_DWC3_SIZE);
++	if (dwc == 0) {
++		nio_dc_puts("\nnio: USB DWC3 map failed");
+ 		return;
+ 	}
+ 	nio_dc_puts("\nnio: USB DWC3 id ");
+-	nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc120u));
+-	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc110u));
+-	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc70cu));
+-	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc700u));
++	nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc120u)));
++	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc110u)));
++	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc70cu)));
++	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc700u)));
+ }
+ 
+ /* nio: automatic reboot so the owner never has to press the power key.
