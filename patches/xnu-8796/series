@@ -259,3 +259,4 @@ nio-usb-ecm-live-log.patch
 nio-usb-export-gadget-start.patch
 nio-usb-drop-sweet-guard.patch
 nio-usb-enable-gadget-by-default.patch
+nio-usb-ecm-trace.patch
