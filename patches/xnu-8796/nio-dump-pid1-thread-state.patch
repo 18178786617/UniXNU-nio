@@ -1,0 +1,60 @@
+nio: dump the PID1 thread's actual scheduler state
+
+CI 641 printed BLOCK but still no context switch to the init thread;
+the sticky 0x80 bit has never appeared, so the thread may not actually
+be runnable when the boot thread blocks.  Add one read-only dump just
+before BLOCK:
+
+  nio: PID1 st=0xNNN
+    low byte   thread->state (TH_RUN=4, TH_WAIT=1, TH_UNINT=8)
+    0x100      thread->runq != PROCESSOR_NULL (really on a run queue)
+    0x200      thread->started
+    0x400      bound_processor != PROCESSOR_NULL
+
+The helper lives in sched_prim.c where the thread fields are visible;
+bsd_init.c only calls it.  No scheduling behaviour changes.  Examples:
+0x204 = started, TH_RUN, no runq; 0x105 = started, TH_WAIT, on runq;
+0x205 = started, TH_RUN and on a run queue (what we expected).
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 759c866..c51f2bf 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1292,6 +1292,10 @@ bsd_init(void)
+ 	 * exec image is already installed in the init task, so
+ 	 * task_wait_to_return -> thread_bootstrap_return should enter
+ 	 * launchd in EL0.  If this thread never comes back, that is the goal. */
++	{
++		extern unsigned int nio_pid1_debug(void);
++		printf("\nnio: PID1 st=%#x\n", nio_pid1_debug());
++	}
+ 	printf("\nnio: BLOCK boot thread for PID1\n");
+ 	thread_block(THREAD_CONTINUE_NULL);
+ }
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index af4db5f..e596357 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -390,6 +390,21 @@ sched_timer_deadline_tracking_init(void);
+ extern thread_t nio_pid1_thread;
+ extern volatile unsigned int nio_user_path_flags;
+ 
++/* nio: read-only dump of the cloned PID1 thread's scheduler state.
++ * low byte = thread->state (TH_RUN=4, TH_WAIT=1, TH_UNINT=8);
++ * 0x100 = on a run queue; 0x200 = started; 0x400 = bound to a processor. */
++unsigned int
++nio_pid1_debug(void)
++{
++	if (nio_pid1_thread == THREAD_NULL) {
++		return 0;
++	}
++	return (unsigned int)(nio_pid1_thread->state & 0xff) |
++	    (nio_pid1_thread->runq != PROCESSOR_NULL ? 0x100U : 0U) |
++	    (nio_pid1_thread->started ? 0x200U : 0U) |
++	    (nio_pid1_thread->bound_processor != PROCESSOR_NULL ? 0x400U : 0U);
++}
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
