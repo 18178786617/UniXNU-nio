@@ -1,0 +1,30 @@
+nio: mark parse_machfile in the boot's first execve
+
+The panel now reaches exec_mach_imgact and "machfile: halt init task",
+then stops before any further mark.  The next substantial call in
+load_machfile is parse_machfile(), which copyins the Mach-O header and maps
+the segments into the init task's map -- the exact place a copyout/copyin
+into the half-initialised init map could stall.
+
+  nio: ML pre-parse-machfile / parse args vp map off size
+  nio: ML post-parse-machfile lret=N
+
+pre without post means parse_machfile is the blocking call. Diagnosis only.
+
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -588,9 +588,13 @@
+ 	result->is_64bit_addr = ((imgp->ip_flags & IMGPF_IS_64BIT_ADDR) == IMGPF_IS_64BIT_ADDR);
+ 	result->is_64bit_data = ((imgp->ip_flags & IMGPF_IS_64BIT_DATA) == IMGPF_IS_64BIT_DATA);
+ 
++	printf("\nnio: ML pre-parse-machfile\n");
++	printf("nio: ML parse args vp=%p map=%p off=%lld size=%lld\n", (void*)vp, (void*)map,
++	    (long long)file_offset, (long long)macho_size);
+ 	lret = parse_machfile(vp, map, thread, header, file_offset, macho_size,
+ 	    0, aslr_page_offset, dyld_aslr_page_offset, result,
+ 	    NULL, imgp);
++	printf("nio: ML post-parse-machfile lret=%d\n", (int)lret);
+ 
+ 	if (lret != LOAD_SUCCESS) {
+ 		vm_map_deallocate(map); /* will lose pmap reference too */
