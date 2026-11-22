@@ -1,16 +1,15 @@
 nio: replace the ECM gadget with a plain USB bulk console channel
 
 The ECM build wedges in ifnet_attach() (KEXT-free boot has no network
-interface threads), so the host never enumerates the device and no log
-ever arrives.  Rebuild the gadget from the network-free EP0 driver (0073)
-plus a single bulk IN endpoint (EP1, physical 3): the console ring made by
-nio-console-log-ring.patch is streamed out as 512-byte bulk transfers,
-read on the PC by libusb/WinUSB with no kernel network stack and no driver.
+interface threads), so the host sees VID_0000 and never enumerates us.
+Rebuild the gadget from the network-free EP0 driver plus one bulk IN EP:
+stream the 4 MiB console ring out in 512-byte bulk transfers, read on the
+PC with libusb/WinUSB.  No ifnet, mbuf or socket in the boot path.
 
 diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 --- a/bsd/dev/nio_usb.c
 +++ b/bsd/dev/nio_usb.c
-@@ -1,895 +1,554 @@
+@@ -1,893 +1,554 @@
 -/*
 - * SWEET: USB bring-up, step 1 - read-only state probe.
 - *
@@ -23,7 +22,6 @@ diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 - * DWC3 / PHY register blocks only when the GCC status registers say their
 - * power domain and clocks are on (an access to a gated block would hang).
 - */
--#if defined(ARM64_BOARD_CONFIG_SWEET)
 -#include <sys/param.h>
 -#include <sys/systm.h>
 -#include <kern/clock.h>
@@ -905,7 +903,6 @@ diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 -		thread_deallocate(thread);
 -	}
 -}
--#endif /* ARM64_BOARD_CONFIG_SWEET */
 +/*
 + * SWEET: USB bring-up, step 1 - read-only state probe.
 + *
