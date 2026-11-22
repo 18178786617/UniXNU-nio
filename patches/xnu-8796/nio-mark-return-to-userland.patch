@@ -1,0 +1,64 @@
+nio: mark the new thread's return to userland
+
+CI 634 proved that execve runs all the way to task_clear_return_wait,
+but nothing after that reaches the panel: bsd_init runs on into VM
+compressor/swap setup, then stops silently after "Failed to open swap
+file".  The open question is no longer exec; it is whether the newly
+execed PID1 thread ever runs in userland, and whether the kernel side
+comes back from its own tail.
+
+Add three diagnosis-only printf landmarks:
+
+  nio: TER th=.. task=..   in thread_exception_return(), printed with
+                           the returning thread's task pointer
+  nio: COMP done           at the end of vm_compressor_init()
+  nio: BI back from        after bsdinit_task() returns on the boot
+    bsdinit_task           thread
+
+TER with a task other than kernel_task proves that a real user task was
+scheduled back to EL0.  COMP done separates "stuck inside swap setup"
+from "kernel idle, waiting for PID1".  No exec or SMP behaviour changes.
+Deliberately no printf in machine_switch_context: that path can run
+with interrupts masked and printing there can deadlock on the console.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index a39ace5..23a330a 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1281,6 +1281,7 @@ bsd_init(void)
+ 	/* nio: the deferred AST never fires on this board (607..612); call it. */
+ 	nio_bmark("\nnio: call bsdinit_task directly (613)");
+ 	bsdinit_task();
++	printf("\nnio: BI back from bsdinit_task\n");
+ }
+ 
+ #if defined(XNU_OWNER_ROOT_AUDIT) && XNU_OWNER_ROOT_AUDIT
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index 037ef36..b2845b8 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -567,6 +567,11 @@ void
+ thread_exception_return()
+ {
+ 	thread_t thread = current_thread();
++	{
++		extern int printf(const char *, ...);
++		printf("\nnio: TER th=%p task=%p\n", (void *)thread,
++		    (void *)get_threadtask_early(thread));
++	}
+ 	if (thread->machine.exception_trace_code != 0) {
+ 		KERNEL_DEBUG_CONSTANT_IST(KDEBUG_TRACE,
+ 		    MACHDBG_CODE(DBG_MACH_EXCP_SYNC_ARM, thread->machine.exception_trace_code) | DBG_FUNC_END, 0, 0, 0, 0, 0);
+diff --git a/osfmk/vm/vm_compressor.c b/osfmk/vm/vm_compressor.c
+index 302cdbe..74bc900 100644
+--- a/osfmk/vm/vm_compressor.c
++++ b/osfmk/vm/vm_compressor.c
+@@ -1229,6 +1229,7 @@ vm_compressor_init(void)
+ 	vm_page_reactivate_all_throttled();
+ 
+ 	bzero(&vmcs_stats, sizeof(struct vm_compressor_swapper_stats));
++	printf("\nnio: COMP done\n");
+ }
+ 
+ 
