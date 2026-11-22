@@ -1,0 +1,38 @@
+nio: yield once to the runnable PID1 thread after bsd_init
+
+CI 639 read PATH flags=0x150 (verified by enlarging the photo): the
+init thread's initial wakeup ran (0x40) and thread_setrun() queued it
+(0x10); the scheduler was entered (0x100) but never saw that thread
+runnable (0x80 absent) and never committed it (0x20 absent).  With the
+screen silent after "COMP done", the boot thread is running bsd_init to
+completion without ever giving another thread the CPU.
+
+The exec image is already installed in the init task, and the init
+thread is sitting in task_wait_to_return with the return-wait flag
+cleared, so it is ready to take its first trip to EL0.  Yield once at
+the end of bsd_init (after the PATH summary and after all kernel-side
+setup) instead of adding more read-only marks.
+
+If the boot thread never returns from this yield, that is success:
+launchd is running in userland.  No exec or SMP changes.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index effd176..642bd10 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1286,6 +1286,14 @@ bsd_init(void)
+ 		extern volatile unsigned int nio_user_path_flags;
+ 		printf("\nnio: PATH flags=%#x\n", (unsigned)nio_user_path_flags);
+ 	}
++	/* nio: 639 read PATH flags=0x150: the init thread was woken and made
++	 * runnable, but this boot thread never yielded after exec, so no
++	 * context switch ever happened.  Hand the CPU to it once here; the
++	 * exec image is already installed in the init task, so
++	 * task_wait_to_return -> thread_bootstrap_return should enter
++	 * launchd in EL0.  If this thread never comes back, that is the goal. */
++	printf("\nnio: YIELD to PID1 thread\n");
++	thread_yield_internal(1);
+ }
+ 
+ #if defined(XNU_OWNER_ROOT_AUDIT) && XNU_OWNER_ROOT_AUDIT

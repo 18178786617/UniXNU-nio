@@ -237,3 +237,4 @@ nio-mark-the-user-return-path.patch
 nio-sticky-user-return-flags.patch
 nio-flag-the-pid1-schedule.patch
 nio-flag-scheduler-look.patch
+nio-yield-to-pid1-after-bsdinit.patch
