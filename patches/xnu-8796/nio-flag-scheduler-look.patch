@@ -1,0 +1,39 @@
+nio: flag whether the scheduler ever looked at the PID1 thread
+
+CI 638 read PATH flags=0x50: the initial wakeup ran and the init thread
+was made runnable, but it was never committed to a processor (0x20
+absent).  Two more read-only bits in thread_select() separate the
+remaining cases:
+
+  bit 7  thread_select() ran at all (scheduler was entered)
+  bit 8  at that moment the cloned PID1 thread was still TH_RUN and on
+         a run queue
+
+Together with the existing bits, the next photo distinguishes:
+
+  no 0x100      the boot thread never entered the scheduler after exec
+  0x100 only    scheduler ran but the init thread was not runnable then
+  0x180         scheduler saw it runnable but chose another thread
+  0x1A0 or more it was committed, so follow the TWR/URET/TER bits
+
+No scheduling behaviour changes: the new code only sets sticky flags.
+
+
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index f124044..af4db5f 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -2443,6 +2443,13 @@ thread_select(thread_t          thread,
+ 	processor_set_t         pset = processor->processor_set;
+ 	thread_t                        new_thread = THREAD_NULL;
+ 
++	/* nio: read-only scheduler landmarks for the cloned PID1 thread. */
++	nio_user_path_flags |= 0x100;
++	if (nio_pid1_thread != THREAD_NULL &&
++	    (nio_pid1_thread->state & TH_RUN) && nio_pid1_thread->runq != PROCESSOR_NULL) {
++		nio_user_path_flags |= 0x80;
++	}
++
+ 	assert(processor == current_processor());
+ 	assert((thread->state & (TH_RUN | TH_TERMINATE2)) == TH_RUN);
+ 
