@@ -1,0 +1,69 @@
+nio: read-only USB/DWC3 state probe
+
+The owner wants the phone fully automatic: read the XNU console over USB
+instead of photographing the panel or waiting for a reboot.  ios-v60's sweet
+port proved the SM8250 DWC3 at 0xA600000 can be brought up after a fastboot
+handoff (USB ECM + live log), but nothing has checked whether nio's ABL
+actually leaves it powered and clocked.
+
+Add a read-only probe at the point where the heartbeat threads start.  It
+reads GCC GDSCR/master CBCR and, only if the block is powered, DWC3 GSNPSID/
+GCTL/DSTS/DCFG, printing each value through the direct framebuffer writer so
+the panel photograph names the exact state.  No registers are written and
+no behaviour changes.  Zero-risk first step before porting the full stack.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index dd30134..6d3702f 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -604,6 +604,42 @@ nio_beacon_thread(void *arg, wait_result_t wr)
+ 	}
+ }
+ 
++/* nio: read-only USB/DWC3 state probe (from ios-v60 sweet 0072, ported to
++ * SM8250).  ABL leaves this controller configured for fastboot; after a
++ * `fastboot boot` it may still be powered and in device mode, which would
++ * let us stream the console live instead of photographing the panel.
++ * This only READS registers, and only touches DWC3 when GCC says the
++ * power domain and clocks are on (a gated access would hang). */
++#define NIO_GCC_PA        0x00100000ull
++#define NIO_GDSCR        0x0f004u
++#define NIO_DWC3_PA      0x0a600000ull
++#define NIO_CLK_OFF      (1u << 31)
++static inline uint32_t nio_usb_rd(uint64_t a) {
++	uint32_t v = *(volatile uint32_t *)a;
++	__asm__ volatile("dsb sy" ::: "memory");
++	return v;
++}
++static void nio_usb_probe(void)
++{
++	uint32_t gdscr = nio_usb_rd(NIO_GCC_PA + NIO_GDSCR);
++	nio_dc_puts("\nnio: USB GDSC ");
++	nio_dc_putu(gdscr);
++	nio_dc_puts(gdscr & (1u<<31) ? " on" : " off");
++	uint32_t mst = nio_usb_rd(NIO_GCC_PA + 0x0f010u);
++	uint32_t noc = nio_usb_rd(NIO_GCC_PA + 0x0502cu);
++	nio_dc_puts("\nnio: USB clk mst ");
++	nio_dc_putu(mst); nio_dc_puts(" noc "); nio_dc_putu(noc);
++	if (!(gdscr & (1u<<31)) || (mst & NIO_CLK_OFF) || (noc & NIO_CLK_OFF)) {
++	nio_dc_puts("\nnio: USB gated, DWC3 not read");
++		return;
++	}
++	nio_dc_puts("\nnio: USB DWC3 id ");
++	nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc120u));
++	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc110u));
++	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc70cu));
++	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd(NIO_DWC3_PA + 0xc700u));
++}
++
+ /* nio: automatic reboot so the owner never has to press the power key.
+  * The KEXT-free boot reaches the PID1 stall and sits there with the
+  * watchdog off, so USB goes dead and the only way back to Android was
+@@ -715,6 +751,7 @@ kernel_startup_initialize_upto(startup_subsystem_id_t upto)
+ 	    kernel_task != TASK_NULL) {
+ 		thread_t th = THREAD_NULL;
+ 		nio_hb_started = true;
++		nio_usb_probe();
+ 		if (kernel_thread_start(nio_heartbeat_thread, NULL, &th) == KERN_SUCCESS) {
+ 			thread_deallocate(th);
+ 			printf("nio: hb thread started\n");

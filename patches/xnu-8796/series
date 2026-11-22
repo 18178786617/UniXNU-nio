@@ -245,3 +245,4 @@ nio-boost-pid1-and-preempt.patch
 nio-fix-pid1-boost-priority-range.patch
 nio-auto-reboot-after-150s.patch
 nio-auto-reboot-via-psci.patch
+nio-usb-readonly-probe.patch
