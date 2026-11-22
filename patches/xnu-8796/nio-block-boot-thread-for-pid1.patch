@@ -1,0 +1,35 @@
+nio: block the boot thread instead of a may-be-noop yield
+
+CI 640 printed "YIELD to PID1 thread" but nothing followed.  The reason
+is in syscall_subr.c: thread_yield_internal() first calls
+SCHED(thread_should_yield)() and returns immediately when the scheduler
+does not consider another thread worth switching to.  With the init
+thread's PATH flags stuck at 0x150, that early return is exactly what
+happened: no context switch, no URET, no TWR.
+
+Replace it with an unconditional thread_block(THREAD_CONTINUE_NULL) at
+the same point (the end of bsd_init, after exec and after all kernel
+setup).  This forces thread_select() to choose somebody.  If the init
+thread is really on a run queue, it now runs task_wait_to_return ->
+thread_bootstrap_return -> EL0 with launchd already installed in its
+task.  If it is not runnable, we will see the new BLOCK marker and then
+silence, which itself is the answer.
+
+No exec or SMP behaviour changes.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 642bd10..759c866 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1292,8 +1292,8 @@ bsd_init(void)
+ 	 * exec image is already installed in the init task, so
+ 	 * task_wait_to_return -> thread_bootstrap_return should enter
+ 	 * launchd in EL0.  If this thread never comes back, that is the goal. */
+-	printf("\nnio: YIELD to PID1 thread\n");
+-	thread_yield_internal(1);
++	printf("\nnio: BLOCK boot thread for PID1\n");
++	thread_block(THREAD_CONTINUE_NULL);
+ }
+ 
+ #if defined(XNU_OWNER_ROOT_AUDIT) && XNU_OWNER_ROOT_AUDIT
