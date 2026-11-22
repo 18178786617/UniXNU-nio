@@ -1,0 +1,41 @@
+nio: trace where nio_usb_gadget_start stalls
+
+Runs 651-653 all wedge with no USB output beyond 'soft reset done', and
+the call wedges bsd_init too.  Mark every step with printf (this unit's
+printf reaches the panel) so one photograph names the exact call that
+hangs.  The pmap_find_phys failure path is silent today -- mark it too.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -455,6 +455,7 @@ nio_usb_gadget_start(vm_offset_t dwc)
+ {
+ 	thread_t thread;
+ 
++	printf("nio: USB: GS enter dwc=%#x\n", (unsigned)dwc);
+ 	ud.dwc = dwc;
+ 	if (kmem_alloc_contig(kernel_map, &ud.dma, UD_SIZE, PAGE_MASK, 0, 0,
+ 	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
+@@ -462,7 +463,9 @@ nio_usb_gadget_start(vm_offset_t dwc)
+ 		return;
+ 	}
+ 	ppnum_t pn = pmap_find_phys(kernel_pmap, (addr64_t)ud.dma);
++	printf("nio: USB: GS dma=%#llx pn=%#x\n", (unsigned long long)ud.dma, (unsigned)pn);
+ 	if (!pn) {
++		printf("nio: USB: GS no phys page, bail\n");
+ 		return;
+ 	}
+ 	ud.dma_pa = ptoa_64(pn);
+@@ -470,4 +473,5 @@ nio_usb_gadget_start(vm_offset_t dwc)
+ 	/* Device controller soft reset (PHY and global setup stay as ABL left them). */
++	printf("nio: USB: GS before soft reset\n");
+ 	dwc_wr(DCTL, DCTL_CSFTRST);
+ 	int i;
+ 	for (i = 0; i < 500 && (dwc_rd(DCTL) & DCTL_CSFTRST); i++) {
+@@ -491,5 +495,6 @@ nio_usb_gadget_start(vm_offset_t dwc)
+ 	/* Events: disconnect, USB reset, connect done */
+ 	dwc_wr(DEVTEN, 0x7);
+ 
++	printf("nio: USB: GS before ep0 setup\n");
+ 	/* Endpoint 0 OUT/IN: start config, control type, max packet 512 until connect done. */
+ 	if (ud_epcmd(0, DEPCMD_DEPSTARTCFG, 0, 0, 0) ||
