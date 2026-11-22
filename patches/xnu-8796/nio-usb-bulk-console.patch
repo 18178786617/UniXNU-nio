@@ -6,6 +6,10 @@ Rebuild the gadget from the network-free EP0 driver plus one bulk IN EP:
 stream the 4 MiB console ring out in 512-byte bulk transfers, read on the
 PC with libusb/WinUSB.  No ifnet, mbuf or socket in the boot path.
 
+Fix the three compile errors from run 663: ud_thread lost its static void
+when the log thread was inserted, gadget_start stayed static though
+bsd_init.c calls it, and nio_log_copy was declared after its use.
+
 diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 --- a/bsd/dev/nio_usb.c
 +++ b/bsd/dev/nio_usb.c
@@ -1332,7 +1336,6 @@ diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 +	}
 +}
 +
-+static void
 +
 +/* nio: push the console ring (nio-console-log-ring.patch) out over bulk IN.
 + * Uses physical EP1 IN (=3) with its own TRB at UD_TRB_BULK. No network
@@ -1371,6 +1374,7 @@ diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 +		}
 +	}
 +}
++static void
 +ud_thread(void *arg __unused, wait_result_t wr __unused)
 +{
 +	for (;;) {
@@ -1391,7 +1395,7 @@ diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
 +	}
 +}
 +
-+static void
++void
 +nio_usb_gadget_start(vm_offset_t dwc)
 +{
 +	thread_t thread;
