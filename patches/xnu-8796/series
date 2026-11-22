@@ -248,3 +248,5 @@ nio-auto-reboot-via-psci.patch
 nio-usb-readonly-probe.patch
 nio-usb-probe-map-mmio.patch
 nio-usb-state-in-pid1-marks.patch
+nio-usb-gadget-driver.patch
+nio-usb-gadget-start.patch

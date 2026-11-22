@@ -1,0 +1,33 @@
+nio: start the USB gadget after the successful DWC3 probe
+
+Run 650 showed the controller is usable (USBSTATE id=0x3333130, GDSC on),
+so bring up the DWC3 USB device stack from the sweet 0072-0074 port in
+bsd/dev/nio_usb.c.  Reuse the already-mapped DWC3 window from the probe;
+the gadget starts only when the probe found a powered, clocked controller.
+This makes the phone enumerate over USB, the first step toward streaming
+the XNU console live (no buttons, no photographs).
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -107,4 +107,5 @@ bsd/dev/memdev.c			standard
+ bsd/dev/mem.c				standard
++bsd/dev/nio_usb.c			standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+ 
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -510,6 +510,11 @@ static void nio_usb_probe(void)
+ 	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc110u)));
+ 	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc70cu)));
+ 	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc700u)));
++	/* nio: controller is usable (650 proved it); start the USB gadget so
++	 * the host enumerates us -- first step to live console over USB. */
++	extern void nio_usb_gadget_start(vm_offset_t dwc);
++	nio_dc_puts("\nnio: USB starting gadget");
++	nio_usb_gadget_start(dwc);
+ }
+ 
+ /* nio: automatic reboot so the owner never has to press the power key.
