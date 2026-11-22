@@ -1,0 +1,45 @@
+nio: start the USB gadget from BSD init, not the ZALLOC boot thread
+
+Run 651 brought the gadget up to "soft reset done" and then wedged the
+boot: nio_usb_gadget_start() ran inside kernel_startup_initialize_upto at
+STARTUP_SUB_ZALLOC, where kmem_alloc_contig()/kernel_thread_start()/the
+DWC3 soft reset are unsafe -- sweet starts it only after the BSD subsystems
+are up (next to sweet_keys_init/sweet_touch_init).  This is a hang, not the
+150 s auto-reset.
+
+Move the gadget start to bsd_init(), right before load_init_program(), the
+same point the panel marks prove is live.  Keep the read-only probe in
+startup.c (harmless, already published via USBSTATE), but drop the gadget
+call there.
+
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -510,10 +510,5 @@ static void nio_usb_probe(void)
+ 	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc110u)));
+ 	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc70cu)));
+ 	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc700u)));
+-	/* nio: controller is usable (650 proved it); start the USB gadget so
+-	 * the host enumerates us -- first step to live console over USB. */
+-	extern void nio_usb_gadget_start(vm_offset_t dwc);
+-	nio_dc_puts("\nnio: USB starting gadget");
+-	nio_usb_gadget_start(dwc);
+ }
+ 
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1320,4 +1320,13 @@ bsd_init(void)
+ 	bsd_init_kprintf("bsd_do_post - done");
+ 
++	/* nio: start the DWC3 USB gadget now that BSD is up.  Starting it in
++	 * the ZALLOC boot thread wedged the machine (651); sweet starts it
++	 * this late too.  Map the controller here and hand it to the driver. */
++	{
++		extern void nio_usb_gadget_start(vm_offset_t dwc);
++		extern vm_offset_t ml_io_map(vm_offset_t pa, vm_size_t size);
++		nio_usb_gadget_start(ml_io_map(0x0a600000ull, 0xd000));
++	}
++
+ 	nio_bmark("\nnio: CHK before load_init");
+ 	load_init_program(p);
