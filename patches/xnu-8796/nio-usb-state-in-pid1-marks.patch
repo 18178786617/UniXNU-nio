@@ -1,0 +1,60 @@
+nio: print USB probe state next to the PID1 panel marks
+
+Run 649 probed the USB registers without panicking, but the probe prints at
+ZALLOC time and those lines scroll off the panel long before the PID1 stall
+where the owner photographs.  Publish the four probed values in a global and
+also print them beside the PID1 st/rq marks, which always appear in the photo.
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 531b489..67671e0 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1297,6 +1297,11 @@ bsd_init(void)
+ 		extern unsigned int nio_pid1_runq_debug(void);
+ 		printf("\nnio: PID1 st=%#x\n", nio_pid1_debug());
+ 		printf("\nnio: PID1 rq=%#x\n", nio_pid1_runq_debug());
++		{
++			extern unsigned int nio_usb_state[4];
++			printf("nio: USBSTATE gdb=%#x mst=%#x noc=%#x id=%#x\n",
++			    nio_usb_state[0], nio_usb_state[1], nio_usb_state[2], nio_usb_state[3]);
++		}
+ 	}
+ 	{
+ 		extern void nio_boost_pid1_and_preempt(void);
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+index ccbd7fc..a1c4880 100644
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -615,6 +615,8 @@ extern vm_offset_t ml_io_map(vm_offset_t pa, vm_size_t size);
+ #define NIO_DWC3_PA      0x0a600000u
+ #define NIO_DWC3_SIZE    0x0000d000u
+ #define NIO_CLK_OFF      (1u << 31)
++unsigned int nio_usb_state[4] = {0,0,0,0};  /* [0]=gdscr [1]=mst [2]=noc [3]=dwc GSNPSID */
++
+ static inline uint32_t nio_usb_rd(volatile uint32_t *a) {
+ 	uint32_t v = *a;
+ 	__asm__ volatile("dsb sy" ::: "memory");
+@@ -628,11 +630,13 @@ static void nio_usb_probe(void)
+ 		return;
+ 	}
+ 	uint32_t gdscr = nio_usb_rd((volatile uint32_t *)(gcc + NIO_GDSCR));
++	nio_usb_state[0] = gdscr;
+ 	nio_dc_puts("\nnio: USB GDSC ");
+ 	nio_dc_putu(gdscr);
+ 	nio_dc_puts(gdscr & (1u<<31) ? " on" : " off");
+ 	uint32_t mst = nio_usb_rd((volatile uint32_t *)(gcc + 0x0f010u));
+ 	uint32_t noc = nio_usb_rd((volatile uint32_t *)(gcc + 0x0502cu));
++	nio_usb_state[1] = mst; nio_usb_state[2] = noc;
+ 	nio_dc_puts("\nnio: USB clk mst ");
+ 	nio_dc_putu(mst); nio_dc_puts(" noc "); nio_dc_putu(noc);
+ 	if (!(gdscr & (1u<<31)) || (mst & NIO_CLK_OFF) || (noc & NIO_CLK_OFF)) {
+@@ -645,7 +649,8 @@ static void nio_usb_probe(void)
+ 		return;
+ 	}
+ 	nio_dc_puts("\nnio: USB DWC3 id ");
+-	nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc120u)));
++	nio_usb_state[3] = nio_usb_rd((volatile uint32_t *)(dwc + 0xc120u));
++	nio_dc_putu(nio_usb_state[3]);
+ 	nio_dc_puts(" gctl "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc110u)));
+ 	nio_dc_puts(" dsts "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc70cu)));
+ 	nio_dc_puts(" dcfg "); nio_dc_putu(nio_usb_rd((volatile uint32_t *)(dwc + 0xc700u)));
