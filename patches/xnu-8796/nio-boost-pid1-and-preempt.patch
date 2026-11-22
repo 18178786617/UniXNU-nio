@@ -1,0 +1,63 @@
+nio: boost the ready PID1 thread and force a preemption
+
+CI 637..643 narrowed the stall to a strange scheduler state: the cloned
+thread is started, TH_RUN, on cpu0's run queue, processor RUNNING,
+base_pri 31 / sched_pri 25, with the exec image already installed in its
+task - yet neither thread_setrun's preempt, thread_yield_internal nor
+thread_block ever switches to it.  Stop probing and force the issue.
+
+After bsd_init's PATH/st/rq dumps (i.e. after execve returned on the
+boot thread), print "nio: BOOST PID1 priority", raise the cloned
+thread's sched_pri and base_pri above BASEPRI_KERNEL, and call
+ast_on(AST_PREEMPT | AST_URGENT) on the boot thread.  The next AST must
+pick the highest-priority runnable thread, which should now be PID1;
+its task_wait_to_return continuation then returns to EL0 with launchd
+already loaded.  The existing thread_block() stays as a backstop.
+
+This changes scheduling priority only for this boot experiment; no
+exec or SMP behaviour changes.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index b3e379c..531b489 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1298,6 +1298,11 @@ bsd_init(void)
+ 		printf("\nnio: PID1 st=%#x\n", nio_pid1_debug());
+ 		printf("\nnio: PID1 rq=%#x\n", nio_pid1_runq_debug());
+ 	}
++	{
++		extern void nio_boost_pid1_and_preempt(void);
++		printf("\nnio: BOOST PID1 priority\n");
++		nio_boost_pid1_and_preempt();
++	}
+ 	printf("\nnio: BLOCK boot thread for PID1\n");
+ 	thread_block(THREAD_CONTINUE_NULL);
+ }
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index 1c2a925..84f7270 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -390,6 +390,22 @@ sched_timer_deadline_tracking_init(void);
+ extern thread_t nio_pid1_thread;
+ extern volatile unsigned int nio_user_path_flags;
+ 
++/* nio: after execve has installed the image in the init task, raise the
++ * cloned thread above the boot thread and force a preemption so it can
++ * take its first trip to EL0.  Diagnosed from CI 637..643: the thread is
++ * started, TH_RUN, on cpu0's run queue, on a RUNNING processor, with
++ * normal priorities, yet ordinary block/yield never selects it. */
++void
++nio_boost_pid1_and_preempt(void)
++{
++	if (nio_pid1_thread == THREAD_NULL) {
++		return;
++	}
++	nio_pid1_thread->sched_pri = MAXPRI_KERNEL + 1;
++	nio_pid1_thread->base_pri = MAXPRI_KERNEL + 1;
++	ast_on(AST_PREEMPT | AST_URGENT);
++}
++
+ /* nio: read-only dump of the cloned PID1 thread's scheduler state.
+  * low byte = thread->state (TH_RUN=4, TH_WAIT=1, TH_UNINT=8);
+  * 0x100 = on a run queue; 0x200 = started; 0x400 = bound to a processor. */

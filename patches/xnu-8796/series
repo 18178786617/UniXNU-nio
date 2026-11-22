@@ -241,3 +241,4 @@ nio-yield-to-pid1-after-bsdinit.patch
 nio-block-boot-thread-for-pid1.patch
 nio-dump-pid1-thread-state.patch
 nio-dump-pid1-runqueue.patch
+nio-boost-pid1-and-preempt.patch
