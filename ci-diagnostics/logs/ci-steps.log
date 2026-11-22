@@ -1,0 +1,159 @@
+09:21:41 prepare: started in /Users/runner/work/UniXNU-nio/UniXNU-nio
+09:21:41 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+09:21:41 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist
+09:21:41 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o
+09:21:41 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+traced script start: scripts/build-xnu-4k-baseline.sh
+traced before/after make: scripts/build-xnu-4k-baseline.sh
+09:21:41 syntax ok: scripts/build-xnu-4k-baseline.sh
+09:21:41 script absent: out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh
+09:21:41 prepare: done
+base=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio
+record=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json exists=True
+tree object=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o exists=True
+recorded file=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c output=startup.o
+replaying 431 arguments in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT
+replay rc=0
+preprocess rc=0
+preprocessed bytes=1252230 has HB=True
+preprocessed bytes=1252230 has hb-started=True
+replay bytes=125456 tree bytes=125456 identical=True
+replay has HB=True tree has HB=True
+object magic=cffaedfe
+object nio contexts (12): [b'%d\x00/chosen\x00\x00nio: hb thread started\n\x00', b'ad started\n\x00nio: hb thread failed\n\x00n', b'ead failed\n\x00nio: beacon thread start', b'ad started\n\x00nio: auto-reboot thread ', b'HREAD_NULL\x00\nnio: USB GCC map failed\x00', b'map failed\x00\nnio: USB GDSC \x00 on\x00 off\x00', b' \x00 on\x00 off\x00\nnio: USB clk mst \x00 noc \x00', b'mst \x00 noc \x00\nnio: USB gated, DWC3 not', b'3 not read\x00\nnio: USB DWC3 map failed', b'map failed\x00\nnio: USB DWC3 id \x00 gctl ', b'ts \x00 dcfg \x00\nnio: HB \x00 \x00V\x00w\x00m\x00c\x00q\x00u\x00r', b'|\x00 f\x00 N\x00 n\x00\nnio: AUTO-REBOOT now via']
+object has leading-newline form=True
+replay sha=3d4ba126ecf421a3 tree sha=3d4ba126ecf421a3
+assembly rc=0
+assembly lines=31108 has HB=True
+assembly calls to nio_dc_puts=39
+heartbeat body lines=130
+  asm| _nio_heartbeat_thread:                  ; @nio_heartbeat_thread
+  asm| Lfunc_begin6:
+  asm| 	.loc	4 688 0                         ; .cache/xnu-work/osfmk/kern/startup.c:688:0
+  asm| 	.cfi_startproc
+  asm| ; %bb.0:
+  asm| 	sub	sp, sp, #96
+  asm| 	stp	x26, x25, [sp, #16]             ; 16-byte Folded Spill
+  asm| 	stp	x24, x23, [sp, #32]             ; 16-byte Folded Spill
+  asm| 	stp	x22, x21, [sp, #48]             ; 16-byte Folded Spill
+  asm| 	stp	x20, x19, [sp, #64]             ; 16-byte Folded Spill
+  asm| 	stp	x29, x30, [sp, #80]             ; 16-byte Folded Spill
+  asm| 	add	x29, sp, #80
+  asm| 	.cfi_def_cfa w29, 16
+  asm| 	.cfi_offset w30, -8
+  asm| 	.cfi_offset w29, -16
+  asm| 	.cfi_offset w19, -24
+  asm| 	.cfi_offset w20, -32
+  asm| 	.cfi_offset w21, -40
+  asm| 	.cfi_offset w22, -48
+  asm| 	.cfi_offset w23, -56
+  asm| 	.cfi_offset w24, -64
+  asm| 	.cfi_offset w25, -72
+  asm| 	.cfi_offset w26, -80
+  asm| 	.loc	4 688 0 prologue_end            ; .cache/xnu-work/osfmk/kern/startup.c:688:0
+  asm| 	mov	x24, #0                         ; =0x0
+  asm| 	mov	w21, #1                         ; =0x1
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:arg <- undef
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:wr <- undef
+  asm| Ltmp171:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- 0
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- 0
+  asm| 	mov	w22, #51712                     ; =0xca00
+  asm| 	movk	w22, #15258, lsl #16
+  asm| Lloh89:
+  asm| 	adrp	x19, l_.str.61@PAGE
+  asm| Lloh90:
+  asm| 	add	x19, x19, l_.str.61@PAGEOFF
+  asm| 	mov	x23, #63439                     ; =0xf7cf
+  asm| 	movk	x23, #58195, lsl #16
+  asm| 	movk	x23, #39845, lsl #32
+  asm| 	movk	x23, #8388, lsl #48
+  asm| Lloh91:
+  asm| 	adrp	x20, l_.str.62@PAGE
+  asm| Lloh92:
+  asm| 	add	x20, x20, l_.str.62@PAGEOFF
+  asm| 	b	LBB6_2
+  asm| Ltmp172:
+  asm| LBB6_1:                                 ;   in Loop: Header=BB6_2 Depth=1
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w21
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	.loc	4 691 2                         ; .cache/xnu-work/osfmk/kern/startup.c:691:2
+  asm| 	add	w21, w21, #1
+  asm| Ltmp173:
+  asm| LBB6_2:                                 ; =>This Inner Loop Header: Depth=1
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- [DW_OP_constu 1, DW_OP_minus, DW_OP_stack_value] $w21
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- 0
+  asm| 	.loc	4 692 12                        ; .cache/xnu-work/osfmk/kern/startup.c:692:12
+  asm| 	stp	xzr, xzr, [sp]
+  asm| Ltmp174:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- 0
+  asm| 	.loc	4 694 3                         ; .cache/xnu-work/osfmk/kern/startup.c:694:3
+  asm| 	mov	w0, #100                        ; =0x64
+  asm| 	bl	_delay
+  asm| Ltmp175:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w21
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- [DW_OP_plus_uconst 8, DW_OP_deref] $sp
+  asm| 	.loc	4 696 3                         ; .cache/xnu-work/osfmk/kern/startup.c:696:3
+  asm| 	add	x0, sp, #8
+  asm| 	bl	_clock_get_uptime
+  asm| Ltmp176:
+  asm| 	.loc	4 697 31                        ; .cache/xnu-work/osfmk/kern/startup.c:697:31
+  asm| 	ldr	x0, [sp, #8]
+  asm| Ltmp177:
+  asm| 	;DEBUG_VALUE: nio_hb_abstime <- $x0
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- [DW_OP_deref] $sp
+  asm| 	.loc	4 697 3 is_stmt 0               ; .cache/xnu-work/osfmk/kern/startup.c:697:3
+  asm| 	mov	x1, sp
+  asm| 	bl	_absolutetime_to_nanoseconds
+  asm| Ltmp178:
+  asm| 	.loc	4 698 8 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:698:8
+  asm| 	ldr	x25, [sp]
+  asm| Ltmp179:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x25
+  asm| 	.loc	4 698 18 is_stmt 0              ; .cache/xnu-work/osfmk/kern/startup.c:698:18
+  asm| 	sub	x8, x25, x24
+  asm| 	.loc	4 698 33                        ; .cache/xnu-work/osfmk/kern/startup.c:698:33
+  asm| 	cmp	x8, x22
+  asm| 	b.lo	LBB6_1
+  asm| Ltmp180:
+  asm| ; %bb.3:                                ;   in Loop: Header=BB6_2 Depth=1
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x25
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:n <- $w21
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x25
+  asm| 	.loc	4 700 4 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:700:4
+  asm| 	mov	x0, x19
+  asm| 	bl	_nio_dc_puts
+  asm| Ltmp181:
+  asm| 	.loc	4 701 16                        ; .cache/xnu-work/osfmk/kern/startup.c:701:16
+  asm| 	mov	w0, w21
+  asm| 	.loc	4 701 4 is_stmt 0               ; .cache/xnu-work/osfmk/kern/startup.c:701:4
+  asm| 	bl	_nio_dc_putu
+  asm| Ltmp182:
+  asm| 	.loc	4 702 4 is_stmt 1               ; .cache/xnu-work/osfmk/kern/startup.c:702:4
+  asm| 	mov	x0, x20
+  asm| 	bl	_nio_dc_puts
+  asm| Ltmp183:
+  asm| 	.loc	4 703 16                        ; .cache/xnu-work/osfmk/kern/startup.c:703:16
+  asm| 	ldr	x8, [sp]
+  asm| Ltmp184:
+  asm| 	;DEBUG_VALUE: nio_hb_ns <- $x8
+  asm| 	.loc	4 703 26 is_stmt 0              ; .cache/xnu-work/osfmk/kern/startup.c:703:26
+  asm| 	lsr	x8, x8, #3
+  asm| Ltmp185:
+  asm| 	umulh	x8, x8, x23
+  asm| 	lsr	x0, x8, #4
+  asm| 	.loc	4 703 4                         ; .cache/xnu-work/osfmk/kern/startup.c:703:4
+  asm| 	bl	_nio_dc_putu
+  asm| Ltmp186:
+  asm| 	.loc	4 0 4                           ; .cache/xnu-work/osfmk/kern/startup.c:0:4
+  asm| 	mov	x24, x25
+  asm| Ltmp187:
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	;DEBUG_VALUE: nio_heartbeat_thread:nio_hb_last <- $x24
+  asm| 	b	LBB6_1
+  asm| Ltmp188:
+  asm| 	.loh AdrpAdd	Lloh91, Lloh92
+  asm| 	.loh AdrpAdd	Lloh89, Lloh90
