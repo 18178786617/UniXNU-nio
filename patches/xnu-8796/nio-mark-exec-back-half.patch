@@ -1,0 +1,44 @@
+nio: mark the back half of execve after parse_machfile
+
+parse_machfile now returns LOAD_SUCCESS ("ML post-parse-machfile lret=0"),
+but the panel shows no later progress.  Mark the remaining steps of the
+first execve so the next photo names the blocking call:
+
+  nio: EX post-load_machfile lret=N
+  nio: EX pre/post-proc-switch         around proc_exec_switch_task
+  nio: EX pre/post-wake-new-thread     around task_clear_return_wait that
+                                       releases the new exec thread (launchd)
+
+A "pre-" without its "post-" is the call that never returns.  Diagnosis only.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1342,6 +1342,7 @@
+ 	 */
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile enter");
+ 	lret = load_machfile(imgp, mach_header, thread, &map, &load_result);
++	printf("nio: EX post-load_machfile lret=%d\n", (int)lret);
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile returned");
+ 	if (lret != LOAD_SUCCESS) {
+ 		error = load_return_to_errno(lret);
+@@ -5092,7 +5093,9 @@
+ 	}
+ 
+ 	if (!error) {
++		printf("nio: EX pre-proc-switch\n");
+ 		p = proc_exec_switch_task(current_proc(), p, old_task, new_task, imgp->ip_new_thread, &inherit);
++		printf("nio: EX post-proc-switch p=%p\n", (void*)p);
+ 		/* proc ref returned */
+ 		should_release_proc_ref = TRUE;
+ 	}
+@@ -5261,7 +5264,9 @@
+ 		/* Release the thread ref returned by cloneproc */
+ 		if (imgp->ip_new_thread) {
+ 			/* wake up the new exec thread */
++			printf("nio: EX pre-wake-new-thread\n");
+ 			task_clear_return_wait(get_threadtask(imgp->ip_new_thread), TCRW_CLEAR_FINAL_WAIT);
++			printf("nio: EX post-wake-new-thread\n");
+ 			thread_deallocate(imgp->ip_new_thread);
+ 			imgp->ip_new_thread = NULL;
+ 		}
