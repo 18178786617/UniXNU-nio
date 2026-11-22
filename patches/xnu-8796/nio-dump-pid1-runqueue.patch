@@ -1,0 +1,66 @@
+nio: dump which run queue holds the PID1 thread
+
+CI 642 read PID1 st=0x304: the cloned init thread is started, TH_RUN,
+on a run queue, and not bound.  Yet thread_select() never sees it
+(0x80 bit absent) and thread_block() cannot switch to it.  The remaining
+suspect is that it was enqueued on a processor that is not running
+(this board boots effectively single-core while the ADT has eight CPUs).
+
+Add one more read-only line before BLOCK:
+
+  nio: PID1 rq=0xAABBCCDD
+    AA = runq processor->state
+    BB = thread->base_pri
+    CC = thread->sched_pri
+    DD = runq processor->cpu_id (0xff = PROCESSOR_NULL)
+
+No behaviour change.  If DD is not cpu0, or AA says the processor is
+off-line, the fix is to force this thread onto the running processor
+before it is woken, not to keep probing exec or SMP.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index c51f2bf..b3e379c 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1294,7 +1294,9 @@ bsd_init(void)
+ 	 * launchd in EL0.  If this thread never comes back, that is the goal. */
+ 	{
+ 		extern unsigned int nio_pid1_debug(void);
++		extern unsigned int nio_pid1_runq_debug(void);
+ 		printf("\nnio: PID1 st=%#x\n", nio_pid1_debug());
++		printf("\nnio: PID1 rq=%#x\n", nio_pid1_runq_debug());
+ 	}
+ 	printf("\nnio: BLOCK boot thread for PID1\n");
+ 	thread_block(THREAD_CONTINUE_NULL);
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index e596357..1c2a925 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -405,6 +405,26 @@ nio_pid1_debug(void)
+ 	    (nio_pid1_thread->bound_processor != PROCESSOR_NULL ? 0x400U : 0U);
+ }
+ 
++/* nio: which run queue is the PID1 thread on?  Read-only.
++ * bits 0..7   runq processor cpu_id (0xff means PROCESSOR_NULL)
++ * bits 8..15  sched_pri
++ * bits 16..23 base_pri
++ * bits 24..31 that processor->state */
++unsigned int
++nio_pid1_runq_debug(void)
++{
++	processor_t p;
++
++	if (nio_pid1_thread == THREAD_NULL) {
++		return 0;
++	}
++	p = nio_pid1_thread->runq;
++	return ((p == PROCESSOR_NULL) ? 0xFFU : (unsigned int)(p->cpu_id & 0xFFU)) |
++	    (((unsigned int)nio_pid1_thread->sched_pri & 0xFFU) << 8) |
++	    (((unsigned int)nio_pid1_thread->base_pri & 0xFFU) << 16) |
++	    (((p == PROCESSOR_NULL) ? 0U : ((unsigned int)p->state & 0xFFU)) << 24);
++}
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
