@@ -256,3 +256,4 @@ nio-usb-gadget-trace.patch
 nio-usb-skip-soft-reset.patch
 nio-console-log-ring.patch
 nio-usb-ecm-live-log.patch
+nio-usb-export-gadget-start.patch
