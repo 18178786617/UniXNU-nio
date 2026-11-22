@@ -1,0 +1,3 @@
+Cloning into '/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/libpthread-work'...
+this XNU tree calls proc_get_pthread_jit_allowlist what the sources call proc_get_jit_entitled
+Matching libpthread: 3 real C sources + bootstrap, ARM64/iOS 17 audit, no unavailable kernel names
