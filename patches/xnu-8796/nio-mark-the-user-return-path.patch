@@ -1,0 +1,94 @@
+nio: mark the new thread's path to userland
+
+CI 635 showed "BI back from bsdinit_task" and "COMP done" on the panel,
+so the boot thread ran on past swap setup, but no "TER" appeared.  That
+alone is not proof that PID1 never reached userland: thread_bootstrap_return()
+branches straight to arm64_thread_exception_return(), bypassing the C
+thread_exception_return() wrapper that carries the TER printf.
+
+Mark the missing part of the path, one photo still decides the case:
+
+  nio: TWR enter task=.. flags=..   task_wait_to_return() started on the
+                                    new thread (it was scheduled at all)
+  nio: TWR ready task=..            return-wait handshake completed and
+                                    the thread is about to bootstrap
+  nio: URET                         arm64_thread_exception_return() actually
+                                    entered, written straight to the panel
+                                    through cons_ops[1] (no console lock)
+
+Read the next photo in order: no TWR enter => the new thread is never
+scheduled; TWR enter but no TWR ready => it is stuck in the return-wait
+handshake; TWR ready but no URET => stuck between the handshake and EL0;
+URET present => the first user return really happened, so follow it with
+the existing TER/syscall marks.  No exec or SMP behaviour changes.
+
+URET is placed in arm64_thread_exception_return(), not at the shared
+return_to_user label: exception_return_dispatch branches there with the
+machine context in sp, where a C call is not safe.  Both callers of
+arm64_thread_exception_return are C functions with a kernel stack, so
+PUSH_FRAME/POP_FRAME there is safe; x21 and x28 are callee-saved.
+
+
+diff --git a/osfmk/arm64/locore.s b/osfmk/arm64/locore.s
+index 98bf885..1c17bc5 100644
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -840,6 +840,11 @@ LEXT(arm64_thread_exception_return)
+ 	add		x21, x0, ACT_CONTEXT
+ 	ldr		x21, [x21]
+ 	mov		x28, xzr
++	/* nio: this path always has a kernel stack (both callers are C);
++	 * x21/x28 are callee-saved, so the C marker preserves them. */
++	PUSH_FRAME
++	bl		EXT(nio_user_return_mark)
++	POP_FRAME
+ 
+ 	//
+ 	// Fall Through to return_to_user from arm64_thread_exception_return.  
+diff --git a/osfmk/kern/task.c b/osfmk/kern/task.c
+index 24ed326..d52a86e 100644
+--- a/osfmk/kern/task.c
++++ b/osfmk/kern/task.c
+@@ -783,11 +783,34 @@ task_clear_return_wait(task_t task, uint32_t flags)
+ 	}
+ }
+ 
++/* nio: a global, lock-free panel mark for the assembly return-to-user path.
++ * The layout mirrors osfmk/console/serial_protos.h's struct console_ops;
++ * cons_ops[1] writes straight to the frame buffer (no console ring/lock). */
++struct nio_uret_console_ops {
++	void (*putc)(char, _Bool);
++	int (*getc)(_Bool);
++};
++extern struct nio_uret_console_ops cons_ops[];
++extern void nio_user_return_mark(void);
++
++__attribute__((noinline)) void
++nio_user_return_mark(void)
++{
++	const char *s = "\nnio: URET\n";
++
++	while (*s != '\0') {
++		cons_ops[1].putc(*s++, 1);
++	}
++}
++
+ void __attribute__((noreturn))
+ task_wait_to_return(void)
+ {
+ 	task_t task = current_task();
+ 
++	printf("\nnio: TWR enter task=%p flags=%#x\n", (void *)task,
++	    (unsigned)task->t_returnwaitflags);
++
+ 	is_write_lock(task->itk_space);
+ 
+ 	if (task->t_returnwaitflags & TRW_LRETURNWAIT) {
+@@ -831,6 +854,7 @@ task_wait_to_return(void)
+ 	mac_proc_notify_exec_complete(current_proc());
+ #endif
+ 
++	printf("\nnio: TWR ready task=%p\n", (void *)task);
+ 	thread_bootstrap_return();
+ }
+ 
