@@ -1,0 +1,67 @@
+nio: mirror the console into a 4 MiB ring for live streaming
+
+The USB live-log (sweet 0077) needs a console ring it can copy from and
+push over UDP.  sweet builds one in its persistent-console-log patch; nio
+has a different hook (console_write_char -> nio_ramoops_putc), so add the
+ring there: every console character goes to both the ramoops record and a
+plain 4 MiB in-memory ring, and export copy/position for the log thread.
+
+No UFS persistence here -- the ring is only the source for USB streaming.
+
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -651,5 +651,46 @@ nio_ramoops_putc(char c)
+ #define NIO_RAMOOPS_SIG     0x43474244u
+ 
++/* nio: 4 MiB console ring for live streaming over USB (sweet 0077 port).
++ * Written from console_write_char, so it sees kernel printf and daemon
++ * /dev/console writes alike.  Never blocks. */
++#define NIO_LOG_SIZE        (4u << 20)
++static char          nio_log_ring[NIO_LOG_SIZE];
++static uint64_t      nio_log_total;
++
++void        nio_log_append(const char *c, int size);
++uint32_t    nio_log_copy(uint64_t *pos, char *out, uint32_t max);
++uint64_t    nio_log_position(void);
++
++void
++nio_log_append(const char *c, int size)
++{
++	for (int i = 0; i < size; i++) {
++		uint64_t at = __sync_fetch_and_add(&nio_log_total, 1);
++		nio_log_ring[at % NIO_LOG_SIZE] = c[i];
++	}
++}
++
++uint64_t
++nio_log_position(void)
++{
++	return nio_log_total;
++}
++
++uint32_t
++nio_log_copy(uint64_t *pos, char *out, uint32_t max)
++{
++	uint64_t total = nio_log_total;
++	if (total - *pos > NIO_LOG_SIZE) {
++		*pos = total - NIO_LOG_SIZE;
++	}
++	uint32_t n = (uint32_t)((total - *pos < max) ? (total - *pos) : max);
++	for (uint32_t i = 0; i < n; i++) {
++		out[i] = nio_log_ring[(*pos + i) % NIO_LOG_SIZE];
++	}
++	*pos += n;
++	return n;
++}
++
+ static void
+ nio_ramoops_putc(char c)
+ {
+@@ -674,5 +715,6 @@ void
+ console_write_char(char c)
+ {
+ 	nio_ramoops_putc(c);
++	nio_log_append(&c, 1);
+ 	console_write(&c, 1);
+ }

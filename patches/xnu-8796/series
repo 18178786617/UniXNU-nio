@@ -254,3 +254,4 @@ nio-auto-reboot-1200s.patch
 nio-usb-gadget-move-to-bsd-init.patch
 nio-usb-gadget-trace.patch
 nio-usb-skip-soft-reset.patch
+nio-console-log-ring.patch
