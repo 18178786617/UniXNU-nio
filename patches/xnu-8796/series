@@ -234,3 +234,4 @@ nio-mark-parse-machfile.patch
 nio-mark-exec-back-half.patch
 nio-mark-return-to-userland.patch
 nio-mark-the-user-return-path.patch
+nio-sticky-user-return-flags.patch

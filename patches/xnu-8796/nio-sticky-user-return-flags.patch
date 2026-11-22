@@ -1,0 +1,103 @@
+nio: make the user-return landmarks survive the rolling console
+
+CI 636 showed no TWR lines on the panel, but those prints happen long
+before execve; the console is a 40-line rolling window and they can have
+been overwritten by the time the execve marks appear.  A missing TWR line
+is therefore not evidence that the new thread never ran.  Also, clang
+expanded the URET string in the putc loop into immediates, so the string
+never entered the kernel (the same trap hit earlier rounds).
+
+Add sticky flags and print one summary where the next photo is certain
+to show it, just after bsd_init gets back from bsdinit_task:
+
+  nio: PATH flags=0xN
+    bit 0  task_wait_to_return entered (the new thread ran at all)
+    bit 1  return-wait handshake done, about to call thread_bootstrap_return
+    bit 2  arm64_thread_exception_return entered (URET assembly path)
+    bit 3  C thread_exception_return wrapper entered (subsequent user returns)
+
+The flags are set in osfmk/kern/task.c, osfmk/arm64/sleh.c and the
+cons_ops[1] marker called from locore.s; bsd/kern/bsd_init.c prints the
+summary after execve.  No exec or SMP behaviour changes.
+
+URET is now read from __attribute__((used)) static const char nio_uret_str[]
+so the bytes are forced into the kernel; verify with a byte search on
+out/kernel.macho before trusting the next photo.
+
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+index 23a330a..04ea84b 100644
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1282,6 +1282,10 @@ bsd_init(void)
+ 	nio_bmark("\nnio: call bsdinit_task directly (613)");
+ 	bsdinit_task();
+ 	printf("\nnio: BI back from bsdinit_task\n");
++	{
++		extern volatile unsigned int nio_user_path_flags;
++		printf("\nnio: PATH flags=%#x\n", (unsigned)nio_user_path_flags);
++	}
+ }
+ 
+ #if defined(XNU_OWNER_ROOT_AUDIT) && XNU_OWNER_ROOT_AUDIT
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index b2845b8..42eb5ee 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -569,6 +569,8 @@ thread_exception_return()
+ 	thread_t thread = current_thread();
+ 	{
+ 		extern int printf(const char *, ...);
++		extern volatile unsigned int nio_user_path_flags;
++		nio_user_path_flags |= 0x8;
+ 		printf("\nnio: TER th=%p task=%p\n", (void *)thread,
+ 		    (void *)get_threadtask_early(thread));
+ 	}
+diff --git a/osfmk/kern/task.c b/osfmk/kern/task.c
+index d52a86e..df14c40 100644
+--- a/osfmk/kern/task.c
++++ b/osfmk/kern/task.c
+@@ -783,6 +783,16 @@ task_clear_return_wait(task_t task, uint32_t flags)
+ 	}
+ }
+ 
++/* nio: sticky flags for the new thread's path to userland.  CI 636 showed
++ * that the console is a rolling 40-line window: the TWR prints happen long
++ * before execve and can be gone from the panel by the time we look.  The
++ * flags survive, and bsd_init prints the summary after execve. */
++volatile unsigned int nio_user_path_flags = 0;
++
++/* clang expands a constant string in a putc loop into immediates; "used"
++ * keeps the bytes in the kernel so the build can be verified. */
++__attribute__((used)) static const char nio_uret_str[] = "\nnio: URET\n";
++
+ /* nio: a global, lock-free panel mark for the assembly return-to-user path.
+  * The layout mirrors osfmk/console/serial_protos.h's struct console_ops;
+  * cons_ops[1] writes straight to the frame buffer (no console ring/lock). */
+@@ -796,8 +806,9 @@ extern void nio_user_return_mark(void);
+ __attribute__((noinline)) void
+ nio_user_return_mark(void)
+ {
+-	const char *s = "\nnio: URET\n";
++	const char *s = nio_uret_str;
+ 
++	nio_user_path_flags |= 0x4;
+ 	while (*s != '\0') {
+ 		cons_ops[1].putc(*s++, 1);
+ 	}
+@@ -808,6 +819,7 @@ task_wait_to_return(void)
+ {
+ 	task_t task = current_task();
+ 
++	nio_user_path_flags |= 0x1;
+ 	printf("\nnio: TWR enter task=%p flags=%#x\n", (void *)task,
+ 	    (unsigned)task->t_returnwaitflags);
+ 
+@@ -854,6 +866,7 @@ task_wait_to_return(void)
+ 	mac_proc_notify_exec_complete(current_proc());
+ #endif
+ 
++	nio_user_path_flags |= 0x2;
+ 	printf("\nnio: TWR ready task=%p\n", (void *)task);
+ 	thread_bootstrap_return();
+ }
