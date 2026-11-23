@@ -1,0 +1,30 @@
+nio: fine probes inside the VBUS override block
+
+Run 668 showed USBA..USBD on the panel but no USBE: the gadget wedges
+between EP0 setup and RUN_STOP. Split that window: USF1 after DALEPENA,
+USF2 after ud_start_setup, USF3 after ml_io_map(QSCRATCH), USF4 after the
+QSCRATCH reads/writes. The last mark on the panel identifies the exact
+stall (candidate: QSCRATCH MMIO access needs a clock/wrapper not up in XNU).
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -590,14 +590,18 @@
+ 	}
+ 	nio_usb_mark(" USBD");
+ 	dwc_wr(DALEPENA, 0x9);   /* EP0 + EP1 IN bulk */
++	nio_usb_mark(" USF1");
+ 	ud_start_setup();
++	nio_usb_mark(" USF2");
+ 	vm_offset_t qs = ml_io_map(QSCRATCH_PA, 0x100);
++	nio_usb_mark(" USF3");
+ 	if (qs != 0) {
+ 		uint32_t hs = usb_rd(qs, QSCRATCH_HS_PHY_CTRL), ss = usb_rd(qs, QSCRATCH_SS_PHY_CTRL);
+ 		printf("nio: USB: QSCRATCH HS 0x%08x SS 0x%08x\n", hs, ss);
+ 		*(volatile uint32_t *)(qs + QSCRATCH_HS_PHY_CTRL) = hs | UTMI_OTG_VBUS_VALID | SW_SESSVLD_SEL;
+ 		*(volatile uint32_t *)(qs + QSCRATCH_SS_PHY_CTRL) = ss | LANE0_PWR_PRESENT;
+ 		__asm__ volatile ("dsb sy" ::: "memory");
++		nio_usb_mark(" USF4");
+ 		printf("nio: USB: VBUS override on\n");
+ 	}
+ 	nio_usb_mark(" USBE");

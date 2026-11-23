@@ -265,3 +265,4 @@ nio-usb-bulk-vbus-override.patch
 nio-usb-bulk-skip-soft-reset.patch
 nio-usb-ep0-hw-delay.patch
 nio-usb-gadget-probes.patch
+nio-usb-vbus-fine-probes.patch
