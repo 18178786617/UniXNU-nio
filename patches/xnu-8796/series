@@ -223,3 +223,4 @@ nio-unconditional-block-boot-thread.patch
 nio-selfcontained-pid1-sched-diag.patch
 nio-direct-sel-saw-pid1.patch
 nio-report-select-outcome.patch
+nio-print-chosen-priority.patch
