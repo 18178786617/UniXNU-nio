@@ -262,3 +262,4 @@ nio-usb-enable-gadget-by-default.patch
 nio-usb-ecm-trace.patch
 nio-usb-bulk-console.patch
 nio-usb-bulk-vbus-override.patch
+nio-usb-bulk-skip-soft-reset.patch
