@@ -1,0 +1,44 @@
+nio: restore DWC3 soft reset with clock-independent delay
+
+Run 654 blamed CSFTRST for a hang, but its wait loop used delay(1000),
+which never returns while the timebase is frozen this early in XNU (the
+same root cause later found for STARTTRANSFER). sweet 0073/74 soft-reset
+here successfully. Restore the reset, wait with ud_hw_delay_us (pure
+instruction loop, proven in run 670), and add USHR-DONE/USHR-STUCK marks
+so the panel shows whether the reset completed. This gives the controller
+the clean state STARTTRANSFER needs.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -556,20 +556,21 @@
+ 	}
+ 	ud.dma_pa = ptoa_64(pn);
+ 
+-	/* Device controller soft reset (PHY and global setup stay as ABL left them). */
+-#if 0
+-	/* nio: DCTL.CSFTRST wedges this board (654); the bulk rebuild (662-664)
+-	 * restored it by dropping the skip. ABL already left the controller in
+-	 * device mode with clocks on -- do not reset it. */
++	/* Device controller soft reset. Run 654 attributed a hang here to
++	 * CSFTRST, but the loop used delay(1000), which never returns while the
++	 * timebase is frozen this early (the same bug as STARTTRANSFER). sweet
++	 * 0073/74 reset here successfully. Use the clock-independent delay. */
+ 	dwc_wr(DCTL, DCTL_CSFTRST);
+ 	int i;
+ 	for (i = 0; i < 500 && (dwc_rd(DCTL) & DCTL_CSFTRST); i++) {
+-		delay(1000);
++		ud_hw_delay_us(1000);
+ 	}
+-#endif
+-	int i = 0;
+ 	printf("nio: USB: soft reset %s after %d ms, GCTL 0x%08x DCFG 0x%08x\n",
+-	    "skipped", i, dwc_rd(GCTL), dwc_rd(DCFG));
++	    (dwc_rd(DCTL) & DCTL_CSFTRST) ? "STUCK" : "done", i, dwc_rd(GCTL), dwc_rd(DCFG));
++	nio_usb_mark(dwc_rd(DCTL) & DCTL_CSFTRST ? " USHR-STUCK" : " USHR-DONE");
++	if (dwc_rd(DCTL) & DCTL_CSFTRST) {
++		return;
++	}
+ 	nio_usb_mark(" USBA");
+ 
+ 	dwc_wr(GEVNTADRLO, (uint32_t)(ud.dma_pa + UD_EVT));
