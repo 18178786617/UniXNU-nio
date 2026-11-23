@@ -1,0 +1,52 @@
+nio: publish static personalities after all IOKit subsystems init
+
+Run 678 moved nio_publish_static_personalities() to just after
+IOCatalogue::initialize() in iokit_post_constructor_init, to get the
+personalities into the catalogue before the lockdown matching sweep. That
+spot is too early: the 19:50 photograph shows a kernel data abort with
+pc = IOCatalogue::~IOCatalogue()+0x4 and frames in addDrivers(),
+exchangeDrivers(), findDrivers() and isModuleLoaded(). addDrivers() at
+that point runs before OSKext::initialize() and the other subsystems have
+run, so the catalogue's class symbols / kext environment are not ready.
+
+Move the call to the end of iokit_post_constructor_init, after every
+initialize() and IOPMinformeeList's lock. The catalogue, class symbols and
+kext environment are then ready, and this is still long before
+PE_lockdown_iokit() runs its sweep, so both the lockdown sweep and the
+later StartIOKitMatching sweep see the personalities. The function's
+static bool keeps publication to once.
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -107,14 +107,6 @@ iokit_post_constructor_init(void)
+ 	assert( root );
+ 	IOService::initialize();
+ 	IOCatalogue::initialize();
+-	/* nio: publish the static drivers' personalities here, before the
+-	 * lockdown. PE_lockdown_iokit() runs its matching sweep before bsd_init()
+-	 * and reads the catalogue as it is then; the only surviving call sat in
+-	 * StartIOKitMatching(), which runs after the lockdown. So the lockdown
+-	 * sweep never saw NioUfs (nor the platform expert), no driver attached,
+-	 * and start() was never entered. Publishing here makes both sweeps see
+-	 * the same catalogue; the static bool in the function makes it once. */
+-	nio_publish_static_personalities();
+ 	IOStatistics::initialize();
+ 	OSKext::initialize();
+ 	IOUserClient::initialize();
+@@ -125,6 +117,15 @@ iokit_post_constructor_init(void)
+ 	// Initializes IOPMinformeeList class-wide shared lock
+ 	IOPMinformeeList::getSharedRecursiveLock();
+ 
++	/* nio: publish the static drivers' personalities before the lockdown
++	 * sweep, but only AFTER every IOKit subsystem above is initialized.
++	 * Calling addDrivers() right after IOCatalogue::initialize() (the earlier
++	 * attempt) data-aborted in IOCatalogue::addDrivers/isModuleLoaded:
++	 * OSKext::initialize() and the rest had not run yet. Here the catalogue,
++	 * the class symbols and the kext environment are all ready, and this is
++	 * still long before PE_lockdown_iokit() runs its matching sweep. */
++	nio_publish_static_personalities();
++
+ 	obj = OSString::withCString( version );
+ 	assert( obj );
+ 	if (obj) {

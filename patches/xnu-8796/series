@@ -271,3 +271,4 @@ nio-usb-dalepena-ep0-only.patch
 nio-usb-restore-soft-reset.patch
 nio-publish-personalities-early.patch
 nio-spawn-parent-is-init-task.patch
+nio-publish-personalities-after-init.patch
