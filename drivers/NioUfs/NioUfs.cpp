@@ -507,23 +507,19 @@ static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, u
   if (!smmu) {
     panic ("NATIVE_UFS smmu: map failed");
   }
-  /* nio run-58: sCR0 reads back 0x002f0406 (SMMUEN=0) and sCR0 writes are
-   * ignored (2026-10-17 note), so the SMMU is in global bypass: every
-   * transaction uses physical addresses and SMR/S2CR entries are never
-   * consulted. Writing an SMR in this state drops the VALID bit on the
-   * floor -- run-58 wrote 0x80000060 to slot 86 and read back smr=0 while
-   * the S2CR at the same offset scheme stuck. There is nothing to take
-   * over while the SMMU is disabled: skip the whole entry program and
-   * leave the registers as the firmware left them. */
+  /* nio run-58 read sCR0 back as 0x002f0406 and, seeing bit0 clear,
+   * declared the SMMU globally bypassed and skipped programming the stream.
+   * That was a misread: on this part (the same SM8250 as alioth) sCR0 has
+   * no SMMUEN bit -- bit0 is CLIENTPD, and 0 means translation is ON. The
+   * alioth kit tests (scr0 & 0x407) == 0x406, which our measured 0x270406
+   * passes: the SMMU is live and the UFS stream DOES need a mapping. Skipping
+   * it left the UFS DMA with no stream->context bank, so the doorbell rang
+   * but the response UPIU never came back (state.json run-499). Follow the
+   * alioth path: reuse the bypass context the bootloader already programmed
+   * (planUfsSmmu/configureUfsSmmu do exactly this), with VA64 set. */
   uint32_t scr0 = read32 (smmu, 0x0);
-  if (!(scr0 & 1)) {
-    printf ("nio: SMMU sCR0=%x globally bypassed, stream %x needs no entry\n",
-            scr0, stream);
-    report[0] = 0;
-    report[1] = 0;
-    report[2] = 0;
-    return;
-  }
+  nioUfsSay ("nio: ufs smmu scr0=%x (CLIENTPD=%u) configuring stream %x\n",
+             scr0, scr0 & 1, stream);
   UfsSmmuPlan plan = planUfsSmmu (stream, dma, bytes, [smmu](unsigned offset) { return read32 (smmu, offset); });
   gRootDiagnostic.smmuId1 = read32 (smmu, 0x24);
   gRootDiagnostic.smmuId2 = read32 (smmu, 0x28);
@@ -1045,7 +1041,7 @@ void NioUfs::adoptAndRead (unsigned level)
   while ((read32 (hc, 0x60) & 1) && stopLoops--) nioUfsSpin (10);
   if (read32 (hc, 0x60) & 1) panic ("NATIVE_UFS adopt: request list did not stop");
   nioUfsSay ("nio: adopt B stopped rsr=%08x\n", read32 (hc, 0x60));
-  smmuBypassStream (0x60, smmuMap, smmuReport, phys, 50176);
+  smmuBypassStream (0xe0, smmuMap, smmuReport, phys, 50176);  /* SM8250 UFS host stream (sm8250.dtsi iommus 0xe0; was 0x60 = sheng) */
   nioUfsSay ("nio: adopt C smmu\n");
   write32 (hc, 0x50, static_cast<uint32_t> (phys));
   write32 (hc, 0x54, static_cast<uint32_t> (phys >> 32));
@@ -2291,7 +2287,7 @@ static bool hostBringUp (const char **why)
     return false;
   }
   nioUfsSay ("nio: ufs bu smmu\n");
-  smmuBypassStream (0x60, gHost.smmuMap, report, gHost.phys, kDmaBytes);
+  smmuBypassStream (0xe0, gHost.smmuMap, report, gHost.phys, kDmaBytes);  /* SM8250 UFS host stream 0xe0 (was 0x60 = sheng) */
   gHost.smmu = gHost.smmuMap->getVirtualAddress ();
   // The board's WiFi endpoint (sheng-wifi=2 or more) needs a pass-through stream of its own, set up here with the same code and at the same moment as the
   // storage stream: the registers of the stream matching group are not safe to touch from another thread later (a read of the first one never returned).
