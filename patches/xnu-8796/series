@@ -267,3 +267,4 @@ nio-usb-ep0-hw-delay.patch
 nio-usb-gadget-probes.patch
 nio-usb-vbus-fine-probes.patch
 nio-usb-ep0-delay-noclock.patch
+nio-usb-dalepena-ep0-only.patch
