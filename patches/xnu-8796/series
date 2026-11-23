@@ -219,3 +219,4 @@ nio-defer-bsdinit-to-init-thread.patch
 nio-mark-the-bsdinit-task-steps.patch
 nio-exec-launchd-as-initproc.patch
 nio-yield-to-init-thread-after-bsdinit.patch
+nio-unconditional-block-boot-thread.patch
