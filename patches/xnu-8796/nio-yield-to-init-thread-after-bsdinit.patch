@@ -1,0 +1,27 @@
+nio: hand the CPU to the init thread after bsd_init defers to it
+
+With the direct call removed, bsd_init() returns on the boot thread and the
+init thread's bsd_ast is supposed to run bsdinit_task() on the real init
+task, where current_proc/task/map are all correct. Runs 607-612 stopped at
+"defer bsdinit_task to init thread AST" because the boot thread never gave
+the CPU up, so that AST never ran.
+
+Yield once here, at the end of bsd_init(), after every kernel-side step is
+done. If the boot thread does not come back, the init thread is running
+bsdinit_task and launchd - which is the goal.
+
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1278,5 +1278,11 @@ bsd_init(void)
+ 	 * Since run 598/602 the init thread can be created (post-cloneproc is
+ 	 * reached), so let the normal bsd_ast() trigger run bsdinit_task() on the
+ 	 * real init thread, where current_proc/task/map are all correct. */
+ 	nio_bmark("\nnio: defer bsdinit_task to init thread AST");
++	/* nio: the defer above only works if this boot thread gives the CPU up.
++	 * Without the yield the AST never runs and the boot stops at the mark
++	 * (runs 607-612). Hand the CPU to the init thread here; if this thread
++	 * never returns, the init thread is running bsdinit_task and launchd,
++	 * which is the goal. */
++	thread_yield_internal(1);
+ }
