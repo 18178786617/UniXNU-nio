@@ -1,0 +1,50 @@
+nio: use hardware counter for EP0 command delay (software timebase frozen)
+
+The gadget stalls right after 'soft reset skipped' (run 666 photo). EP0 setup
+calls ud_epcmd, which waits with delay(1); on this board delay() uses
+mach_absolute_time, which does not tick this early in XNU, so the command
+poll never advances and the timeout print is never reached. sweet 0074 used
+the same code in the shim (clock running), which is why it worked there.
+Wait on the architected CNTPCT_EL0 counter instead (19.2 MHz, no clock
+subsystem needed) -- the same trick that fixed the UFS bring-up (run 473).
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -229,6 +229,27 @@
+ 	thread_block(THREAD_CONTINUE_NULL);
+ }
+ 
++/* nio: the software timebase (mach_absolute_time) does not tick this early
++ * in XNU, so delay(1) never returns and EP0 commands wedge the gadget.
++ * Use the architected physical counter instead (19.2 MHz on this board):
++ * no clock subsystem needed, same trick as the UFS timerTicks fix. */
++static inline uint64_t
++ud_hw_ticks(void)
++{
++	uint64_t v;
++	__asm__ volatile ("isb\n\tmrs %0, cntpct_el0" : "=r" (v));
++	return v;
++}
++
++static inline void
++ud_hw_delay_us(unsigned us)
++{
++	uint64_t end = ud_hw_ticks() + (uint64_t)us * 19;  /* 19 ticks = 1 us @19.2MHz */
++	while (ud_hw_ticks() < end) {
++		__asm__ volatile ("isb" ::: "memory");
++	}
++}
++
+ static int
+ ud_epcmd(unsigned ep, uint32_t cmd, uint32_t p0, uint32_t p1, uint32_t p2)
+ {
+@@ -246,7 +267,7 @@
+ 			}
+ 			return 0;
+ 		}
+-		delay(1);
++		ud_hw_delay_us(1);
+ 	}
+ 	printf("nio: USB: ep%u cmd 0x%x timeout\n", ep, cmd & 0xf);
+ 	return -1;
