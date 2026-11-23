@@ -1041,8 +1041,16 @@ void NioUfs::adoptAndRead (unsigned level)
   while ((read32 (hc, 0x60) & 1) && stopLoops--) nioUfsSpin (10);
   if (read32 (hc, 0x60) & 1) panic ("NATIVE_UFS adopt: request list did not stop");
   nioUfsSay ("nio: adopt B stopped rsr=%08x\n", read32 (hc, 0x60));
-  smmuBypassStream (0xe0, smmuMap, smmuReport, phys, 50176);  /* SM8250 UFS host stream (sm8250.dtsi iommus 0xe0; was 0x60 = sheng) */
-  nioUfsSay ("nio: adopt C smmu\n");
+  smmuBypassStream (0xe0, smmuMap, smmuReport, phys, 50176);  /* SM8250 UFS host stream 0xe0 (sm8250.dtsi iommus) */
+  /* SM8250 routes the UFS host through TWO streams: 0xe0 and 0x4e0
+   * (refs/linux/sm8250.dtsi:2524 iommus = <0x0e0>, <0x4e0>; alioth passes both).
+   * 674 configured only 0xe0, so DMA issued on 0x4e0 had no stream->context-bank
+   * mapping and its response UPIU never came back. Configure the second stream here
+   * with its own map/report so the first stream's diagnostic report is preserved. */
+  OSSharedPtr<IOMemoryMap> smmuMap4e0;
+  uint32_t smmuReport4e0[3] = { 0, 0, 0 };
+  smmuBypassStream (0x4e0, smmuMap4e0, smmuReport4e0, phys, 50176);
+  nioUfsSay ("nio: adopt C smmu (e0+4e0)\n");
   write32 (hc, 0x50, static_cast<uint32_t> (phys));
   write32 (hc, 0x54, static_cast<uint32_t> (phys >> 32));
   nioUfsSay ("nio: adopt D ba written ba=%08x bau=%08x\n",
@@ -2287,7 +2295,12 @@ static bool hostBringUp (const char **why)
     return false;
   }
   nioUfsSay ("nio: ufs bu smmu\n");
-  smmuBypassStream (0xe0, gHost.smmuMap, report, gHost.phys, kDmaBytes);  /* SM8250 UFS host stream 0xe0 (was 0x60 = sheng) */
+  smmuBypassStream (0xe0, gHost.smmuMap, report, gHost.phys, kDmaBytes);  /* SM8250 UFS host stream 0xe0 */
+  /* Second UFS stream 0x4e0 (sm8250.dtsi iommus pair, same as alioth). Own map and report
+   * so the 0xe0 report survives; planUfsSmmu picks a distinct slot/bank for the stream. */
+  OSSharedPtr<IOMemoryMap> smmuMap4e0;
+  uint32_t report4e0[3] = { 0, 0, 0 };
+  smmuBypassStream (0x4e0, smmuMap4e0, report4e0, gHost.phys, kDmaBytes);
   gHost.smmu = gHost.smmuMap->getVirtualAddress ();
   // The board's WiFi endpoint (sheng-wifi=2 or more) needs a pass-through stream of its own, set up here with the same code and at the same moment as the
   // storage stream: the registers of the stream matching group are not safe to touch from another thread later (a read of the first one never returned).
