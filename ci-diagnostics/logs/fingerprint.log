@@ -1,0 +1,326 @@
+kernel.macho (published): 56979456 bytes, mtime 11-23 09:58:05, nio: bsd_init: =yes, nio: MT thread=yes, 
+D1=no, 
+S1=yes, nio: STALL rounds==no, nio: HB =yes, the matching path stalled=yes, nio: U1=no
+nio literals in the published kernel (274):
+    nio: %u
+    nio: AS %s
+    nio: AT cpuic
+    nio: AT cpuic fail
+    nio: AUTO-REBOOT now via PSCI
+    nio: BI back from bsdinit_task
+    nio: BLOCK boot thread for PID1
+    nio: BOOST PID1 priority
+    nio: C%u pre size=%#llx rng=%p name=%s
+    nio: CFG alive
+    nio: CFG enq %s out=%d wt=%d ct=%d
+    nio: CFG mk fail init
+    nio: CFG mk fail start kr=%d
+    nio: CFG mk ok t=%p
+    nio: CFG pick %s
+    nio: CFG wait
+    nio: CHK after utaskbootstrap
+    nio: COMP done
+    nio: CP post-fork_create_child
+    nio: CP pre-fork_create_child
+    nio: CPU count published
+    nio: D %s r=%d g=%d
+    nio: DSM enter
+    nio: DSM exit
+    nio: EX post-load_machfile lret=%d
+    nio: EX post-proc-switch p=%p
+    nio: EX post-wake-new-thread
+    nio: EX pre-proc-switch
+    nio: EX pre-wake-new-thread
+    nio: FX post-main-thread err=%d
+    nio: FX pre-main-thread
+    nio: HB 
+    nio: IOBSD published early
+    nio: IOKit match go
+    nio: IOKit match ret=%d
+    nio: LD post-security-token
+    nio: LD pre-execve
+    nio: LD pre-security-token
+    nio: LDX enter %s
+    nio: LDX post-arg-copyout err=%d
+    nio: LDX post-argv32-copyout err=%d
+    nio: LDX post-argv64-copyout err=%d
+    nio: LDX post-path-copyout err=%d
+    nio: LDX pre-arg-copyout
+    nio: LDX pre-argv32-copyout
+    nio: LDX pre-argv64-copyout
+    nio: LDX pre-path-copyout
+    nio: ML parse args vp=%p map=%p off=%lld size=%l
+    nio: ML post-parse-machfile lret=%d
+    nio: ML pre-parse-machfile
+    nio: MT done
+    nio: MT inline
+    nio: MT thread
+    nio: N %s
+    nio: PATH flags=%#x
+    nio: PID1 rq=%#x
+    nio: PID1 st=%#x
+    nio: R0 root=%p plat=%p
+    nio: ROOT pre-mount rootdev=[
+    nio: Rq %u %s
+    nio: S1 %s up=%d%s p=%p r=%p g=%p
+    nio: SM b4busy cfg=%d
+    nio: SM busy ok
+    nio: SM dropped %u
+    nio: SM enter %s t=%p
+    nio: SM inline %s
+    nio: SM inline done
+    nio: SM locked %s t=%p
+    nio: SM queue full, dropped %u
+    nio: SM queued %s
+    nio: SM skip cpuic
+    nio: SM unlocked
+    nio: TER th=%p task=%p
+    nio: TW done
+    nio: TW post-assert-wait
+    nio: TW post-mtx
+    nio: TW post-thread-create err=%d
+    nio: TW post-unlock-mtx
+    nio: TW pre-assert-wait
+    nio: TW pre-mtx
+    nio: TW pre-thread-create
+    nio: TWR enter task=%p flags=%#x
+    nio: TWR ready task=%p
+    nio: U%u %s
+    nio: URET
+    nio: USB DWC3 id 
+    nio: USB DWC3 map failed
+    nio: USB GCC map failed
+    nio: USB GDSC 
+    nio: USB clk mst 
+    nio: USB gated, DWC3 not read
+    nio: USB: DWC3 DCFG 0x%08x DCTL 0x%08x DEVTEN 0x
+    nio: USB: DWC3 GEVNTADR 0x%08x%08x GEVNTSIZ 0x%0
+    nio: USB: DWC3 GSNPSID 0x%08x GCTL 0x%08x GSTS 0
+    nio: USB: DWC3 map failed
+    nio: USB: GCC map failed
+    nio: USB: GDSC usb30_prim 0x%08x (%s)
+    nio: USB: QSCRATCH HS 0x%08x SS 0x%08x
+    nio: USB: QUSB2 PLL_STATUS 0x%08x PWR_CTRL1 0x%0
+    nio: USB: VBUS override on
+    nio: USB: address %u
+    nio: USB: ahb2phy clock off; QUSB2 PHY not read
+    nio: USB: bulk log thread start
+    nio: USB: bus reset
+    nio: USB: clk %-12s CBCR 0x%08x (%s)
+    nio: USB: configured (%u)
+    nio: USB: connected, speed %u
+    nio: USB: controller unpowered or unclocked; DWC
+    nio: USB: disconnect
+    nio: USB: endpoint 0 setup failed
+    nio: USB: ep%u cmd 0x%x status %u
+    nio: USB: ep%u cmd 0x%x timeout
+    nio: USB: event 0x%08x
+    nio: USB: no DMA memory
+    nio: USB: running (DSTS 0x%08x after %d ms), DMA
+    nio: USB: setup %02x %02x %04x len %u
+    nio: USB: soft reset %s after %d ms, GCTL 0x%08x
+    nio: USBSTATE gdb=%#x mst=%#x noc=%#x id=%#x
+    nio: adopt A enter phys=%llx hcs=%08x
+    nio: adopt A0 own=%llx fw=%08x:%08x
+    nio: adopt A2 hce set hce=%08x
+    nio: adopt B stopped rsr=%08x
+    nio: adopt C smmu (e0+4e0)
+    nio: adopt D ba written ba=%08x bau=%08x
+    nio: adopt E status cleared
+    nio: adopt F list started rsr=%08x hcs=%08x
+    nio: adopt G list ready hcs=%08x
+    nio: ast: thread %p has no thread_ro
+    nio: auto-reboot thread started
+    nio: beacon thread started
+    nio: bsd_init: bsd_do_post - done
+    nio: bsd_init: calling IOKitInitializeTime
+    nio: bsd_init: calling VFS_ROOT
+    nio: bsd_init: calling aio_init
+    nio: bsd_init: calling bsd_autoconf
+    nio: bsd_init: calling bsd_bufferinit
+    nio: bsd_init: calling bsd_utaskbootstrap
+    nio: bsd_init: calling chgproccnt
+    nio: bsd_init: calling devfs_kernel_mount
+    nio: bsd_init: calling dlil_init
+    nio: bsd_init: calling domaininit
+    nio: bsd_init: calling ether_family_init
+    nio: bsd_init: calling eventhandler_init
+    nio: bsd_init: calling get_bsdthread_info
+    nio: bsd_init: calling inittodr
+    nio: bsd_init: calling kauth_cred_create
+    nio: bsd_init: calling kauth_init
+    nio: bsd_init: calling kmem_suballoc
+    nio: bsd_init: calling knote_init
+    nio: bsd_init: calling loopattach
+    nio: bsd_init: calling mbinit
+    nio: bsd_init: calling memorystatus_freeze_init
+    nio: bsd_init: calling memorystatus_init
+    nio: bsd_init: calling mountroot_post_hook
+    nio: bsd_init: calling net_init_run
+    nio: bsd_init: calling nwk_wq_init
+    nio: bsd_init: calling proc_uuid_policy_init()
+    nio: bsd_init: calling process_name
+    nio: bsd_init: calling psem_cache_init
+    nio: bsd_init: calling pshm_cache_init
+    nio: bsd_init: calling setconf
+    nio: bsd_init: calling siginit
+    nio: bsd_init: calling skywalk_init
+    nio: bsd_init: calling socketinit
+    nio: bsd_init: calling sysctl_mib_init
+    nio: bsd_init: calling vfsinit
+    nio: bsd_init: doing image boot: type = %d
+    nio: bsd_init: done
+    nio: bsd_init: vfs_mountroot
+    nio: call bsdinit_task directly (613)
+    nio: chunk high watermark keeps moving @%s:%d
+    nio: claims shuffled
+    nio: comp enter, size %#llx
+    nio: comp swap capacity %#llx err %d
+    nio: comp swap query %s
+    nio: dlil input thread not created: %d
+    nio: dlil threads never ran, %d still pending (i
+    nio: exec: exec_mach_imgact enter
+    nio: exec: load_init_program enter
+    nio: exec: old_task <- init task
+    nio: exec: switched to initproc map
+    nio: fuzz start %#llx
+    nio: hb thread failed
+    nio: hb thread started
+    nio: kernel __DATA_CONST left writable, %lu byte
+    nio: kext __PLK_DATA_CONST left writable, %lu by
+    nio: kext id=[%s]%s
+    nio: kext start ret=0x%x id=[%s]
+    nio: kext_alloc_init done
+    nio: kmem metadata done
+    nio: kmem scramble done
+    nio: kmem sizeclass done
+    nio: kmem_locate_space out of chunks @%s:%d
+    nio: kmem_locate_space stuck size=%#llx range=%d
+    nio: ldl> %s started=%d
+    nio: ldx> %s
+    nio: load< %s ret=0x%x
+    nio: load> %s
+    nio: locate space spins size=%#llx min=%#llx max
+    nio: machfile: halt init task, not kernel_task
+    nio: meta init range %d
+    nio: nio_skip_security_extensions=1, not loading
+    nio: no personality for %s
+    nio: not loading apfs at load time
+    nio: pmap_init done
+    nio: pmap_init enter
+    nio: probeCandidates entered %u times @%s:%d
+    nio: publishing %d static personalities
+    nio: root nub is named %s
+    nio: scramble enter, claims %u
+    nio: skip IOBSD stall in IOFindBSDRoot
+    nio: skip IOSecureBSDRoot
+    nio: skipping apfs start
+    nio: space walk stuck s=%#llx l=%#llx @%s:%d
+    nio: start> %s
+    nio: sysctl cycle (auto/parent) at %p @%s:%d
+    nio: sysctl cycle (auto/rw) at %p @%s:%d
+    nio: sysctl cycle (insert/parent) at %p @%s:%d
+    nio: sysctl cycle (insert/rw) at %p @%s:%d
+    nio: the matching path stalled (rounds=%u, nub=%
+    nio: thread_create_internal: no parent task
+    nio: tree has /arm-io=%d /arm-io/intc=%d /arm-io
+    nio: ufs FAIL prepare phase=%u window=%u
+    nio: ufs FAIL step 1 bringup why=%s
+    nio: ufs FAIL step 2 layout why=%s
+    nio: ufs FAIL step 3 manifest status=%u magic=%0
+    nio: ufs H dw0=%08x dw2=%08x prdt=%08x
+    nio: ufs H0 r=%d cap=%08x mcq=%08x
+    nio: ufs H0b urlcc=%08x err=%08x %08x %08x %08x 
+    nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x
+    nio: ufs H0d clr=%08x rsr=%08x db=%08x
+    nio: ufs H0e vs=%08x
+    nio: ufs H4 bad=%08x w0=%08x w4=%08x
+    nio: ufs H4c descriptor differs; not ringing
+    nio: ufs H5 db0=%08x
+    nio: ufs H6 ba=%08x:%08x want=%08x:%08x rsr=%08x
+    nio: ufs I0 hce=%08x hcs=%08x db=%08x
+    nio: ufs I1 doorbell
+    nio: ufs I2 taken=%d db=%08x
+    nio: ufs I3 dbhi=%c dblo=%c
+    nio: ufs bu FAIL power-query dp=%d hcs=%08x
+    nio: ufs bu FAIL stop-queue why=%s hcs=%08x hce=
+    nio: ufs bu clock hw=%llu kernel=%llu
+    nio: ufs bu doorbell about to ring
+    nio: ufs bu doorbell rang
+    nio: ufs bu nop-out %s dp=%d hcs=%08x
+    nio: ufs bu nop-out failed, going on
+    nio: ufs bu poll %d got dp=%d hcs=%08x
+    nio: ufs bu poll %d read
+    nio: ufs bu power-query dp=%d hcs=%08x
+    nio: ufs bu queue-up dp=%d hcs=%08x
+    nio: ufs bu smmu
+    nio: ufs bu stop-queue
+    nio: ufs driver is linked in
+    nio: ufs driver round %d
+    nio: ufs driver start enter
+    nio: ufs probe #%u provider=%s compatible="%s"
+    nio: ufs publish FAIL phase=%u window=%u publish
+    nio: ufs publish FAIL start window=%u
+    nio: ufs publish in place
+    nio: ufs published %s
+    nio: ufs smmu scr0=%x (CLIENTPD=%u) configuring 
+    nio: ufs startRoot enter
+    nio: ufs step 1 bringup
+    nio: ufs step 1 ok
+    nio: ufs step 2 layout
+    nio: ufs step 2 ok windows=%u objects=%u
+    nio: ufs step 3 ok
+    nio: ufs wait media %s
+    nio: uic recovery rst=%02x en=%02x ls=%02x hcs=%
+    nio: uthread_init: NULL task (kernel_task %p)
+    nio: vm_fault: no task yet, vaddr 0x%llx map %p 
+    nio: wake begin power=%08x
+    nio: wake done, polling LUN ready
+native (prelink input): 18880112 bytes, mtime 11-23 09:57:59, nio: bsd_init: =yes, nio: MT thread=yes, 
+D1=no, 
+S1=yes, nio: STALL rounds==no, nio: HB =yes, the matching path stalled=yes, nio: U1=no
+osfmk/DEVELOPMENT/startup.o: 125912 bytes, mtime 11-23 09:55:29, nio: bsd_init: =no, nio: MT thread=yes, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =yes, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/bsd_init.o: 209600 bytes, mtime 11-23 09:56:52, nio: bsd_init: =yes, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/kern_exec.o: 358952 bytes, mtime 11-23 09:57:02, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+iokit/DEVELOPMENT/IOService.cpo: 962088 bytes, mtime 11-23 09:53:53, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=yes, nio: U1=no
+object directory totals: 858 .o, 120 .cpo, 9 .filelist, 1 .a
+filelist bsd/DEVELOPMENT/bsd.filelist: 457 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_syscalls.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_gss.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_serv.o
+filelist iokit/DEVELOPMENT/iokit.filelist: 94 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSObject.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSAction.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.iig.cpo
+filelist osfmk/DEVELOPMENT/osfmk.filelist: 311 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/gssd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/lockd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/KUNCUserNotifications.o
+startup.c source: mtime 11-23 09:53:00, HB=yes, old-format=no
+IOService.cpp source: mtime 11-23 09:53:00, STALL=yes, U1=no
+bsd_init.c source: mtime 11-23 09:53:00, BSDINIT=yes
+startup.c sha256: 7233b8ac75d6ff941707033f3d446bb7
+  source line 709: nio_dc_puts("\nnio: HB ");
+    696| nio_heartbeat_thread(void *arg, wait_result_t wr)
+    697| {
+    698| 	unsigned n = 0;
+    699| 	uint64_t nio_hb_last = 0;
+    700| 	for (;;) {
+    701| 		uint64_t nio_hb_abstime = 0, nio_hb_ns = 0;
+    702| 
+    703| 		delay(100);
+    704| 		n++;
+    705| 		clock_get_uptime(&nio_hb_abstime);
+    706| 		absolutetime_to_nanoseconds(nio_hb_abstime, &nio_hb_ns);
+    707| 		if ((nio_hb_ns - nio_hb_last) >= 1000000000ULL) {
+    708| 			nio_hb_last = nio_hb_ns;
+    709| 			nio_dc_puts("\nnio: HB ");
+    710| 			nio_dc_putu(n);
+    711| 			nio_dc_puts(" ");
+    712| 			nio_dc_putu(nio_hb_ns / 1000u);
+    713| 		}
+startup.o nio literals: ['nio: AUTO-REBOOT now via PSCI', 'nio: CPU count published', 'nio: HB ', 'nio: MT done', 'nio: MT inline', 'nio: MT thread', 'nio: USB DWC3 id ', 'nio: USB DWC3 map failed', 'nio: USB GCC map failed', 'nio: USB GDSC ', 'nio: USB clk mst ', 'nio: USB gated, DWC3 not read']
+startup.o nio symbols: ['00000000000186f8 b _kernel_startup_initialize_upto.nio_hb_started', '00000000000008f0 t _nio_auto_reboot_thread', '00000000000006e8 t _nio_beacon_thread', '00000000000186c8 S _nio_boot_waypoint', '0000000000002435 D _nio_cand_class', '00000000000186d0 S _nio_cand_count', '00000000000186d4 S _nio_cand_reason', '0000000000001a28 t _nio_dc_puts']
+startup.o stat: inode=3152897 links=1 size=125912
+compile record: present
+compile record entries: 1
+startup.o compile: /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -xc /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/.cache/xnu-work/osfmk/kern/startup.c -o startup.o -c -g -nostdinc -ferror-limit=10000 -fno-builtin -fno-common -ftrivial-auto-var-init=zero -fsigned-bitfields -fmerge-all-constants -fc++-static-destructors=none -fsanitize-minimal-runtime -fsanitize-ignorelist=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/san/kasan-blacklist-arm64 -fsanitize=signed-integer-overflow -D ARM64_BOARD_CONFIG_BCM2837 -arch arm64 -D arm64 -D ARM64 -D __ARM64__ -D LP64 -D PAGE_SIZE_FIXED -D VM_KERNEL_
