@@ -1,0 +1,72 @@
+nio: add direct-to-panel probes in USB gadget bring-up
+
+Runs 665-667 all stall right after 'soft reset skipped' but printf marks
+beyond that point never reach the panel (console ring may block). Add
+direct-to-framebuffer marks (cons_ops[1].putc, same as bsd_init.c nio_bmark)
+at each step: USBA after soft reset, USBB after event buffer, USBC after
+DEVTEN, USBD after EP0 setup, USBE after VBUS override. One photo will show
+exactly which step wedges. Diagnostic only; no hardware writes changed.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -26,6 +26,21 @@
+ void nio_usb_gadget_start(vm_offset_t dwc);
+ extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
+ 
++/* nio: direct-to-panel probe marks, independent of printf/console ring.
++ * Mirrors bsd_init.c's nio_bmark (cons_ops[1].putc); proven on the panel. */
++struct nio_usb_console_ops {
++	void (*putc)(char, bool);
++	int (*getc)(bool);
++};
++extern struct nio_usb_console_ops cons_ops[];
++static void
++nio_usb_mark(const char *s)
++{
++	while (*s != '\0') {
++		cons_ops[1].putc(*s++, true);
++	}
++}
++
+ #define GCC_PA                  0x00100000
+ #define GCC_SIZE                0x00090000
+ #define GCC_USB30_PRIM_GDSCR    0x0f004         /* bit 31: power on */
+@@ -548,18 +563,21 @@
+ 	int i = 0;
+ 	printf("nio: USB: soft reset %s after %d ms, GCTL 0x%08x DCFG 0x%08x\n",
+ 	    "skipped", i, dwc_rd(GCTL), dwc_rd(DCFG));
++	nio_usb_mark(" USBA");
+ 
+ 	dwc_wr(GEVNTADRLO, (uint32_t)(ud.dma_pa + UD_EVT));
+ 	dwc_wr(GEVNTADRHI, (uint32_t)((ud.dma_pa + UD_EVT) >> 32));
+ 	dwc_wr(GEVNTSIZ, (1u << 31) | UD_EVT_SIZE);     /* interrupt masked: polled */
+ 	dwc_wr(GEVNTCOUNT, dwc_rd(GEVNTCOUNT) & 0xffff);
+ 	ud.evt_pos = 0;
++	nio_usb_mark(" USBB");
+ 
+ 	/* High speed, address 0 */
+ 	uint32_t dcfg = dwc_rd(DCFG) & ~(7u | (0x7fu << 3));
+ 	dwc_wr(DCFG, dcfg | 0);
+ 	/* Events: disconnect, USB reset, connect done */
+ 	dwc_wr(DEVTEN, 0x7);
++	nio_usb_mark(" USBC");
+ 
+ 	/* Endpoint 0 OUT/IN: start config, control type, max packet 512 until connect done. */
+ 	if (ud_epcmd(0, DEPCMD_DEPSTARTCFG, 0, 0, 0) ||
+@@ -570,6 +588,7 @@
+ 		printf("nio: USB: endpoint 0 setup failed\n");
+ 		return;
+ 	}
++	nio_usb_mark(" USBD");
+ 	dwc_wr(DALEPENA, 0x9);   /* EP0 + EP1 IN bulk */
+ 	ud_start_setup();
+ 	vm_offset_t qs = ml_io_map(QSCRATCH_PA, 0x100);
+@@ -581,6 +600,7 @@
+ 		__asm__ volatile ("dsb sy" ::: "memory");
+ 		printf("nio: USB: VBUS override on\n");
+ 	}
++	nio_usb_mark(" USBE");
+ 
+ 	dwc_wr(DCTL, dwc_rd(DCTL) | DCTL_RUN_STOP);
+ 	for (i = 0; i < 500 && (dwc_rd(DSTS) & DSTS_DEVCTRLHLT); i++) {
