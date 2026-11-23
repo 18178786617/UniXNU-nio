@@ -1,0 +1,37 @@
+nio: publish static personalities before the lockdown sweep
+
+The only surviving nio_publish_static_personalities() call sits in
+StartIOKitMatching(), which runs after the lockdown. But PE_lockdown_iokit()
+runs its own matching sweep earlier, during the lockdown, and reads the
+catalogue at that moment. The static NioUfs driver has no OSKext/Info.plist
+to publish its personality, so that early sweep saw no UFS personality at
+all: the driver was never matched, probe()/start() were never called, and
+no UFS line ever reached the panel - which is exactly the "no change" the
+last five rounds showed even though the driver, personality and probe=12
+were all in the kernel.
+
+Run 570's own analysis (nio-publish-personalities-before-lockdown.patch)
+concluded that publication must happen in iokit_post_constructor_init,
+long before the lockdown. That early call was later removed while the
+matching was moved around; this patch restores it. The function's static
+bool keeps publication to once, so the later call in StartIOKitMatching()
+is harmless. Both sweeps now see the same catalogue.
+
+diff --git a/iokit/Kernel/IOStartIOKit.cpp b/iokit/Kernel/IOStartIOKit.cpp
+--- a/iokit/Kernel/IOStartIOKit.cpp
++++ b/iokit/Kernel/IOStartIOKit.cpp
+@@ -107,6 +107,14 @@ iokit_post_constructor_init(void)
+ 	assert( root );
+ 	IOService::initialize();
+ 	IOCatalogue::initialize();
++	/* nio: publish the static drivers' personalities here, before the
++	 * lockdown. PE_lockdown_iokit() runs its matching sweep before bsd_init()
++	 * and reads the catalogue as it is then; the only surviving call sat in
++	 * StartIOKitMatching(), which runs after the lockdown. So the lockdown
++	 * sweep never saw NioUfs (nor the platform expert), no driver attached,
++	 * and start() was never entered. Publishing here makes both sweeps see
++	 * the same catalogue; the static bool in the function makes it once. */
++	nio_publish_static_personalities();
+ 	IOStatistics::initialize();
+ 	OSKext::initialize();
+ 	IOUserClient::initialize();
