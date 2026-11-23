@@ -1,0 +1,61 @@
+nio: print full scheduler picture when PID1 is not chosen
+
+Run 688/689 showed choose_thread always returns OTHER with sched_pri 0x5b
+(91), far above PID1's 0x19 (25).  Two candidates remain: PID1 enqueued on
+a different CPU's runq (687 only checked runq != NULL, not which CPU), or
+plain priority starvation.  Print both: current cpu, chosen tid, is-idle,
+PID1 runq-cpu, PID1 sched_pri (2 hex), PID1 bound-cpu.  0xf=PROCESSOR_NULL.
+No behaviour change.
+
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index b4888b9..b426358 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -406,6 +406,14 @@ nio_sel_hex1(unsigned int v)
+ 	cons_ops[1].putc(d[v & 0xf], true);
+ }
+ 
++/* nio: print a 32-bit value as 8 hex digits, lock-free. */
++static void __attribute__((noinline))
++nio_sel_hex8(unsigned int v)
++{
++	int i;
++	for (i = 28; i >= 0; i -= 4) { nio_sel_hex1(v >> i); }
++}
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
+@@ -2829,10 +2837,28 @@ send_followup_ipi_before_idle:
+ 			if (new_thread == nio_pid1_thread) {
+ 				nio_sel_puts("\nnio: SEL chose PID1");
+ 			} else {
+-				unsigned int op = (unsigned int)new_thread->sched_pri;
+-				nio_sel_puts("\nnio: SEL OTHER pri=");
+-				nio_sel_hex1(op >> 4);
+-				nio_sel_hex1(op & 0xf);
++				/* nio: full picture in one line: cpu | chosen tid | idle?
++				 * | pid1 runq-cpu | pid1 pri | pid1 bound-cpu */
++				processor_t prq = (nio_pid1_thread != THREAD_NULL) ?
++				    nio_pid1_thread->runq : PROCESSOR_NULL;
++				processor_t pbd = (nio_pid1_thread != THREAD_NULL) ?
++				    nio_pid1_thread->bound_processor : PROCESSOR_NULL;
++				nio_sel_puts("\nnio: SEL CPU=");
++				nio_sel_hex1((unsigned int)processor->cpu_id);
++				nio_sel_puts(" tid=");
++				nio_sel_hex8((unsigned int)thread_tid(new_thread));
++				nio_sel_puts(new_thread == processor->idle_thread ? " I" : " -");
++				nio_sel_puts(" p1rq=");
++				nio_sel_hex1(prq == PROCESSOR_NULL ? 0xf : (unsigned int)prq->cpu_id);
++				nio_sel_puts(" p1pri=");
++				{
++					unsigned int pp = (unsigned int)(nio_pid1_thread != THREAD_NULL ?
++					    (unsigned int)(int16_t)nio_pid1_thread->sched_pri : 0);
++					nio_sel_hex1(pp >> 4);
++					nio_sel_hex1(pp & 0xf);
++				}
++				nio_sel_puts(" p1bd=");
++				nio_sel_hex1(pbd == PROCESSOR_NULL ? 0xf : (unsigned int)pbd->cpu_id);
+ 			}
+ 			pset_commit_processor_to_new_thread(pset, processor, new_thread);
+ 
