@@ -1,0 +1,46 @@
+nio: report what thread_select actually chose, or why it went idle
+
+Run 687 showed "SEL saw PID1 runnable on runq" after the boot thread
+blocked, yet PID1 never ran.  thread_select has several goto-idle exits
+before SCHED(choose_thread) and can also choose a different thread.  Print
+one lock-free line at each decisive point: which thread choose_thread
+returned (PID1 vs other), and the idle_reason when it bailed out.  This
+separates "chose somebody else" from "never looked at the runq".
+
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index 031f7cf..ee7208e 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -398,6 +398,14 @@ nio_sel_puts(const char *s)
+ 	while (*s != '\0') { cons_ops[1].putc(*s++, true); }
+ }
+ 
++/* nio: print one hex digit, lock-free (for idle_reason, 0..9). */
++static void __attribute__((noinline))
++nio_sel_hex1(unsigned int v)
++{
++	static const char d[] = "0123456789abcdef";
++	cons_ops[1].putc(d[v & 0xf], true);
++}
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
+@@ -2818,6 +2826,8 @@ send_followup_ipi_before_idle:
+ 
+ 		/* No RT threads, so let's look at the regular threads. */
+ 		if ((new_thread = SCHED(choose_thread)(processor, MINPRI, *reason)) != THREAD_NULL) {
++			nio_sel_puts(new_thread == nio_pid1_thread ?
++			    "\nnio: SEL chose PID1" : "\nnio: SEL chose OTHER");
+ 			pset_commit_processor_to_new_thread(pset, processor, new_thread);
+ 
+ 			clear_pending_AST_bits(pset, processor, 4);
+@@ -2897,6 +2907,8 @@ send_followup_ipi_before_idle:
+ 		}
+ 
+ idle:
++		nio_sel_puts("\nnio: SEL idle reason=");
++		nio_sel_hex1((unsigned int)idle_reason);
+ 		/* Someone selected this processor while we had dropped the lock */
+ 		if ((!pending_AST_URGENT && bit_test(pset->pending_AST_URGENT_cpu_mask, processor->cpu_id)) ||
+ 		    (!pending_AST_PREEMPT && bit_test(pset->pending_AST_PREEMPT_cpu_mask, processor->cpu_id))) {
