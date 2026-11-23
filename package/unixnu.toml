@@ -41,7 +41,13 @@ initrd = "Payloads/rootfs.img"
 # that a hand-built ADT does not have. amfi_get_out_of_my_way cannot help:
 # the panic happens before AMFI reads that argument. The kernel patch of the
 # same name makes the bootstrap skip the load when this is present.
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 startup_debug=1 wdt=-1 debug=0x1"
+# DarwinBoot truncates the command line to 256 bytes; only the first 14 arguments
+# (246 bytes) reached the kernel, so native-ufs-probe=12 -- appended by the packer
+# after this line -- never arrived and the UFS driver never started (probe=0 short-
+# circuits start()). Put the probe in the menu's own args, inside the 250-byte budget,
+# by dropping startup_debug=1 (a verbose-only marker). board.toml still names the
+# other eight arguments, which the packer appends after these 14.
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 debug=0x1 native-ufs-probe=12"
 
 # debug=0x1 is DB_HALT (osfmk/kern/debug.h:513): a panic stops in the debugger
 # instead of rebooting.  Every round of this port ends with the machine
