@@ -6,8 +6,8 @@ giving the CPU up.  On this board the init thread is on the runq with the
 processor RUNNING but thread_select never picks it (runs 645/683), so the
 yield was a no-op and the init thread bsd_ast never ran.
 
-Call thread_block_reason(AST_YIELD) directly, the same primitive the kernel
-uses for its own yield (syscall_subr.c:329).  This skips the should_yield
+Call thread_block(THREAD_CONTINUE_NULL) directly, exactly as the verified
+645 patch did.  This skips the should_yield
 test and physically blocks the boot thread, handing the CPU to the init
 thread.  Diagnostic, one line, no probe marks.
 
@@ -18,5 +18,5 @@ diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
  	 * never returns, the init thread is running bsdinit_task and launchd,
  	 * which is the goal. */
 -	thread_yield_internal(1);
-+	thread_block_reason(THREAD_CONTINUE_NULL, NULL, AST_YIELD);
++	thread_block(THREAD_CONTINUE_NULL);
  }

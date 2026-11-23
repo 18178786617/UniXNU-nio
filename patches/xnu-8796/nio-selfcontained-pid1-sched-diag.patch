@@ -11,7 +11,7 @@ runnable but chose another thread; neither = boot thread never reached the
 scheduler.  This is the one new fact 645 never captured.
 
 diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
-index 7be91e4..a477e34 100644
+index bd67e3d..fcd45c9 100644
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -1284,6 +1284,8 @@ bsd_init(void)
@@ -20,7 +20,7 @@ index 7be91e4..a477e34 100644
  	 * which is the goal. */
 +	{ extern volatile unsigned int nio_user_path_flags;
 +	  printf("\nnio: PID1 PATH=%#x\n", (unsigned)nio_user_path_flags); }
- 	thread_block_reason(THREAD_CONTINUE_NULL, NULL, AST_YIELD);
+ 	thread_block(THREAD_CONTINUE_NULL);
  }
  
 @@ -1448,6 +1450,7 @@ bsd_utaskbootstrap(void)
