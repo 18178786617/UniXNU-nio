@@ -1,0 +1,44 @@
+nio: print directly from thread_select when PID1 is seen runnable
+
+Run 686 showed "PID1 PATH=0x100": the scheduler ran, but the 0x80 flag
+(seen PID1 runnable) was still clear when the boot thread printed it just
+before blocking.  That snapshot cannot tell us what thread_select sees
+AFTER the boot thread gives the CPU up -- the moment that matters.
+
+Write one line straight to the framebuffer (cons_ops[1], the same lock-free
+channel startup.c uses) the first time thread_select actually observes
+PID1 runnable on a runq, guarded by 0x800 so it prints once.  Include
+<console/serial_protos.h> for struct console_ops.  No behaviour change.
+
+diff --git a/osfmk/kern/sched_prim.c b/osfmk/kern/sched_prim.c
+index decfe8b..031f7cf 100644
+--- a/osfmk/kern/sched_prim.c
++++ b/osfmk/kern/sched_prim.c
+@@ -388,6 +388,16 @@ sched_timer_deadline_tracking_init(void);
+ thread_t nio_pid1_thread = THREAD_NULL;
+ volatile unsigned int nio_user_path_flags = 0;
+ 
++/* nio: lock-free direct-to-panel write (same channel as startup.c's
++ * nio_dc_puts); safe to call from thread_select under the pset lock. */
++#include <console/serial_protos.h>
++extern struct console_ops cons_ops[];
++static void __attribute__((noinline))
++nio_sel_puts(const char *s)
++{
++	while (*s != '\0') { cons_ops[1].putc(*s++, true); }
++}
++
+ #if     DEBUG
+ extern int debug_task;
+ #define TLOG(a, fmt, args...) if(debug_task & a) kprintf(fmt, ## args)
+@@ -2442,6 +2452,10 @@ thread_select(thread_t          thread,
+ 	if (nio_pid1_thread != THREAD_NULL &&
+ 	    (nio_pid1_thread->state & TH_RUN) && nio_pid1_thread->runq != PROCESSOR_NULL) {
+ 		nio_user_path_flags |= 0x80;
++		if ((nio_user_path_flags & 0x800) == 0) {
++			nio_user_path_flags |= 0x800;
++			nio_sel_puts("\nnio: SEL saw PID1 runnable on runq");
++		}
+ 	}
+ 
+ 	assert(processor == current_processor());
