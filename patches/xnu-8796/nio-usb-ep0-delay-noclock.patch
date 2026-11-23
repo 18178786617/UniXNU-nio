@@ -1,0 +1,36 @@
+nio: make EP0 command delay clock-independent, probe ud_start
+
+Run 669 wedged inside ud_start_setup(): the 5 EP0 SETUP commands returned
+instantly (USBD mark), but STARTTRANSFER entered the poll loop and never
+returned (no USF2). If cntpct_el0 is not enabled this early, ud_hw_delay_us
+spins forever. Replace the counter wait with a pure volatile instruction
+loop that cannot depend on any clock. Also add USG1/USG2 marks around the
+STARTTRANSFER command so a remaining wedge is located exactly.
+
+diff --git a/bsd/dev/nio_usb.c b/bsd/dev/nio_usb.c
+--- a/bsd/dev/nio_usb.c
++++ b/bsd/dev/nio_usb.c
+@@ -259,8 +259,11 @@
+ static inline void
+ ud_hw_delay_us(unsigned us)
+ {
+-	uint64_t end = ud_hw_ticks() + (uint64_t)us * 19;  /* 19 ticks = 1 us @19.2MHz */
+-	while (ud_hw_ticks() < end) {
++	/* nio: pure instruction busy-wait. cntpct_el0 may not be enabled this
++	 * early in XNU (run 669 wedged here); do not depend on ANY counter.
++	 * Volatile loop cannot be optimized away; ~2000 isb iterations ~= 1 us. */
++	volatile unsigned n = us * 2000;
++	while (n--) {
+ 		__asm__ volatile ("isb" ::: "memory");
+ 	}
+ }
+@@ -305,7 +308,9 @@
+ 		ud_sync(buf, len);
+ 	}
+ 	uint64_t tpa = ud.dma_pa + trb;
++	nio_usb_mark(" USG1");
+ 	ud_epcmd(ep, DEPCMD_STARTTRANSFER, (uint32_t)(tpa >> 32), (uint32_t)tpa, 0);
++	nio_usb_mark(" USG2");
+ }
+ 
+ static void
