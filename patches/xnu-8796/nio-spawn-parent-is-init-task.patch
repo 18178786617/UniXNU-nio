@@ -1,0 +1,40 @@
+nio: use the init task as posix_spawn's parent on the boot thread
+
+Launchd now execs and runs, but its first posix_spawn panics:
+
+  task.c:3126 Assertion failed: task != kernel_task
+  frames: task_duplicate_map_and_threads -> task_terminate_internal
+
+posix_spawn() takes old_task = current_task(). Launchd still executes on the
+boot thread, where current_task() is kernel_task, so cloneproc() duplicates
+kernel_task; when that duplicate fails, its cleanup calls
+task_terminate_internal(old_task) on kernel_task and the assert fires. This is
+the exact failure the boot exec path already works around in __mac_execve()
+(nio-exec-parent-is-init-task.patch), but posix_spawn() has no such guard.
+
+Swap kernel_task for proc_find(1)'s task here too. Normal user spawns are
+unaffected: their old_task is a real task, not kernel_task.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -3448,6 +3448,19 @@ posix_spawn(proc_t ap, struct posix_spawn_args *uap, int32_t *retval)
+ 	struct exec_port_actions port_actions = { };
+ 	vm_size_t px_sa_offset = offsetof(struct _posix_spawnattr, psa_ports);
+ 	task_t old_task = current_task();
++	/* nio: launchd still runs on the boot thread, where current_task() is
++	 * kernel_task. posix_spawn() cloneproc-s from old_task, and when the
++	 * duplicate fails its cleanup calls task_terminate_internal(old_task) --
++	 * on kernel_task -- tripping task.c:3126 assert(task != kernel_task).
++	 * The boot exec (below) already swaps kernel_task for the init task;
++	 * do the same here so a user spawn operates on a real task. Normal
++	 * user spawns are unaffected because their old_task is not kernel_task. */
++	if (old_task == kernel_task) {
++		proc_t initp = proc_find(1);
++		if (initp != PROC_NULL) {
++			old_task = proc_task(initp);
++		}
++	}
+ 	task_t new_task = NULL;
+ 	boolean_t should_release_proc_ref = FALSE;
+ 	void *inherit = NULL;
