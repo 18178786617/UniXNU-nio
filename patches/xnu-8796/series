@@ -225,3 +225,4 @@ nio-direct-sel-saw-pid1.patch
 nio-report-select-outcome.patch
 nio-print-chosen-priority.patch
 nio-full-select-picture.patch
+nio-boost-pid1-before-enqueue.patch
