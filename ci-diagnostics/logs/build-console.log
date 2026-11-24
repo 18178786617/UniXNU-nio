@@ -1,0 +1,9 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+== kernel: bootstrap pass for the compile records
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-xnu-4k-baseline.sh
+Restored 0 omitted public headers from Apple; blob hashes verified
+NativeVirtioBlock currently requires the qualified NativeAES/original-storage prelink baseline
+unixnu: bash failed (1); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/logs/kernel-bootstrap.log
