@@ -1,0 +1,35 @@
+Restored 0 omitted public headers from Apple; blob hashes verified
+Set XNU_OWNER_DATA_VOLUME_UUID to the actual observed scratch APFS volume UUID
+build-xnu-4k-baseline.sh: line 480: python3 - "$OWNER_DATA_HEADER" "$OWNER_DATA_MOUNT" "$NATIVE_RAM_BLOCK" "${XNU_OWNER_DATA_VOLUME_UUID:-}" "${XNU_OWNER_CACHE_VOLUME_UUID:-}" "${XNU_OWNER_ROOT_VOLUME_UUID:-}" "$OWNER_BOOT_MANIFEST"  <<'PY_DATA_UUID'
+from pathlib import Path
+import sys
+import uuid
+path = Path(sys.argv[1])
+text = '/* Scratch Data IOKit selection disabled. */\n'
+if sys.argv[2:4] == ['1', '1']:
+    try:
+        value = str(uuid.UUID(sys.argv[4])).upper()
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_DATA_VOLUME_UUID to the actual observed scratch APFS volume UUID')
+    text = '#define XNU_OWNER_DATA_VOLUME_UUID "' + value + '"\n'
+# The SystemOS cryptex volume of this image; the sheng value stays the default of the patch.
+cache = '8846FE78-2910-4297-AF97-D59BB6F8FC16'
+if len(sys.argv) > 5 and sys.argv[5]:
+    try:
+        cache = str(uuid.UUID(sys.argv[5])).upper()
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_CACHE_VOLUME_UUID to the SystemOS volume UUID of the signed policy')
+text += '#define XNU_OWNER_CACHE_VOLUME_UUID "' + cache + '"\n'
+# The OS root volume of the boot manifest comes from the OS profile ([root] os_volume_uuid).
+if len(sys.argv) > 6 and sys.argv[6]:
+    try:
+        text += '#define XNU_OWNER_ROOT_VOLUME_UUID "' + str(uuid.UUID(sys.argv[6])).upper() + '"\n'
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_ROOT_VOLUME_UUID to the OS volume UUID of the signed policy')
+elif len(sys.argv) > 7 and sys.argv[7] == '1':
+    raise SystemExit('The owner boot manifest needs XNU_OWNER_ROOT_VOLUME_UUID (OS profile [root] os_volume_uuid)')
+path.parent.mkdir(parents=True, exist_ok=True)
+if not path.exists() or path.read_text() != text:
+    path.write_text(text)
+PY_DATA_UUID
+ failed

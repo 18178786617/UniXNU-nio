@@ -1,0 +1,37 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+== kernel: bootstrap pass for the compile records
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-xnu-4k-baseline.sh
+import uuid
+path = Path(sys.argv[1])
+text = '/* Scratch Data IOKit selection disabled. */\n'
+if sys.argv[2:4] == ['1', '1']:
+    try:
+        value = str(uuid.UUID(sys.argv[4])).upper()
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_DATA_VOLUME_UUID to the actual observed scratch APFS volume UUID')
+    text = '#define XNU_OWNER_DATA_VOLUME_UUID "' + value + '"\n'
+# The SystemOS cryptex volume of this image; the sheng value stays the default of the patch.
+cache = '8846FE78-2910-4297-AF97-D59BB6F8FC16'
+if len(sys.argv) > 5 and sys.argv[5]:
+    try:
+        cache = str(uuid.UUID(sys.argv[5])).upper()
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_CACHE_VOLUME_UUID to the SystemOS volume UUID of the signed policy')
+text += '#define XNU_OWNER_CACHE_VOLUME_UUID "' + cache + '"\n'
+# The OS root volume of the boot manifest comes from the OS profile ([root] os_volume_uuid).
+if len(sys.argv) > 6 and sys.argv[6]:
+    try:
+        text += '#define XNU_OWNER_ROOT_VOLUME_UUID "' + str(uuid.UUID(sys.argv[6])).upper() + '"\n'
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_ROOT_VOLUME_UUID to the OS volume UUID of the signed policy')
+elif len(sys.argv) > 7 and sys.argv[7] == '1':
+    raise SystemExit('The owner boot manifest needs XNU_OWNER_ROOT_VOLUME_UUID (OS profile [root] os_volume_uuid)')
+path.parent.mkdir(parents=True, exist_ok=True)
+if not path.exists() or path.read_text() != text:
+    path.write_text(text)
+PY_DATA_UUID
+ failed
+unixnu: bash failed (1); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/logs/kernel-bootstrap.log
