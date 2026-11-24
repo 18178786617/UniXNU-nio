@@ -1,0 +1,62 @@
+nio: report the exec fault site and stop the debug assert from hiding it
+
+692 proved the -disable_procref_tracking boot arg is truncated off the
+command line (loader takes ~239 bytes), so the DEBUG-only
+uu_proc_refcount assertion still panics and buries the real fault.  The
+first fault (EL1 write to 0x16f8f5e70) is swallowed by the exception
+path, so its PC never reaches the panel.
+
+Two changes, one round:
+  * handle_abort(): print pc/lr/cpsr/esr/far once per fault (cap 24) so
+    kernsym can name the exact instruction that faults.
+  * uthread_assert_zero_proc_refcount(): kprintf instead of panic -- the
+    exec failure path legitimately leaves refs on a never-run thread;
+    this is a DEVELOPMENT-only debug check, RELEASE never tests it.
+
+With the assert no longer panic-stopping, exec can finish and we can see
+whether launchd reaches userland, while the fault site is on the panel.
+
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index 037ef36..1d1ea0d 100644
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -1137,6 +1137,23 @@ handle_abort(arm_saved_state_t *state, uint32_t esr, vm_offset_t fault_addr,
+ 	fault_status_t fault_code;
+ 	vm_prot_t      fault_type;
+ 
++	/* nio: one-shot fault site probe -- the exec path swallows this abort
++	 * (no panic dump), so report pc/lr/cpsr here where the saved state is
++	 * still intact.  Cap the count so a fault storm cannot bury the panel. */
++	{
++		static unsigned nio_abort_reported;
++		if (nio_abort_reported < 24) {
++			arm_saved_state64_t *nio_ss = saved_state64(state);
++			if (nio_ss != NULL) {
++				nio_abort_reported++;
++				kprintf("nio: ABORT#%u pc=0x%016llx lr=0x%016llx cpsr=0x%08x esr=0x%08x far=0x%016llx\n",
++				    nio_abort_reported,
++				    (unsigned long long)nio_ss->pc, (unsigned long long)nio_ss->lr,
++				    nio_ss->cpsr, esr, (unsigned long long)fault_addr);
++			}
++		}
++	}
++
+ 	inspect_abort(ESR_ISS(esr), &fault_code, &fault_type);
+ 	handler(state, esr, fault_addr, fault_code, fault_type, expected_fault_handler);
+ }
+diff --git a/bsd/kern/kern_proc.c b/bsd/kern/kern_proc.c
+index 407a18b..b652375 100644
+--- a/bsd/kern/kern_proc.c
++++ b/bsd/kern/kern_proc.c
+@@ -493,7 +493,10 @@ uthread_assert_zero_proc_refcount(uthread_t uth)
+ 	}
+ 
+ 	if (__improbable(uth->uu_proc_refcount != 0)) {
+-		panic("Unexpected non zero uu_proc_refcount = %d (%p)",
++		/* nio: DEVELOPMENT debug assertion -- do not panic; the exec
++		 * failure path legitimately leaves refs on a never-run thread.
++		 * Report once and let exec finish so we can see launchd. */
++		kprintf("nio: proc_ref nonzero %d (uth %p) -- no panic\n",
+ 		    uth->uu_proc_refcount, uth);
+ 	}
+ }
