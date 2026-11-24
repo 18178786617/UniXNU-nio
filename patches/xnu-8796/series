@@ -209,7 +209,6 @@ nio-mark-the-last-bsd-init-steps.patch
 nio-call-bsdinit-task-directly.patch
 nio-mark-the-init-clone-steps.patch
 nio-mark-the-cloneproc-calls.patch
-nio-skip-the-cloneproc-return-wait.patch
 nio-mark-the-fork-create-child-steps.patch
 nio-skip-the-fork-yield.patch
 nio-switch-to-init-map-before-exec.patch
