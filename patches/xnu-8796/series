@@ -227,3 +227,4 @@ nio-print-chosen-priority.patch
 nio-full-select-picture.patch
 nio-boost-pid1-before-enqueue.patch
 nio-exec-fault-site-probe.patch
+nio-exec-path-full-trace.patch

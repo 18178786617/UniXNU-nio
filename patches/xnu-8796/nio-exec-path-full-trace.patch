@@ -1,0 +1,68 @@
+nio: trace the exec_mach_imgact path to find where launchd stalls
+
+694 froze right after "exec create_task_and_map_image" (kern_exec.c's
+exec_mach_imgact enter) with no further output: exec_mach_imgact is the
+last marked step and has no probes inside it.  Add a full set of marks in
+one round (no drip-feeding): around load_machfile(), and inside it around
+pmap_create / vm_map_create / parse_machfile.  Whichever mark is last on
+the panel names the exact stall.  Uses the existing direct-console mark
+mechanism so the lines survive the console being busy.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index ed7a19b..d169da3 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1340,9 +1340,11 @@ grade:
+ 	/*
+ 	 * Actually load the image file we previously decided to load.
+ 	 */
++	nio_emark("\nnio: EX: before load_machfile");
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile enter");
+ 	lret = load_machfile(imgp, mach_header, thread, &map, &load_result);
+ 	boot_progress_process_stage(proc_getpid(p),p->p_name,"exec load_machfile returned");
++	nio_emark("\nnio: EX: after load_machfile");
+ 	if (lret != LOAD_SUCCESS) {
+ 		error = load_return_to_errno(lret);
+ 
+diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
+index fc53e0e..0a6315e 100644
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -95,6 +95,11 @@
+ 
+ #include "kern_exec_internal.h"
+ 
++/* nio: direct console mark (mirrors serial_console.c console_ops layout) */
++struct nio_wd_console_ops { void (*putc)(char, bool); int (*getc)(bool); };
++extern struct nio_wd_console_ops cons_ops[];
++static void nio_lmark(const char *s) { while (*s) cons_ops[1].putc(*s++, true); }
++
+ /* XXX should have prototypes in a shared header file */
+ extern int      get_map_nentries(vm_map_t);
+ 
+@@ -497,12 +502,14 @@ load_machfile(
+ 	}
+ #endif /* XNU_TARGET_OS_OSX && _POSIX_SPAWN_FORCE_4K_PAGES && PMAP_CREATE_FORCE_4K_PAGE */
+ 
++	nio_lmark("\nnio: LD: before pmap_create");
+ 	pmap = pmap_create_options(get_task_ledger(ledger_task),
+ 	    (vm_map_size_t) 0,
+ 	    pmap_flags);
+ 	if (pmap == NULL) {
+ 		return LOAD_RESOURCE;
+ 	}
++	nio_lmark("\nnio: LD: after pmap_create vm_map");
+ 	map = vm_map_create_options(pmap, 0,
+ 	    vm_compute_max_offset(result->is_64bit_addr),
+ 	    VM_MAP_CREATE_PAGEABLE);
+@@ -579,8 +586,10 @@ load_machfile(
+ 	result->is_64bit_addr = ((imgp->ip_flags & IMGPF_IS_64BIT_ADDR) == IMGPF_IS_64BIT_ADDR);
+ 	result->is_64bit_data = ((imgp->ip_flags & IMGPF_IS_64BIT_DATA) == IMGPF_IS_64BIT_DATA);
+ 
++	nio_lmark("\nnio: LD: before parse_machfile");
+ 	lret = parse_machfile(vp, map, thread, header, file_offset, macho_size,
+ 	    0, aslr_page_offset, dyld_aslr_page_offset, result,
++	nio_lmark("\nnio: LD: after parse_machfile");
+ 	    NULL, imgp);
+ 
+ 	if (lret != LOAD_SUCCESS) {
