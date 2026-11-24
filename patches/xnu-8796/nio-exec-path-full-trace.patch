@@ -25,7 +25,7 @@ index ed7a19b..d169da3 100644
  		error = load_return_to_errno(lret);
  
 diff --git a/bsd/kern/mach_loader.c b/bsd/kern/mach_loader.c
-index fc53e0e..0a6315e 100644
+index fc53e0e..62410a7 100644
 --- a/bsd/kern/mach_loader.c
 +++ b/bsd/kern/mach_loader.c
 @@ -95,6 +95,11 @@
@@ -55,14 +55,15 @@ index fc53e0e..0a6315e 100644
  	map = vm_map_create_options(pmap, 0,
  	    vm_compute_max_offset(result->is_64bit_addr),
  	    VM_MAP_CREATE_PAGEABLE);
-@@ -579,8 +586,10 @@ load_machfile(
+@@ -579,9 +586,11 @@ load_machfile(
  	result->is_64bit_addr = ((imgp->ip_flags & IMGPF_IS_64BIT_ADDR) == IMGPF_IS_64BIT_ADDR);
  	result->is_64bit_data = ((imgp->ip_flags & IMGPF_IS_64BIT_DATA) == IMGPF_IS_64BIT_DATA);
  
 +	nio_lmark("\nnio: LD: before parse_machfile");
  	lret = parse_machfile(vp, map, thread, header, file_offset, macho_size,
  	    0, aslr_page_offset, dyld_aslr_page_offset, result,
-+	nio_lmark("\nnio: LD: after parse_machfile");
  	    NULL, imgp);
++	nio_lmark("\nnio: LD: after parse_machfile");
  
  	if (lret != LOAD_SUCCESS) {
+ 		vm_map_deallocate(map); /* will lose pmap reference too */
