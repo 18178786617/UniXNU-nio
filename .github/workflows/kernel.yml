@@ -726,6 +726,20 @@ jobs:
               git -C "$wt" clean -fdxq 2>/dev/null || true
               echo "### reset the work tree to pristine: $wt"
             fi
+            # run-720 proved the reset above was not enough.  unixnu's
+            # patches.prepare() keeps a signature of the applied series in
+            # $ctx.work/xnu-inputs.json (next to tree/, not inside it).  A
+            # reset+clean makes the source pristine but leaves that stamp
+            # untouched, so prepare() believes the tree is still patched and
+            # skips the whole series: every file gets a fresh mtime while the
+            # patch markers and every implementation object are missing.  That
+            # is exactly what the link errors reported (mockfs, native_ram_block
+            # and native_verified_block symbols undefined).  Drop the stamp and
+            # the generated patch list so this round is forced to clone a clean
+            # tree and apply the selected arch/soc/os/device series again.
+            work="${tree%/tree}"
+            rm -f "$work/xnu-inputs.json" "$work/xnu-patches.list"
+            echo "### invalidated the patch stamp: $work"
           done
           find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
 
