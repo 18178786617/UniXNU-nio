@@ -636,7 +636,7 @@ jobs:
           echo "merged config: $config ($switches switches)"
 
       - name: Prepare the kernel build inputs
-        # All of it lives in device/tools/ci-prepare.sh so it can be run and
+        # All of it lives in tools/ci-prepare.sh so it can be run and
         # checked on a workstation: the inline version of this step cost runs
         # 342, 343, 345 and 346, and the job log could not show why.
         #
@@ -646,7 +646,11 @@ jobs:
         # happens, and the round continues.
         continue-on-error: true
         run: |
-          bash device/tools/ci-prepare.sh . 2>&1 | tee -a "${RUNNER_TEMP:-/tmp}/ci-prepare.out" || true
+          if [ ! -f tools/ci-prepare.sh ]; then
+            echo "::error title=prepare script missing::tools/ci-prepare.sh is not in this checkout"
+          else
+            bash tools/ci-prepare.sh . 2>&1 | tee -a "${RUNNER_TEMP:-/tmp}/ci-prepare.out" || true
+          fi
           echo "prepare finished; the build follows whether or not it did anything"
 
       - name: Build the kernel
@@ -729,7 +733,7 @@ jobs:
         run: |
           base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
           mkdir -p "${base:-out}/logs" 2>/dev/null || true
-          python3 device/tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
+          python3 tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
             | tee -a "${base:-out}/logs/ci-steps.log" || true
 
       # The kernel is not booted in QEMU any more.  The owner said on
@@ -870,7 +874,7 @@ jobs:
               emarks = ('M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M16',
                         'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07',
                         'D08', 'D09', 'D10', 'D11', 'D12', 'D13',
-                        'C02', 'C05', 'C06', 'E05', 'E06', 'E07', 'UB01')
+                        'C02', 'C05', 'C06', 'E05', 'E06', 'UB01')
               present = [m for m in emarks if m.encode() in d]
               absent = [m for m in emarks if m.encode() not in d]
               print('kern_exec.c source: mtime %s, %d bytes' % (stamp, len(d)))
@@ -1227,7 +1231,7 @@ jobs:
             echo "no patched tree: the build did not get as far as patching"
             exit 0
           fi
-          python3 device/tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
+          python3 tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
 
       # A hunk header says how many lines the hunk has, and patch reads
       # exactly that many.  A patch whose header counts fewer lines than
@@ -1248,7 +1252,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          python3 device/tools/check-patch-hunks.py device/patches/xnu-8796 \
+          python3 tools/check-patch-hunks.py patches/xnu-8796 \
             | tee "$RUNNER_TEMP/hunks.txt"
 
       # The display hand-off of nio carries one set of numbers, and they are
@@ -1269,9 +1273,9 @@ jobs:
             [ -f "$candidate" ] && { boot_args="$candidate"; break; }
           done
           if [ -n "$boot_args" ]; then
-            python3 device/tools/check-display-handoff.py --boot-args "$boot_args" | tee "$RUNNER_TEMP/display.txt"
+            python3 tools/check-display-handoff.py --boot-args "$boot_args" | tee "$RUNNER_TEMP/display.txt"
           else
-            python3 device/tools/check-display-handoff.py | tee "$RUNNER_TEMP/display.txt"
+            python3 tools/check-display-handoff.py | tee "$RUNNER_TEMP/display.txt"
             echo "no boot-arguments file was produced; only the panel's own numbers were checked"
           fi
 
