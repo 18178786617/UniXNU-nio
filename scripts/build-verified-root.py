@@ -223,32 +223,13 @@ def force_core_rebuild() -> None:
     print(f'PASS: {touched} patched sources carry a fresh mtime'
           + (f' ({missing} named by git but not on disk)' if missing else ''))
 
-    # A fresh mtime alone did not make make recompile kern_exec.c: rounds
-    # 698-703 showed the source carrying every exec mark (UB01, D01..D13,
-    # M02..) while kern_exec.o kept a constant 402872-byte body with only
-    # D06/C02, and the published core inherited that stale object.  The
-    # object's mtime was newer than the source's, so make called it current.
-    # Change the CONTENT by appending a comment carrying this round's
-    # identity: a C comment cannot affect codegen, but the new bytes (and a
-    # fresh inode from writing via a temp file) force every content-based
-    # dependency to rebuild the object from this exact source.
-    work = ROOT / '.cache/xnu-work'
-    token = os.environ.get('GITHUB_RUN_NUMBER', os.environ.get('GITHUB_RUN_ID', 'local'))
-    for relative in ('bsd/kern/kern_exec.c',):
-        path = work / relative
-        if not path.is_file():
-            print(f'  content-token: {relative} absent')
-            continue
-        raw = path.read_bytes()
-        marker = f'/* nio rebuild token {token} */\n'.encode()
-        if marker in raw:
-            continue
-        import hashlib as _h
-        print(f'  content-token {relative}: {_h.sha256(raw).hexdigest()[:16]} ', end='')
-        tmp = path.with_name(path.name + '.niotmp')
-        tmp.write_bytes(raw + b'\n' + marker)
-        os.replace(tmp, path)   # new inode: defeats any hard link to a cached copy
-        print('-> ' + _h.sha256(path.read_bytes()).hexdigest()[:16])
+    # Both object roots were cleared above.  A stale kern_exec.o came back
+    # anyway in rounds 698-704 -- proof that the object the link reads is not
+    # necessarily the one under these two roots (the diagnosis prints both
+    # roots' sha256 and the link's chosen path).  Do NOT mutate the source
+    # bytes to force a rebuild: the series' later patches depend on exact
+    # context, and a noise edit can make them fail to apply.  rm + touch is
+    # enough for make; finding the third object root is the real work.
     for relative, mark in (('bsd/kern/bsd_init.c', b'nio: bsd_init: '),
                            ('iokit/Kernel/IOService.cpp', b'nio: S1'),
                            ('bsd/kern/kern_exec.c', b'nio: exec: load_init_program enter')):

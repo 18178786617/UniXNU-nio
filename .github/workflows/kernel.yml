@@ -755,6 +755,7 @@ jobs:
         if: always()
         run: |
           obj=$(ls -d out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837 2>/dev/null | head -1)
+          bobj=$(ls -d out/nio/*/nio/tree/build/xnu/obj/DEVELOPMENT_ARM64_BCM2837 2>/dev/null | head -1)
           native=$(ls out/nio/*/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped 2>/dev/null | head -1)
           work=$(ls -d out/nio/*/nio/tree/.cache/xnu-work 2>/dev/null | head -1)
           echo "obj=$obj"
@@ -765,11 +766,11 @@ jobs:
           mkdir -p "$dest" 2>/dev/null || true
           # This step must never be the reason a round is red, so the pipeline
           # ends in true whether or not the tee target could be written.
-          python3 - "$obj" "$native" "$work" <<'PY' | tee "$dest/fingerprint.log" || true
+          python3 - "$obj" "$native" "$work" "$bobj" <<'PY' | tee "$dest/fingerprint.log" || true
           import os, sys
           marks = [b'nio: bsd_init: ', b'nio: MT thread', b'\nD1', b'\nS1',
                    b'nio: STALL rounds=', b'nio: HB ', b'the matching path stalled', b'nio: U1']
-          obj, native, work = sys.argv[1:4]
+          obj, native, work, bobj = sys.argv[1:5]
 
           def probe(label, path):
               if not path or not os.path.isfile(path):
@@ -925,24 +926,47 @@ jobs:
                       print('startup.o twins:', twins[:6])
               except Exception as exc:
                   print('stat failed:', exc)
-          # Three-way comparison for the exec-tail marks: source (above),
-          # the object the link should read, and the published core.  Rounds
-          # 698-702 showed the source complete but the core carrying only a
-          # random subset, so the object is the missing link in the chain.
-          eopath = os.path.join(obj, 'bsd/DEVELOPMENT/kern_exec.o') if obj else ''
-          if eopath and os.path.isfile(eopath):
-              od = open(eopath, 'rb').read()
-              import time as _t
-              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(eopath)))
-              emarks = ('M02', 'M03', 'D01', 'D02', 'D06', 'D07', 'D08',
-                        'C02', 'E05', 'E06', 'E07', 'UB01')
-              opresent = [m for m in emarks if m.encode() in od]
-              oabsent = [m for m in emarks if m.encode() not in od]
-              print('kern_exec.o: %d bytes, mtime %s' % (len(od), stamp))
-              print('  exec marks PRESENT in object: %s' % ' '.join(opresent))
-              print('  exec marks ABSENT  in object: %s' % ' '.join(oabsent))
-          else:
-              print('kern_exec.o: MISSING', eopath)
+          # The exec-tail object is the missing link: source has every mark,
+          # the published core has a random subset.  Compare BOTH object roots
+          # (the link may read the bootstrap one, not ios-obj), and read the
+          # absolute path bsd.filelist actually names.  Rounds 698-704 showed
+          # an ios-obj kern_exec.o with only D06/C02 while the core had
+          # D07/D12/D13 -- so the object we inspected was NOT the one linked.
+          import hashlib as _h
+          import time as _t
+          emarks = ('M02', 'M03', 'D01', 'D02', 'D06', 'D07', 'D08',
+                    'D12', 'D13', 'C02', 'E05', 'E06', 'UB01')
+          for label, root in (('ios-obj', obj), ('bootstrap-obj', bobj)):
+              eopath = os.path.join(root, 'bsd/DEVELOPMENT/kern_exec.o') if root else ''
+              if eopath and os.path.isfile(eopath):
+                  od = open(eopath, 'rb').read()
+                  stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(eopath)))
+                  opresent = [m for m in emarks if m.encode() in od]
+                  oabsent = [m for m in emarks if m.encode() not in od]
+                  print('kern_exec.o [%s]: %d bytes, mtime %s, sha256 %s'
+                        % (label, len(od), stamp, _h.sha256(od).hexdigest()[:16]))
+                  print('  PRESENT: %s' % ' '.join(opresent))
+                  print('  ABSENT : %s' % ' '.join(oabsent))
+              else:
+                  print('kern_exec.o [%s]: MISSING %s' % (label, eopath))
+          # The path the linker really consumes, straight from bsd.filelist.
+          if obj:
+              fl = os.path.join(obj, 'bsd/DEVELOPMENT/bsd.filelist')
+              if os.path.isfile(fl):
+                  for n in open(fl, 'rb').read().split(b'\n'):
+                      if b'kern_exec.o' in n:
+                          chosen = n.decode('latin1').strip()
+                          print('LINK CHOOSES kern_exec.o: %s' % chosen)
+                          if os.path.isfile(chosen):
+                              cd = open(chosen, 'rb').read()
+                              print('  chosen object: %d bytes, sha256 %s, UB01=%s M02=%s D07=%s'
+                                    % (len(cd), _h.sha256(cd).hexdigest()[:16],
+                                       b'UB01' in cd, b'M02' in cd, b'D07' in cd))
+                          else:
+                              print('  chosen object MISSING on disk')
+                          break
+                  else:
+                      print('LINK CHOOSES kern_exec.o: not named in bsd.filelist')
           rec = os.path.join(obj, 'osfmk/DEVELOPMENT/startup.o.json') if obj else ''
           print('compile record: %s' % ('present' if rec and os.path.isfile(rec) else 'absent'))
           # The record clang writes with -MJ carries the exact command line.
