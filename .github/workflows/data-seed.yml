@@ -114,16 +114,29 @@ jobs:
           set -euo pipefail
           trap 'echo "::error title=Build seed::$BASH_COMMAND"' ERR
           mkdir -p "$RUNNER_TEMP/out"
+          # seed-data-skip-setup.py unpacks the seed into a TemporaryDirectory
+          # under <unixnu>/build; that directory is gitignored and absent in a
+          # clean checkout, and Python reports only "No such file or directory"
+          # unless the step creates it first.
+          mkdir -p unixnu/build
           python3 device/.github/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/base-data.dbr" \
             --size-mib "$SIZE_MIB" \
             --unixnu unixnu \
             --work "$RUNNER_TEMP/seed-work"
+          set +e
           python3 unixnu/scripts/seed-data-skip-setup.py \
             "$RUNNER_TEMP/out/base-data.dbr" \
             "$RUNNER_TEMP/out/nio-data.dbr" \
-            --no-auto-dim --build=21H461
+            --no-auto-dim --build=21H461 > "$RUNNER_TEMP/out/skip-setup.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/out/skip-setup.log"
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=seed-data-skip-setup::$(tail -n 1 "$RUNNER_TEMP/out/skip-setup.log")"
+            exit "$status"
+          fi
           python3 - <<'PY'
           import json, os
           from pathlib import Path
