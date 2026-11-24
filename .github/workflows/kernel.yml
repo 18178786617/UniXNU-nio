@@ -855,6 +855,28 @@ jobs:
                     % (stamp, 'yes' if b'nio: bsd_init: ' in d else 'no'))
           else:
               print('bsd_init.c source: MISSING', bsrc)
+          # The published core has carried only a random subset of the exec
+          # marks for several rounds (D01..D13 but only D06/D07/D12/D13 made
+          # it; UB01/M02/E06 never did).  kern_exec.c was the one source this
+          # inventory never listed.  Print the full mark set from the CI-side
+          # patched source so the next round can tell whether the patches
+          # landed there at all, or landed but did not reach the object.
+          esrc = os.path.join(work, 'bsd/kern/kern_exec.c') if work else ''
+          if esrc and os.path.isfile(esrc):
+              d = open(esrc, 'rb').read()
+              import time as _t
+              stamp = _t.strftime('%m-%d %H:%M:%S', _t.localtime(os.path.getmtime(esrc)))
+              emarks = ('M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M16',
+                        'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07',
+                        'D08', 'D09', 'D10', 'D11', 'D12', 'D13',
+                        'C02', 'C05', 'C06', 'E05', 'E06', 'E07', 'UB01')
+              present = [m for m in emarks if m.encode() in d]
+              absent = [m for m in emarks if m.encode() not in d]
+              print('kern_exec.c source: mtime %s, %d bytes' % (stamp, len(d)))
+              print('  exec marks PRESENT in source: %s' % ' '.join(present))
+              print('  exec marks ABSENT  in source: %s' % ' '.join(absent))
+          else:
+              print('kern_exec.c source: MISSING', esrc)
           # Why is the string in the source but not in the object?  Print the
           # source's digest and the exact line, and every nio: literal the
           # object does carry, so the next round compares the two directly.
