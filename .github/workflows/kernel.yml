@@ -457,9 +457,17 @@ jobs:
       # The extracted file is cached under out/ipsw/21H461, so the later
       # prelink step reuses it instead of opening the remote archive again.
       - name: Fetch the 21H461 donor kernelcache
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           pin=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['kernel']['prelink']['kernelcache_sha256'])")
           echo "pin: $pin"
+          # The CLI resolves the whole schema-2 profile before it opens the
+          # IPSW, and that needs the pinned SoC/driver sources in the feed
+          # cache. The build step fetches them later too; doing it here first
+          # is what makes "unixnu ipsw fetch" runnable on a fresh checkout.
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          ./unixnu fetch
           ./unixnu ipsw fetch KernelCache
           cache=$(ls out/ipsw/21H461/kernelcache.decompressed 2>/dev/null | head -1)
           test -n "$cache"
