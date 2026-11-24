@@ -1,0 +1,21 @@
+{
+  "os_mount": "/Users/runner/work/_temp/os-mount",
+  "os_launchd_sha256": "8cec9a3c44a443b08e977ccc5d577850316ad428c575dc01f09b018dbd5b6a25",
+  "volume_uuid": "8902BEB3-3922-43F2-A2E1-31F8C82758D9",
+  "size_mib": 256,
+  "container_bytes": 268435456,
+  "files": 39,
+  "file_bytes": 611715,
+  "skipped_dirs": [
+    "staged_system_apps"
+  ],
+  "output": "/Users/runner/work/_temp/out/base-data.dbr",
+  "output_sha256": "f127418e86837d50abcbd4abb8f4d9bd25b1c8917c5a931d3d99d358c25632f1",
+  "output_bytes": 1003616,
+  "hardware_tested": false,
+  "bytes": 268435456,
+  "sha256": "ac9698064b6088c51797c49124061deb20c68692b24783c8ca55884402d4b0a2",
+  "encoded_bytes": 1003616,
+  "encoded_sha256": "f127418e86837d50abcbd4abb8f4d9bd25b1c8917c5a931d3d99d358c25632f1",
+  "packed": true
+}

@@ -1,0 +1,20 @@
+{
+  "base_sha256": "ac9698064b6088c51797c49124061deb20c68692b24783c8ca55884402d4b0a2",
+  "output": {
+    "bytes": 268435456,
+    "sha256": "8e9d1262ae5cf4a98cb997ea1c05cea5d299789af9fc10ad8722f8331109abb1",
+    "encoded_bytes": 1187920,
+    "encoded_sha256": "4a9ca111964736002ffc69b2187e3d8eaf148d4ccf94ff8d20d3c685fcb03816",
+    "packed": true
+  },
+  "preferences": [
+    "com.apple.migration",
+    "com.apple.springboard",
+    "com.apple.purplebuddy",
+    "com.apple.purplebuddy.notbackedup",
+    "com.apple.managedconfiguration.notbackedup"
+  ],
+  "no_auto_dim": true,
+  "build": "21H461",
+  "source": "github.com/dipa-studio/ios-sweet tools/sweet-root-tweaks.py"
+}
