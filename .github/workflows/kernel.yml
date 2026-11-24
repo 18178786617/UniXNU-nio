@@ -682,6 +682,21 @@ jobs:
           # 606/608 "succeeded" on such a file and published a core with none of
           # the round's marks.  Remove any pre-existing core so the loop below
           # can only succeed on a kernel this round actually linked.
+          # nio: the framework keeps out/ across rounds, and .cache/xnu-work is the
+          # source tree the series is applied to.  Patching an already patched tree
+          # makes patch(1) reject the hunks it had already applied, and the rejects
+          # were invisible: run-708 carried D06/C05/D12 (from kern_exec.c) but not
+          # E05/E06, which live in the same file, so the difference was which hunks
+          # applied, not which object got linked.  Reset the tree to its pristine
+          # commit before every round so the series applies from the same base.
+          for tree in out/nio/*/nio/tree; do
+            wt="$tree/.cache/xnu-work"
+            if [ -d "$wt/.git" ]; then
+              git -C "$wt" reset --hard -q 2>/dev/null || true
+              git -C "$wt" clean -fdxq 2>/dev/null || true
+              echo "### reset the work tree to pristine: $wt"
+            fi
+          done
           find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
 
           # The old seed kernel is gone (deleted above), so any kernel.macho
@@ -701,6 +716,29 @@ jobs:
                 echo "### it carries the round mark 'nio: BT enter'"
               else
                 echo "### NOTE: no 'nio: BT enter' in this core; fingerprint/photo will judge"
+              fi
+              # nio: the patched sources are the input the core is made from, and a
+              # round where the series did not leave its marks there cannot produce
+              # them in the core.  Fail the round instead of publishing a core that
+              # says nothing new -- run-708 published a byte-identical copy of 707.
+              src=""
+              for t in out/nio/*/nio/tree/.cache/xnu-work; do
+                [ -d "$t" ] && { src="$t"; break; }
+              done
+              if [ -n "$src" ]; then
+                for probe in "bsd/kern/kern_exec.c:nio: E05" "bsd/kern/kern_exec.c:nio: E06" "osfmk/kern/sched_prim.c:nio: UB01"; do
+                  f="${probe%%:*}"
+                  m="${probe#*:}"
+                  if grep -q "$m" "$src/$f" 2>/dev/null; then
+                    echo "### patched source carries '$m' ($f)"
+                  else
+                    echo "::error title=series did not apply::$f carries no '$m'"
+                    echo "### the series did not reach $f; refusing to publish this core"
+                    exit 1
+                  fi
+                done
+              else
+                echo "### no work tree under out/nio/*/nio/tree/.cache/xnu-work to check"
               fi
               break
             fi
