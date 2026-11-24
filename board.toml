@@ -53,7 +53,7 @@ soc_source = "sm8250"
 # (the profile above, the rebased patch series below, and this line). NX769J is
 # an SM8550 board; this one is SM8250, and the difference is in the series:
 # patches/xnu-8796/ carries the SM8250 two-cluster scheduler patch as well.
-os_profile = "ios-16.5-20F66"
+os_profile = "ipados-17.7.11-21H461"
 description = "MOTO Edge S (XT2125-4) / SM8250-AC UniXNU bring-up"
 kit = "nio"
 
@@ -92,7 +92,7 @@ defconfig = "nio_defconfig"
 # off the RAMDisk memory device as the root filesystem, and without it the boot
 # stops at "Failed to mount root device" (R54 measured that). The 8796 series
 # below carries the five mockfs patches, so mockfs is buildable on this train.
-config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ios.config"]
+config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "os:configs/ipados.config"]
 # The whole series lives in this repository, rebased onto xnu-8796.101.5.
 #
 # The shared arch and soc series still target xnu-10063.141.1, so referencing
@@ -123,7 +123,7 @@ config_fragments = ["arch:configs/common.config", "soc:configs/sm8250.config", "
 #   ["arch:patches/xnu/series", "soc:patches/xnu/series",
 #    "os:patches/xnu/series", "device:patches/xnu/series"]
 # once the shared series are rebased, and delete the duplicated copies here.
-patch_series = ["device:patches/xnu-8796/series"]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 # The arch profile's default archives cover the components selected above.
 #
 # The GPU archive needs one more recipe, and a list in this file REPLACES the
@@ -232,10 +232,10 @@ archives = [
 # link put it, which is precisely the rule scripts/pin-prelink-storage.py uses
 # when it re-bases the measured pin onto a new image.
 [kernel.prelink]
-tool = "scripts/emit-prelink-nio.py"
-kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped"
-kernelcache_sha256 = "e6fa75598f47b5a9460a60913e2ac8e4cd6cd60eb475bb31da65b68ffbcfdad5"
-slide = "-0x1000000"
+# iPadOS 17.7.11 / 21H461 (alioth-aligned). tool/kernel/slide/early_security_init
+# inherit from the official OS profile. kernelcache_sha256 is restated so the CI
+# donor step can pin the decompressed 21H461 kernelcache (same value as the profile).
+kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
 roots = [
   "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
   "com.apple.driver.AppleARMPlatform",
@@ -255,7 +255,6 @@ roots = [
   "com.apple.iokit.IOCryptoAcceleratorFamily",
   "com.apple.iokit.IOGPUFamily",
   "com.apple.iokit.IOHDCPFamily",
-  "com.apple.iokit.IOHIDFamily",
   "com.apple.iokit.IOMobileGraphicsFamily",
   "com.apple.iokit.IOReportFamily",
   "com.apple.iokit.IOSlowAdaptiveClockingFamily",
@@ -264,37 +263,33 @@ roots = [
   "com.apple.kec.Libm",
   "com.apple.kec.corecrypto",
   "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOHIDEventDriver",
 ]
 
 [ipsw]
-# The target: the iOS 16.5 image (iPhone10,3 / 20F66). The restore image is
-# not redistributable, so the URL names the member instead of pointing at
-# Apple's CDN; point the build at a local copy with --ipsw or UNIXNU_IPSW.
-# The user's copy and its extracted members are on the porting host under
-# E:\nio-unixnu-port\ios165\.
-url = "iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw"
-product = "iPhone10,3"
-version = "16.5"
-build = "20F66"
-device_class = "d22ap"
-chip_id = 32789
-board_id = 6
+# iPadOS 17.7.11 / 21H461 donor, aligned with alioth and the official OS profile.
+# j120ap Erase identity: ApChipID 0x8011 / ApBoardID 0x0C (not [payload.adt] chip_id 0x164).
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 0x8011
+board_id = 0x0C
 fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]
 
 [ipsw.sha256]
-# Member hashes pinned by member file name. These are the two disk images the
-# [userdata] windows consume: OS and Cryptex1,SystemOS. unixnu ipsw fetch
-# checks every extracted member against its pin.
-#
-# The values were measured on the porting host against the extracted members
-# of E:\nio-unixnu-port\ios165\ipsw\, and they are the same two the
-# ios-16.5-20F66 profile carries.
-"096-04088-077.dmg" = "64354ba3475d3c34d6fc531f75585a7b24af0fdb7a3a8a2bdf95c7f351a3f290"
-"096-04666-078.dmg" = "2279bf443856fcb6a3f00b1fa06a32ba02a66fdf6ab6b12019462c7498aafdd3"
-"kernelcache.release.iphone10b" = "f753edf09be3cf2b21f4dead9deb44809d1f7f0efe8fb94c767ff500dc763fc1"
-"096-04088-077.dmg.trustcache" = "df0f60fd05b7c312ad0fddb5c85d8adf97b487e8500518337bc4cbde3ca73ea7"
-"096-04666-078.dmg.trustcache" = "501fa23c4620e68e48b91bd2ba8d74251d4fbe37147290650cf717bbef619616"
-"DeviceTree.d22ap.im4p" = "51e7e42b74fb5e4cf5c7c1eed30b3d79ec829edfe8c0884c2e7839ddf62a4853"
+# 21H461 member hashes (alioth-verified, measured 2026-10-30). KernelCache is
+# absent on purpose: it is pinned decompressed via [kernel.prelink] in the OS profile.
+"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
+"044-76034-038.dmg.trustcache" = "9742f3d566369e6c48f63b3dc0740b06c243d13c6650e25bbf44616e13d6d097"
+"044-76040-038.dmg.trustcache" = "4563bdbf6ed8f72237d45dbba3ccde432634338f95c10d79d5d4631678a97c7c"
+"DeviceTree.j120ap.im4p" = "3f612f64819fbf6a8aacc03fabeda08ba897c4bf5385df995c59815c0c80c8f0"
 
 # userdata lives on LUN 4 (sde). 224.3 GiB raw; the tested-disk size is a
 # separate decision and is deliberately not set here.
@@ -325,7 +320,7 @@ ENABLE_SECUREBOOT = "0"
 DEVICE_MODEL = "0"
 MEMORY_PROTECTION = "TRUE"
 SHIP_MODE = "FALSE"
-BUILDID_STRING = "nio-xnu-16.5"
+BUILDID_STRING = "nio-xnu-ipados-17.7.11"
 
 # nio's own boot.img is header v3 (no kernel_offset/tags_offset); ABL decides
 # where the payload lands, so the packer only needs the page size.
@@ -344,7 +339,7 @@ base = 0
 unixnu = "../UniXNU"
 
 [package.defconfig]
-"ios-16.5-20F66" = "nio_defconfig"
+"ipados-17.7.11-21H461" = "nio_defconfig"
 
 [payload]
 volume = "NIOXNU"

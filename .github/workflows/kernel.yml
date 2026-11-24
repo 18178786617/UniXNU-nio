@@ -95,13 +95,7 @@ on:
         required: false
         default: "auto"
       ipsw_url:
-        description: IPSW URL (empty uses board.toml)
-        required: false
-        default: ""
-      kernelcache_url:
-        description: >-
-          URL of the gzipped donor kernelcache (the arm64 slice of the iOS
-          16.5 kernelcache). Empty uses the release asset of this repository.
+        description: IPSW URL (empty uses board.toml, iPadOS 17.7.11 / 21H461)
         required: false
         default: ""
   # A push to main also builds, but only when something the kernel is made of
@@ -433,13 +427,10 @@ jobs:
           PY
           echo "DROPPED_FLAGS=$(echo $dropped | tr ' ' ',')" >> "$GITHUB_ENV"
 
-      # board.os_profile names a directory under UniXNU/profiles/os/. The iOS
-      # 16.5 profile this port targets does not exist upstream yet, so it
-      # ships in this repository (os-profiles/ios-16.5-20F66/) and is installed
-      # into the checkout before the configuration is resolved. The step reads
-      # the name out of board.toml, so it does the right thing for whichever
-      # profile the board currently names: the 16.5 one is installed from this
-      # repository, and a profile that is upstream is used as it is.
+      # board.os_profile names a directory under UniXNU/profiles/os/. The board
+      # now names ipados-17.7.11-21H461, which exists in the official UniXNU
+      # checkout; the step still reads the name out of board.toml so a future
+      # board-provided profile can be installed the same way.
       - name: Install the OS profile
         run: |
           profile=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['board']['os_profile'])")
@@ -453,45 +444,29 @@ jobs:
           fi
           test -f "profiles/os/$profile/profile.toml"
 
-      # The prelink step needs the donor kernelcache, and the donor for a 16.5
-      # build is the arm64 slice of the iOS 16.5 kernelcache. The restore image
-      # is not redistributable, so it cannot be downloaded here the way the
-      # 17.7.11 one was.
-      #
-      # The donor lives in this repository under donor/. It is checked here
-      # against board.toml's pin before the build uses it, so a truncated or
-      # substituted file cannot reach the prelink.
-      #
-      # UNIXNU_KERNELCACHE makes scripts/unixnu/kernel.py:prelink() take the
-      # donor from this path instead of from an IPSW, so no IPSW is fetched at
-      # all.
-      #
-      # The kernelcache_url input overrides the file: a build that wants a
-      # different donor points it at one.
-      - name: Fetch the donor kernelcache
-        env:
-          KERNELCACHE_URL: ${{ inputs.kernelcache_url || '' }}
+      # The prelink step needs the donor kernelcache of the selected OS profile.
+      # For ipados-17.7.11-21H461 that member is public on Apple's CDN, so the
+      # official tool fetches and decompresses it from the IPSW named by
+      # board.toml. UNIXNU_KERNELCACHE is deliberately NOT set: the old value
+      # pointed at the 16.5 donor in device/donor/ and would fail the 21H461
+      # pin. scripts/unixnu/ipsw.py:kernelcache() checks the decompressed arm64
+      # Mach-O against [kernel.prelink].kernelcache_sha256 before returning it.
+      # The extracted file is cached under out/ipsw/21H461, so the later
+      # prelink step reuses it instead of opening the remote archive again.
+      - name: Fetch the 21H461 donor kernelcache
         run: |
           pin=$(python3 -c "import tomllib;print(tomllib.load(open('device/board.toml','rb'))['kernel']['prelink']['kernelcache_sha256'])")
           echo "pin: $pin"
-          mkdir -p out/kernelcache
-          if [ -n "$KERNELCACHE_URL" ]; then
-            echo "fetching $KERNELCACHE_URL"
-            curl -fsSL --retry 3 -o out/kernelcache/kernelcache.gz "$KERNELCACHE_URL"
-          else
-            echo "using the donor in the repository"
-            cp device/donor/kernelcache.decompressed.gz out/kernelcache/kernelcache.gz
-          fi
-          ls -la out/kernelcache/kernelcache.gz
-          gzip -t out/kernelcache/kernelcache.gz
-          gzip -dc out/kernelcache/kernelcache.gz > out/kernelcache/kernelcache.decompressed
-          got=$(shasum -a 256 out/kernelcache/kernelcache.decompressed | cut -d' ' -f1)
+          ./unixnu ipsw fetch KernelCache
+          cache=$(ls out/ipsw/21H461/kernelcache.decompressed 2>/dev/null | head -1)
+          test -n "$cache"
+          got=$(shasum -a 256 "$cache" | cut -d' ' -f1)
           echo "sha256: $got"
           if [ "$got" != "$pin" ]; then
             echo "::error::the kernelcache does not match board.toml's pin"
             exit 1
           fi
-          echo "UNIXNU_KERNELCACHE=$GITHUB_WORKSPACE/out/kernelcache/kernelcache.decompressed" >> "$GITHUB_ENV"
+          ls -la "$cache"
 
       - name: Register the board's own components
         run: |
@@ -518,7 +493,7 @@ jobs:
           scope = "board"
           path = "drivers/NioUfs"
           hardware = ["SM8250 UFS controller"]
-          os_abi = ["ios-16.5-20F66"]
+          os_abi = ["ipados-17.7.11-21H461"]
           board_dependencies = ["nio userdata layout", "SM8250 clocks and SMMU"]
           verified_devices = ["nio"]
           dependencies = []
@@ -700,11 +675,9 @@ jobs:
           find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
 
           # The old seed kernel is gone (deleted above), so any kernel.macho
-          # found below was linked by this round.  Runs 609/610 proved that
-          # gating publication on a marker string deletes a good kernel and
-          # leaves nothing to flash: the fingerprint step already records every
-          # nio: literal the core carries, and the phone is the judge.  Accept
-          # the kernel on presence; only a genuine build failure retries.
+          # found below was linked by this round.  The official four-layer
+          # series carries no nio probe strings; accept the kernel on presence
+          # and let the phone decide whether it boots.
           attempt=1
           while [ "$attempt" -le 3 ]; do
             echo "### build attempt $attempt"
@@ -712,34 +685,9 @@ jobs:
             kernel=$(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null | head -1)
             if [ -n "$kernel" ]; then
               echo "### the kernel is there ($(wc -c < "$kernel") bytes)"
-              if LC_ALL=C grep -a -q 'nio: BT enter' "$kernel" 2>/dev/null; then
-                echo "### it carries the round mark 'nio: BT enter'"
-              else
-                echo "### NOTE: no 'nio: BT enter' in this core; fingerprint/photo will judge"
-              fi
-              # nio: the patched sources are the input the core is made from, and a
-              # round where the series did not leave its marks there cannot produce
-              # them in the core.  Fail the round instead of publishing a core that
-              # says nothing new -- run-708 published a byte-identical copy of 707.
-              src=""
-              for t in out/nio/*/nio/tree/.cache/xnu-work; do
-                [ -d "$t" ] && { src="$t"; break; }
-              done
-              if [ -n "$src" ]; then
-                for probe in "bsd/kern/kern_exec.c:nio: E05" "bsd/kern/kern_exec.c:nio: E06" "osfmk/kern/sched_prim.c:nio: UB01"; do
-                  f="${probe%%:*}"
-                  m="${probe#*:}"
-                  if grep -q "$m" "$src/$f" 2>/dev/null; then
-                    echo "### patched source carries '$m' ($f)"
-                  else
-                    echo "::error title=series did not apply::$f carries no '$m'"
-                    echo "### the series did not reach $f; refusing to publish this core"
-                    exit 1
-                  fi
-                done
-              else
-                echo "### no work tree under out/nio/*/nio/tree/.cache/xnu-work to check"
-              fi
+              # The official four-layer series carries no nio probe strings.
+              # A freshly linked kernel.macho is the evidence for this step;
+              # the panel decides whether it boots.
               break
             fi
             attempt=$((attempt + 1))
@@ -1270,28 +1218,6 @@ jobs:
             exit 0
           fi
           python3 tools/check-patch-scope.py "$tree" | tee "$RUNNER_TEMP/scope.txt"
-
-      # A hunk header says how many lines the hunk has, and patch reads
-      # exactly that many.  A patch whose header counts fewer lines than
-      # the hunk holds loses the rest, silently: the file it writes is
-      # still valid C, it compiles, it links, and the function that was
-      # dropped from the end of it is simply never called.
-      #
-      # Run-170 built such a kernel.  The lost line was
-      #   STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, source_pthread_bootstrap);
-      # and the boot died in bsd_init with "pthread kernel extension not
-      # loaded (function table is NULL)", because the function that
-      # registers libpthread's function table was never entered.
-      #
-      # The check reads every patch in the series and compares each hunk
-      # header's count with the lines the hunk actually holds.  It never
-      # fails the build: it is a diagnosis, not a gate.
-      - name: Check the patch series for hunk counts
-        if: always()
-        continue-on-error: true
-        run: |
-          python3 tools/check-patch-hunks.py patches/xnu-8796 \
-            | tee "$RUNNER_TEMP/hunks.txt"
 
       # The display hand-off of nio carries one set of numbers, and they are
       # the panel's: 1080x2520 at 32 bits, 4320 bytes a row, on the region
