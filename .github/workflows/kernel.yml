@@ -179,8 +179,11 @@ concurrency:
   # image.  A push and a dispatch no longer wait for each other, and three
   # images tried by hand no longer wait for each other either.  What is
   # still serial is what should be: two pushes of the same branch.
+  # A queued push is never useful once a newer commit exists: the old run can
+  # only publish a kernel that is already superseded while the new one waits
+  # behind it. Cancel the queued/older run so exactly the latest commit runs.
   group: nio-kernel-${{ github.event_name }}-${{ github.ref }}-${{ inputs.defconfig || 'nio_defconfig' }}-${{ inputs.runner || 'by-the-hour' }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   HOMEBREW_NO_AUTO_UPDATE: 1
