@@ -576,6 +576,20 @@ jobs:
                '[ "$OWNER_ROOT_PROBE" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; then'),
               ('{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; }; }; then',
                '{ [ "${XNU_NATIVE_VIRTIO_BLOCK:-0}" != 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; }; }; then'),
+              # NATIVE_RAM_BLOCK's qualification gate has the same question as
+              # the owner-root gate above: can the kernel name the media the
+              # root came from?  nio answers that from NativeUfs (NioUfs.cpp
+              # publishes the SHNGROOT OS window and binds it to the live
+              # IORegistry), so the original storage/AES prelink closure is not
+              # the only acceptable answer.  Match with the error echo so the
+              # only the qualification check changes, not the later one that
+              # links libRamBlock.a (which nio genuinely needs).
+              ('if [ "$NATIVE_RAM_BLOCK" = 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; then\n'
+               '  if [ "${XNU_NATIVE_AES:-0}" != 1 ]; then\n'
+               '    echo \'NativeRamBlock requires the qualified original storage/AES prelink closure\' >&2',
+               'if [ "$NATIVE_RAM_BLOCK" = 1 ] && [ "${XNU_SOURCE_STORAGE:-0}" != 1 ]; then\n'
+               '  if [ "${XNU_NATIVE_AES:-0}" != 1 ] && [ "${XNU_NATIVE_UFS:-0}" != 1 ]; then\n'
+               '    echo \'NativeRamBlock requires the qualified original storage/AES prelink closure\' >&2'),
           ]
           for old, new in edits:
               count = text.count(old)
@@ -584,7 +598,7 @@ jobs:
                                    % (count, old[:70]))
               text = text.replace(old, new)
           path.write_text(text)
-          print('owner-root gate: NativeUfs is accepted as mounted-media binding')
+          print('owner-root and NATIVE_RAM_BLOCK gates: NativeUfs is accepted as mounted-media binding')
           PY
           bash -n scripts/build-xnu-4k-baseline.sh
 
@@ -662,10 +676,10 @@ jobs:
         # happens, and the round continues.
         continue-on-error: true
         run: |
-          if [ ! -f tools/ci-prepare.sh ]; then
-            echo "::error title=prepare script missing::tools/ci-prepare.sh is not in this checkout"
+          if [ ! -f device/tools/ci-prepare.sh ]; then
+            echo "::error title=prepare script missing::device/tools/ci-prepare.sh is not in this checkout"
           else
-            bash tools/ci-prepare.sh . 2>&1 | tee -a "${RUNNER_TEMP:-/tmp}/ci-prepare.out" || true
+            bash device/tools/ci-prepare.sh . 2>&1 | tee -a "${RUNNER_TEMP:-/tmp}/ci-prepare.out" || true
           fi
           echo "prepare finished; the build follows whether or not it did anything"
 
@@ -760,7 +774,7 @@ jobs:
         run: |
           base=$(ls -d out/nio/*/nio 2>/dev/null | head -1)
           mkdir -p "${base:-out}/logs" 2>/dev/null || true
-          python3 tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
+          python3 device/tools/replay-compile.py "${base:-out}" "${base:-out}/logs" 2>&1 \
             | tee -a "${base:-out}/logs/ci-steps.log" || true
 
       # The kernel is not booted in QEMU any more.  The owner said on
