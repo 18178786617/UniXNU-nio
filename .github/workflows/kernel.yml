@@ -447,6 +447,34 @@ jobs:
           fi
           test -f "profiles/os/$profile/profile.toml"
 
+      - name: Drop the boot-progress probe from the 21H461 OS series
+        run: |
+          # The official ipados-17.7.11-21H461 OS series opens with
+          # arch:../../../patches/xnu/zzz-boot-progress.patch, a bring-up probe
+          # that paints each boot stage onto the framebuffer/console. Its
+          # bsd/kern/bsd_init.c hunk expects the sheng_pmgr_run() block that
+          # the SM8550/Sheng platform power patch inserts; kona (this board)
+          # has no such block, so run 714 stopped at
+          #   bsd/kern/bsd_init.c:773: patch does not apply
+          # The device series already documents CONFIG_XNU_SHENG_PMGR=n and
+          # CONFIG_XNU_BOOT_PROGRESS=n, and the owner asked for no probes.
+          # No enabled patch references the boot_progress_* symbols this patch
+          # introduces, so dropping it is safe. Remove only this one line;
+          # the two XnuPrelink 10063.141.1 patches stay exactly as upstream.
+          python3 - <<'PY'
+          from pathlib import Path
+          series = Path('profiles/os/ipados-17.7.11-21H461/patches/xnu/series')
+          lines = series.read_text().splitlines(keepends=True)
+          needle = 'zzz-boot-progress.patch'
+          kept = [line for line in lines if needle not in line]
+          if len(kept) == len(lines):
+              raise SystemExit('zzz-boot-progress.patch was not in the OS series; upstream changed')
+          series.write_text(''.join(kept))
+          print('dropped the boot-progress probe from', series)
+          print('remaining OS series:', ''.join(kept).replace('\n', ' | '))
+          PY
+          ! grep -q 'zzz-boot-progress' profiles/os/ipados-17.7.11-21H461/patches/xnu/series
+
       - name: Register the board's own components
         run: |
           # The component catalog lives in the UniXNU checkout (components.toml
