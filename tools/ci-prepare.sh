@@ -48,7 +48,16 @@ for f in "$OBJ/mach.development.bcm2837.unstripped" "$OBJ/link.filelist" \
     fi
 done
 
-for s in scripts/build-xnu-4k-baseline.sh out/nio/ios-16.5-20F66/nio/tree/scripts/build-xnu-4k-baseline.sh; do
+# nio: the tree is named after the OS profile, and that name changes; resolve it
+# by glob instead of spelling ios-16.5-20F66, which is not the only profile.
+TREE_SCRIPT=
+for cand in out/nio/*/nio/tree/scripts/build-xnu-4k-baseline.sh; do
+    [ -f "" ] && { TREE_SCRIPT=; break; }
+done
+if [ -z "" ]; then
+    note "no build tree yet: out/nio/*/nio/tree/scripts/build-xnu-4k-baseline.sh absent"
+fi
+for s in scripts/build-xnu-4k-baseline.sh ; do
     if [ ! -f "$s" ]; then
         note "script absent: $s"
         continue
