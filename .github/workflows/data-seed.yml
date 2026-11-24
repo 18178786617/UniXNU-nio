@@ -152,7 +152,9 @@ jobs:
           from pathlib import Path
           temp = Path(os.environ['RUNNER_TEMP'])
           base = json.loads((temp / 'out/base-data.dbr.json').read_text())
-          final = json.loads((temp / 'out/nio-data.dbr.json').read_text())
+          # seed-data-skip-setup.py writes its report with output.with_suffix('.json'),
+          # which replaces '.dbr' -> nio-data.json (NOT nio-data.dbr.json).
+          final = json.loads((temp / 'out/nio-data.json').read_text())
           print(f"Data volume UUID {base.get('volume_uuid')}")
           out = final.get('output')
           sha = out.get('sha256') if isinstance(out, dict) else final.get('output_sha256')
@@ -173,10 +175,10 @@ jobs:
           set -euo pipefail
           trap 'echo "::error title=Publish::$BASH_COMMAND"' ERR
           mkdir -p "$RUNNER_TEMP/publish"
-          cp "$RUNNER_TEMP/out/nio-data.dbr" \
-             "$RUNNER_TEMP/out/nio-data.dbr.json" \
-             "$RUNNER_TEMP/out/base-data.dbr.json" \
-             "$RUNNER_TEMP/publish/"
+           cp "$RUNNER_TEMP/out/nio-data.dbr" \
+              "$RUNNER_TEMP/out/nio-data.json" \
+              "$RUNNER_TEMP/out/base-data.dbr.json" \
+              "$RUNNER_TEMP/publish/"
           {
             echo "device $(git -C device rev-parse HEAD)"
             echo "unixnu $(git -C unixnu rev-parse HEAD)"

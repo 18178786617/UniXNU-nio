@@ -91,6 +91,16 @@ CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_OWNER_CACHE_MOUNT=y
 CONFIG_XNU_OWNER_CACHE_STARTUP=y
 CONFIG_XNU_OWNER_BOOT_MANIFEST=y
+# The offline owner chain is keyed by volume UUID (build-xnu-4k-baseline.sh's
+# PY_DATA_UUID gate). OWNER_DATA_MOUNT + NATIVE_RAM_BLOCK require a DATA UUID,
+# and OWNER_BOOT_MANIFEST requires the OS ROOT UUID. ROOT is the OS window's own
+# volume UUID, measured from the 21H461 userdata image and pinned in the OS
+# profile [root] os_volume_uuid and board.toml root_match_volume_uuid. DATA is
+# the OwnerData seed volume: this 21H461 userland was validated on alioth with
+# this seed UUID, and native_ram_block_volume_seed() only logs, not fails, when
+# a freshly built seed carries a different UUID.
+CONFIG_XNU_OWNER_DATA_VOLUME_UUID="B0B12459-4F23-4E03-9B64-A902959309AA"
+CONFIG_XNU_OWNER_ROOT_VOLUME_UUID="04769D26-2CA0-4825-B443-E2E5F88300F2"
 CONFIG_XNU_OWNER_DATA_MOUNT=y
 CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
 
