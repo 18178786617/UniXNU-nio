@@ -119,12 +119,21 @@ jobs:
           # clean checkout, and Python reports only "No such file or directory"
           # unless the step creates it first.
           mkdir -p unixnu/build
+          set +e
           python3 device/.github/scripts/build-data-seed.py \
             --os-mount "$RUNNER_TEMP/os-mount" \
             --output "$RUNNER_TEMP/out/base-data.dbr" \
             --size-mib "$SIZE_MIB" \
             --unixnu unixnu \
-            --work "$RUNNER_TEMP/seed-work"
+            --work "$RUNNER_TEMP/seed-work" > "$RUNNER_TEMP/out/build-data-seed.log" 2>&1
+          seed_status=$?
+          set -e
+          cat "$RUNNER_TEMP/out/build-data-seed.log"
+          if [ "$seed_status" -ne 0 ]; then
+            echo "::error title=build-data-seed::$(tail -n 1 "$RUNNER_TEMP/out/build-data-seed.log")"
+            exit "$seed_status"
+          fi
+          echo "SEED_STAGE build-data-seed OK ($(stat -f%z "$RUNNER_TEMP/out/base-data.dbr") bytes)"
           set +e
           python3 unixnu/scripts/seed-data-skip-setup.py \
             "$RUNNER_TEMP/out/base-data.dbr" \
@@ -137,14 +146,20 @@ jobs:
             echo "::error title=seed-data-skip-setup::$(tail -n 1 "$RUNNER_TEMP/out/skip-setup.log")"
             exit "$status"
           fi
+          echo "SEED_STAGE seed-data-skip-setup OK ($(stat -f%z "$RUNNER_TEMP/out/nio-data.dbr") bytes)"
           python3 - <<'PY'
           import json, os
           from pathlib import Path
           temp = Path(os.environ['RUNNER_TEMP'])
           base = json.loads((temp / 'out/base-data.dbr.json').read_text())
           final = json.loads((temp / 'out/nio-data.dbr.json').read_text())
-          print(f"Data volume UUID {base['volume_uuid']}")
-          print(f"final seed sha256 {final['output']['sha256'] if 'output' in final and isinstance(final['output'], dict) else final['output_sha256']}")
+          print(f"Data volume UUID {base.get('volume_uuid')}")
+          out = final.get('output')
+          sha = out.get('sha256') if isinstance(out, dict) else final.get('output_sha256')
+          print(f"final seed sha256 {sha}")
+          if not sha:
+              raise SystemExit('final seed report has no sha256; keys=' + ','.join(sorted(final)))
+          print('SEED_STAGE reports OK')
           PY
 
       - name: Unmount the OS volume
