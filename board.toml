@@ -421,17 +421,18 @@ unique_chip_id = "required"
 # firmware with 36 clean descriptors). 256 MiB is the WINDOW_SIZE fallback
 # that R42/R43 proved loadable on this exact firmware.
 owned_memory_size = "0x10000000"
-packed_data_ramdisk = false
-# The APFS volume UUID of the OS window in the userdata image, read out of the
-# volume superblock of the image this build writes
-# (scripts/extract-root-volume-uuid.py, the copy in refs/UniXNU-nx769j).
+packed_data_ramdisk = true
+# The APFS volume UUID of the OS window in the 21H461 userdata image, read out
+# of the volume superblock with tools/apfs-volumes.py on 2026-11-24:
+# DawnUpdate21H461.J120J121J207J208OS. It is the same pin the official alioth
+# profile records for this IPSW.
 # The ADT generator writes it to /chosen/root-matching as an IOKit dictionary
 # with IOProviderClass = IOMedia, and the kernel mounts the IOMedia whose UUID
 # matches. A wrong value boots the firmware and then finds no root.
 #
 # The container UUID in the same superblock (nx_uuid) is NOT this one: it
 # matches the synthesized whole-disk IOMedia rather than a volume that mounts.
-root_match_volume_uuid = "97A3EB1A-5218-4936-BC85-9574EC2C8CC9"
+root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
 
 # Hardware device tree: compiled by the pipeline (real dtc on the cloud
 # runner, tools/dtc-mini.py locally) and merged into the ADT by

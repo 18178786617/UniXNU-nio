@@ -8,28 +8,22 @@ timeout = 3
 default = "xnu"
 
 [ui]
-title = "Edge S - UniXNU iOS 16.5"
+title = "Edge S - UniXNU iPadOS 17.7.11 (21H461)"
 
 [[entry]]
 id = "xnu"
-title = "iOS 16.5 kernel"
+title = "iPadOS 17.7.11 kernel (xnu-10063.141.1)"
 type = "xnu"
 # Supplied by the packer once a kernel.macho exists; until then this entry is
 # the placeholder that proves the menu and the file path are wired.
 path = "Payloads/kernel.macho"
-# initrd: the N4KROOT rootfs image. DarwinBoot copies it into memory and fills
-# the ADT /chosen/memory-map RAMDisk placeholder with {base,size}; the kernel's
-# memdev then exposes it as md0 and mockfs_mountroot reads the N4KROOT header
-# off it. rd=md0 makes IOFindBSDRoot pick that memory device as the root.
-#
-# STAGE 1 (2026-11-08): the initrd is KEPT on purpose. make-payload-vol.sh
-# asserts that the menu's initrd and the device tree's RAMDisk placeholder
-# agree; dropping rd=md0 here without regenerating kernel.macho.adt would make
-# DarwinBoot refuse this kernel as Compromised Data before it ever runs.
-# native-ufs-probe=12 therefore runs the UFS bring-up path ALONGSIDE the RAM
-# root: it reports every IOMedia (BSD name, size, UUID) and then panics, which
-# is the reading needed to confirm the nio UFS controller can publish blocks.
-initrd = "Payloads/rootfs.img"
+# initrd: the packed APFS Data seed, not the root. The 21H461 kernel now owns
+# the real root through NioUfs: /chosen/root-matching selects the OS volume in
+# the SHNGROOT image on UFS LUN 4, and the writable Data volume comes from the
+# DBRDISK1 ramdisk below. DarwinBoot still needs an initrd entry to fill the
+# ADT /chosen/memory-map PackedRAMDisk placeholder; make-payload-vol.sh checks
+# that the two agree before it writes the volume.
+initrd = "Payloads/scratch-data.img"
 # amfi_get_out_of_my_way=1: the standard AMFI bypass boot-arg (rmx1971 device
 # record uses it too); launchd has no code signature and AMFI would otherwise
 # refuse it.
@@ -41,14 +35,14 @@ initrd = "Payloads/rootfs.img"
 # that a hand-built ADT does not have. amfi_get_out_of_my_way cannot help:
 # the panic happens before AMFI reads that argument. The kernel patch of the
 # same name makes the bootstrap skip the load when this is present.
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam rd=md0 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 startup_debug=1 wdt=-1 debug=0x1"
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam native-ufs-root=1 native-ufs-stream=0xe0 native-ufs-stream2=0x4e0 offline-apfs-load=1 -apfs_shared_datavolume panic_on_crash_disabled=1 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1"
 
-# debug=0x1 is DB_HALT (osfmk/kern/debug.h:513): a panic stops in the debugger
-# instead of rebooting.  Every round of this port ends with the machine
-# resetting itself about a minute in, and with the watchdog defanged in the
-# ADT's /options it has to be said whether that reset is a panic or the
-# hardware watchdog.  A halt leaves the panic screen on the panel, which is
-# the difference between the two answers.
+# No rd=md0: the root is the OS volume NioUfs publishes from userdata. No
+# debug=0x1 or startup_debug=1: those are DB_HALT and wait for a debugger that
+# will never attach. panic_on_crash_disabled=1 keeps a crashing daemon from
+# panicking the whole kernel during bring-up, the same bring-up argument the
+# official alioth port uses. -apfs_shared_datavolume lets keybagd accept a
+# Data volume with no hardware keybag, which is this board's situation.
 
 [[entry]]
 id = "tools"

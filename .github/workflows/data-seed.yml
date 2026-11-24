@@ -1,0 +1,168 @@
+name: Build nio Data seed
+
+# The writable Data volume for the native-root boot.  It is made on a hosted
+# macOS runner because the APFS formatter and attacher are hdiutil/diskutil;
+# Windows has neither.  The seed is the 21H461 OS volume's initial /private/var
+# in a packed DBRDISK1 ramdisk, with the Setup pages already marked done.
+#
+# The restore image is never committed.  Only the packed seed, its reports and
+# the input inventory are pushed to the orphan branch ci-data-seed/latest, so
+# the boot-image packaging can fetch them with plain git.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/data-seed.yml'
+      - '.github/scripts/build-data-seed.py'
+  workflow_dispatch:
+    inputs:
+      size_mib:
+        description: Data container size in MiB
+        required: true
+        default: "256"
+      ipsw_url:
+        description: iPadOS 17.7.11 restore image URL
+        required: true
+        default: https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
+      unixnu_ref:
+        description: UniXNU commit holding seed-data-skip-setup.py and packed_ramdisk.py
+        required: true
+        default: "04573c510c5fd4892ca6948739389141cc9e05f5"
+
+permissions:
+  contents: write
+
+env:
+  IPSW_SHA256: c84ad24b6981a859eec499b1802be9ac593acfd3dc0a185a76d06e4d767a1451
+  OS_MEMBER: 044-76040-038.dmg
+  LAUNCHD_SHA256: 8cec9a3c44a443b08e977ccc5d577850316ad428c575dc01f09b018dbd5b6a25
+  SIZE_MIB: ${{ inputs.size_mib || '256' }}
+  IPSW_URL: ${{ inputs.ipsw_url || 'https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw' }}
+  UNIXNU_REF: ${{ inputs.unixnu_ref || '04573c510c5fd4892ca6948739389141cc9e05f5' }}
+
+jobs:
+  seed:
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    steps:
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: ${{ env.UNIXNU_REF }}
+          path: unixnu
+
+      - name: Fetch the DarwinBoot submodule
+        run: git -C unixnu submodule update --init --depth 1 drivers/DarwinBoot
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Fetch the restore image
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Fetch IPSW::$BASH_COMMAND"' ERR
+          mkdir -p "$RUNNER_TEMP/ipsw"
+          curl -fSL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/ipsw/restore.ipsw" "$IPSW_URL"
+          echo "$IPSW_SHA256  $RUNNER_TEMP/ipsw/restore.ipsw" | shasum -a 256 -c -
+
+      - name: Extract the OS volume
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Extract OS::$BASH_COMMAND"' ERR
+          python3 - <<'PY'
+          import hashlib, os, tomllib, zipfile
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          profile = tomllib.loads(Path('unixnu/profiles/os/ipados-17.7.11-21H461/profile.toml')
+                                  .read_text(encoding='utf-8'))
+          member = os.environ['OS_MEMBER']
+          pin = profile['ipsw']['sha256'][member]
+          out = temp / 'os'
+          out.mkdir(exist_ok=True)
+          digest = hashlib.sha256()
+          with zipfile.ZipFile(temp / 'ipsw/restore.ipsw') as archive, archive.open(member) as source:
+              with (out / member).open('wb') as target:
+                  while chunk := source.read(8 * 1024 * 1024):
+                      target.write(chunk)
+                      digest.update(chunk)
+          if digest.hexdigest() != pin:
+              raise SystemExit(f'{member}: {digest.hexdigest()} != profile pin {pin}')
+          print(f'{member} {digest.hexdigest()}')
+          PY
+          rm -f "$RUNNER_TEMP/ipsw/restore.ipsw"
+
+      - name: Mount the OS volume read-only
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Mount OS::$BASH_COMMAND"' ERR
+          mkdir -p "$RUNNER_TEMP/os-mount"
+          hdiutil attach -readonly -nobrowse -owners off \
+            -mountpoint "$RUNNER_TEMP/os-mount" "$RUNNER_TEMP/os/$OS_MEMBER"
+          echo "$LAUNCHD_SHA256  $RUNNER_TEMP/os-mount/sbin/launchd" | shasum -a 256 -c -
+
+      - name: Build the packed Data seed
+        id: seed
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Build seed::$BASH_COMMAND"' ERR
+          mkdir -p "$RUNNER_TEMP/out"
+          python3 device/.github/scripts/build-data-seed.py \
+            --os-mount "$RUNNER_TEMP/os-mount" \
+            --output "$RUNNER_TEMP/out/base-data.dbr" \
+            --size-mib "$SIZE_MIB" \
+            --unixnu unixnu \
+            --work "$RUNNER_TEMP/seed-work"
+          python3 unixnu/scripts/seed-data-skip-setup.py \
+            "$RUNNER_TEMP/out/base-data.dbr" \
+            "$RUNNER_TEMP/out/nio-data.dbr" \
+            --no-auto-dim --build=21H461
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          base = json.loads((temp / 'out/base-data.dbr.json').read_text())
+          final = json.loads((temp / 'out/nio-data.dbr.json').read_text())
+          print(f"Data volume UUID {base['volume_uuid']}")
+          print(f"final seed sha256 {final['output']['sha256'] if 'output' in final and isinstance(final['output'], dict) else final['output_sha256']}")
+          PY
+
+      - name: Unmount the OS volume
+        if: always()
+        run: hdiutil detach "$RUNNER_TEMP/os-mount" -force || true
+
+      - name: Publish the seed branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error title=Publish::$BASH_COMMAND"' ERR
+          mkdir -p "$RUNNER_TEMP/publish"
+          cp "$RUNNER_TEMP/out/nio-data.dbr" \
+             "$RUNNER_TEMP/out/nio-data.dbr.json" \
+             "$RUNNER_TEMP/out/base-data.dbr.json" \
+             "$RUNNER_TEMP/publish/"
+          {
+            echo "device $(git -C device rev-parse HEAD)"
+            echo "unixnu $(git -C unixnu rev-parse HEAD)"
+            echo "size_mib $SIZE_MIB"
+            echo "os_member $OS_MEMBER"
+            echo "launchd_sha256 $LAUNCHD_SHA256"
+            echo "ipsw_sha256 $IPSW_SHA256"
+            shasum -a 256 "$RUNNER_TEMP/publish/nio-data.dbr"
+          } | tee "$RUNNER_TEMP/publish/inputs.txt"
+          cd "$RUNNER_TEMP/publish"
+          git init -q
+          git checkout -q -b ci-data-seed/latest
+          git config user.name 'nio-ci'
+          git config user.email 'nio@local'
+          git add -A
+          git commit -q -m 'ci: the 21H461 Data seed for the native root boot'
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/ci-data-seed/latest
