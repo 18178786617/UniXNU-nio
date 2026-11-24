@@ -1,0 +1,43 @@
+nio: B2 -- mark the EL0 entry point (thread_bootstrap_return)
+
+B1 showed exec succeeds with a valid user PC/SP, and the ABORT probe shows
+no fault after ERET -- yet initprobe prints nothing.  The remaining blind
+spot is whether the new thread ever reaches the assembly return-to-user
+path.  Add a direct-console mark at thread_bootstrap_return, using the same
+PUSH_FRAME / bl / POP_FRAME pattern XNU itself uses for the KASAN hook there,
+plus a tiny C writer next to the other nio marks.  UB01 on the panel means
+the thread reached the EL0 return path; no UB01 means it never got there.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 8ed9367..d14a339 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1202,6 +1202,13 @@ nio_ehex64(unsigned long long v)
+ 	}
+ }
+ 
++/* nio: B2 -- called from thread_bootstrap_return (EL0 entry, asm). */
++void
++nio_bootmark(void)
++{
++	nio_emark("\nnio: UB01 bootret");
++}
++
+ static int
+ exec_mach_imgact(struct image_params *imgp)
+ {
+diff --git a/osfmk/arm64/locore.s b/osfmk/arm64/locore.s
+index 98bf885..8eb289e 100644
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -823,6 +823,10 @@ LEXT(return_to_kernel)
+ 	.text
+ 	.globl EXT(thread_bootstrap_return)
+ LEXT(thread_bootstrap_return)
++	.text
++	PUSH_FRAME
++	bl		EXT(nio_bootmark)               // nio: B2 user-mode entry probe
++	POP_FRAME
+ #if CONFIG_DTRACE
+ 	bl		EXT(dtrace_thread_bootstrap)
+ #endif
