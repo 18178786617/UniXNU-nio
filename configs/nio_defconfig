@@ -51,7 +51,11 @@ CONFIG_XNU_SHENG_PMGR=n
 # root_match_volume_uuid.
 CONFIG_XNU_NATIVE_UFS=y
 CONFIG_XNU_NATIVE_AES=n
-CONFIG_XNU_NATIVE_VIRTIO_BLOCK=n
+# Run 721: OWNER_ROOT_AUDIT/TRUST need a provider for
+# native_verified_block_root_authorized(); the NativeUfs gate exemption only
+# silenced the build-time check, it did not supply the symbol.  Alioth selects
+# VirtioMmioBlock for exactly this on the same 21H461 kernel, so do the same.
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
 CONFIG_XNU_NATIVE_RAM_BLOCK=y
 
 # The OS profile turns these on for the full Hello image. R54 reached
@@ -85,7 +89,7 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
-CONFIG_XNU_VERIFIED_ROOT_PROBE=n
+CONFIG_XNU_VERIFIED_ROOT_PROBE=y
 CONFIG_XNU_OWNER_ROOT_AUDIT=y
 CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_OWNER_CACHE_MOUNT=y
@@ -170,6 +174,12 @@ CONFIG_XNU_SMMU4K_PROBE=n
 CONFIG_XNU_CONSTANT_UPLOADS_PROBE=n
 CONFIG_XNU_NATIVE_OFFLINE_GPU=n
 
+# Same verified-root / transport bundle pins alioth uses on 21H461.  The build
+# script force-loads these archives when VERIFIED_ROOT_PROBE and
+# NATIVE_VIRTIO_BLOCK are on; without the pins it looked in directories this
+# board never produced and the link lost every native_verified_block_* symbol.
+CONFIG_XNU_VERIFIED_ROOT_ARCHIVE="{tree}/build/verified-root-os-xnu-bundle/libVerifiedRootProbe.a"
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE="{tree}/build/virtio-mmio-block-verified-bundle/libVirtioMmioBlock.a"
 CONFIG_XNU_BUILD_ARCHIVES=y
 # The link stubs. The GPU archive imports six names that no selected component
 # defines (package/LinkStubs.c), and ld64 refuses to leave a weak_import

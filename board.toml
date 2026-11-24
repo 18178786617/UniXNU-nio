@@ -78,7 +78,7 @@ kit = "nio"
 # build stops at that line, before a single file is compiled. Runs 29 and 30
 # ended exactly there: "component:NioUfs" had been added to the archives list
 # when the UFS path was turned on, and this list was not.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VerifiedRoot"]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VirtioMmioBlock", "RamBlock", "VerifiedRoot"]
 
 [kernel]
 defconfig = "nio_defconfig"
@@ -181,6 +181,19 @@ archives = [
   # kernelcache by scripts/pin-prelink-storage.py; see the recipe for why the
   # addresses are stable.
   "build-storage-bindings.py",
+  # Run 721 reproduced run 720's link failure even after the patch stamp was
+  # invalidated: `test -f "$RAM_BLOCK_ARCHIVE" failed` and every native_ram_block
+  # / native_verified_block symbol stayed undefined.  The shared arch series adds
+  # the *references*, but the provider archives are components, and nio's board
+  # had never selected them.  Alioth (same SM8250 + 21H461 stack) selects both:
+  # VirtioMmioBlock exports native_verified_block_root_authorized() for
+  # OWNER_ROOT_AUDIT/TRUST, and RamBlock exports native_ram_block_volume_seed()
+  # and native_ram_block_gpu_addon() for OWNER_DATA_MOUNT.  Their storage
+  # bindings must be compiled into the same archives the kernel force-loads.
+  "component:VirtioMmioBlock",
+  "build-storage-bindings.py --component NativeVirtioBlock --archive libVirtioMmioBlock.a --directory build/virtio-mmio-block --subset",
+  "component:RamBlock",
+  "build-storage-bindings.py --component NativeRamBlock --archive libRamBlock.a --directory build/ram-block --subset",
   # VerifiedRoot: NioUfs authenticates every root window against an owner-signed
   # bundle, so the link needs the real vr_open, this board's policy table and the
   # trusted key. No bundle has been signed for this phone yet, so the table is
