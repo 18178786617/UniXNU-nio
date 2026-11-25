@@ -60,6 +60,7 @@ extern const uint8_t verified_root_key[];
 #include "RootDiagnostics.h"
 #include "TransferPoll.h"
 #include "SmmuTakeover.h"
+#include "J716FSmmuTakeover.h"   // SM8250 dual-stream bypass (Lenovo J716F reference)
 
 static UfsRootDiagnostics gRootDiagnostic;
 static bool gRootDiagnosticEnabled;
@@ -2113,6 +2114,7 @@ namespace {
 
 struct UfsHost {
   OSSharedPtr<IOMemoryMap> hcMap, smmuMap, dmaMap;
+  OSSharedPtr<IOBufferMemoryDescriptor> dma;   // j716f: own physically-contiguous DMA buffer
   uintptr_t hc;
   uint8_t *virt;
   uint64_t phys;
@@ -2121,7 +2123,7 @@ struct UfsHost {
   bool poisoned = false;
   uintptr_t smmu = 0, cb = 0;
 };
-UfsHost gHost = { OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), 0, nullptr, 0, nullptr, false };
+UfsHost gHost = { OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOMemoryMap> (), OSSharedPtr<IOBufferMemoryDescriptor> (), 0, nullptr, 0, nullptr, false };
 
 
 static IOReturn recordTransport (IOReturn result, uint32_t ocs)
@@ -2244,44 +2246,35 @@ static bool hostBringUp (const char **why)
     gRootDiagnostic.hce = read32 (gHost.hc, 0x34);
   }
   gRootDiagnostic.stage = "DMA allocation";
-  // nio run-60: the kernel allocator put the DMA buffer at 0xc51e4000 --
-  // below the 0xc8000000 line adoptAndRead already measured as unusable --
-  // and the first doorbell hung the fabric until the watchdog reset the
-  // board 10 s later, with no panic screen. The one region the
-  // controller's DMA is known to reach is its own request list: the
-  // firmware zeroed those 16 KiB and the controller reads them every
-  // command it runs. Take that over as the transfer region, exactly as
-  // adoptAndRead does (kDmaBytes is 16 KiB now: the request list, the
-  // command UPIU and two 4 KiB data blocks fit; larger reads go through
-  // the chunking loops).
-  uint64_t fwList = (uint64_t (read32 (gHost.hc, 0x54)) << 32) | read32 (gHost.hc, 0x50);
-  if (!fwList || (fwList & 0xfff)) {
-    *why = "no usable firmware list base";
+  // Match the Lenovo J716F (TB-J716F, SM8250, iPadOS 17.7.11, UFS root
+  // device-verified): allocate our OWN physically-contiguous DMA buffer and
+  // give the UFS stream a bypass mapping of it, instead of taking over the
+  // firmware request list.  The reference uses inTaskWithOptions(InOut|
+  // PhysicallyContiguous|MapperNone) and getPhysicalSegment; the SMMU
+  // dual-stream bypass below makes the address reachable by the controller.
+  gHost.dma = OSSharedPtr<IOBufferMemoryDescriptor> (
+    IOBufferMemoryDescriptor::inTaskWithOptions (
+      kernel_task,
+      static_cast<IOOptionBits> (kIODirectionInOut) |
+      static_cast<IOOptionBits> (kIOMemoryPhysicallyContiguous) |
+      static_cast<IOOptionBits> (kIOMemoryMapperNone),
+      kDmaBytes, 4096), OSNoRetain);
+  gHost.lock = IOLockAlloc ();
+  if (!gHost.dma || !gHost.lock) {
+    *why = "own DMA allocation";
     return false;
   }
-  gHost.phys = fwList;
-  // nio run-280: adoptAndRead is the only recipe ever validated on hardware,
-  // and it maps this region CACHED and maintains the cache around each DMA
-  // hand-off. R275's uncached mapPhys mapping changed exactly that: the CPU
-  // stores still reached memory (run-63), yet ringing the first doorbell
-  // hung the fabric with no panic screen, twice (run-65, run-66). Return to
-  // the proven environment: cached mapping, zero32, cacheClean before
-  // ringing, cacheCleanInvalidate before reading results.
-  IOMemoryDescriptor *dmaRegion = IOMemoryDescriptor::withPhysicalAddress (fwList, kDmaBytes, kIODirectionInOut);
-  if (dmaRegion) {
-    gHost.dmaMap = OSSharedPtr<IOMemoryMap> (dmaRegion->map (kIOMapAnywhere), OSNoRetain);
-    dmaRegion->release ();
-  }
-  gHost.virt = gHost.dmaMap ? reinterpret_cast<uint8_t *> (gHost.dmaMap->getVirtualAddress ()) : nullptr;
+  gHost.virt = static_cast<uint8_t *> (gHost.dma->getBytesNoCopy ());
+  IOByteCount contiguous = 0;
+  gHost.phys = gHost.dma->getPhysicalSegment (0, &contiguous, kIOMemoryMapperNone);
   gRootDiagnostic.dma = gHost.phys;
-  gRootDiagnostic.contiguous = kDmaBytes;
-  gHost.lock = IOLockAlloc ();
-  if (!gHost.virt || !gHost.lock) {
-    *why = "firmware list map";
+  gRootDiagnostic.contiguous = contiguous;
+  if (!gHost.virt || !gHost.phys || (gHost.phys & 4095) || contiguous < kDmaBytes) {
+    *why = "own DMA outside conventional RAM";
     return false;
   }
   zero32 (gHost.virt, kDmaBytes);
-  cacheClean (gHost.virt, kDmaBytes);
+  cacheCivac (gHost.virt, kDmaBytes);
   uint32_t report[3] = { 0, 0, 0 };
   gRootDiagnostic.stage = "SMMU and request list";
   nioUfsSay ("nio: ufs bu stop-queue\n");
@@ -2291,8 +2284,34 @@ static bool hostBringUp (const char **why)
     return false;
   }
   nioUfsSay ("nio: ufs bu smmu\n");
-  smmuBypassStream (0x60, gHost.smmuMap, report, gHost.phys, kDmaBytes);
-  gHost.smmu = gHost.smmuMap->getVirtualAddress ();
+  // J716F-style dual-stream (0x0e0/0x4e0) bypass for our own DMA buffer.
+  // When the firmware left apps-SMMU globally bypassed (sCR0 bit0 clear),
+  // physical addresses pass through with no stream entries -- as before.
+  gHost.smmu = mapPhys (0x15000000ULL, 0xd0000, gHost.smmuMap);
+  if (!gHost.smmu) {
+    *why = "SMMU mapping";
+    return false;
+  }
+  if (read32 (gHost.smmu, 0x0) & 1) {
+    auto smmuRead = [&] (unsigned at) { return read32 (gHost.smmu, at); };
+    J716fSmmuPlan plan = planJ716fSmmu (gHost.phys, kDmaBytes, smmuRead);
+    if (plan.error) {
+      *why = "SMMU dual-stream plan refused";
+      return false;
+    }
+    plan.error = configureJ716fSmmu (plan, smmuRead, [&] (unsigned at, uint32_t val) {
+      write32 (gHost.smmu, at, val);
+      __asm__ volatile ("dsb sy" ::: "memory");
+    });
+    if (plan.error) {
+      *why = "SMMU dual-stream readback";
+      return false;
+    }
+    gHost.cb = gHost.smmu + (plan.pages + plan.bank) * 4096;
+    report[0] = plan.slot[0] | (plan.bank << 16);
+  } else {
+    report[0] = 0; report[1] = 0; report[2] = 0;
+  }
   // The board's WiFi endpoint (sheng-wifi=2 or more) needs a pass-through stream of its own, set up here with the same code and at the same moment as the
   // storage stream: the registers of the stream matching group are not safe to touch from another thread later (a read of the first one never returned).
   uint32_t wifi = 0;
