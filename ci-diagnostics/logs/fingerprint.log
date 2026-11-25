@@ -1,0 +1,101 @@
+kernel.macho (published): 52486144 bytes, mtime 11-25 10:45:29, nio: bsd_init: =no, nio: MT thread=no, 
+D1=yes, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+nio literals in the published kernel (59):
+    nio: SMMU sCR0=%x globally bypassed, stream %x n
+    nio: adopt A enter phys=%llx hcs=%08x
+    nio: adopt A0 own=%llx fw=%08x:%08x
+    nio: adopt A2 hce set hce=%08x
+    nio: adopt B stopped rsr=%08x
+    nio: adopt C smmu
+    nio: adopt D ba written ba=%08x bau=%08x
+    nio: adopt E status cleared
+    nio: adopt F list started rsr=%08x hcs=%08x
+    nio: adopt G list ready hcs=%08x
+    nio: ufs FAIL prepare phase=%u window=%u
+    nio: ufs FAIL step 1 bringup why=%s
+    nio: ufs FAIL step 2 layout why=%s
+    nio: ufs FAIL step 3 manifest status=%u magic=%0
+    nio: ufs H dw0=%08x dw2=%08x prdt=%08x
+    nio: ufs H0 r=%d cap=%08x mcq=%08x
+    nio: ufs H0b urlcc=%08x err=%08x %08x %08x %08x 
+    nio: ufs H0c vs=%08x %08x clk=%08x fh=%08x
+    nio: ufs H0d clr=%08x rsr=%08x db=%08x
+    nio: ufs H0e vs=%08x
+    nio: ufs H4 bad=%08x w0=%08x w4=%08x
+    nio: ufs H4c descriptor differs; not ringing
+    nio: ufs H5 db0=%08x
+    nio: ufs H6 ba=%08x:%08x want=%08x:%08x rsr=%08x
+    nio: ufs I0 hce=%08x hcs=%08x db=%08x
+    nio: ufs I1 doorbell
+    nio: ufs I2 taken=%d db=%08x
+    nio: ufs I3 dbhi=%c dblo=%c
+    nio: ufs bu FAIL power-query dp=%d hcs=%08x
+    nio: ufs bu FAIL stop-queue why=%s hcs=%08x hce=
+    nio: ufs bu clock hw=%llu kernel=%llu
+    nio: ufs bu doorbell about to ring
+    nio: ufs bu doorbell rang
+    nio: ufs bu nop-out %s dp=%d hcs=%08x
+    nio: ufs bu nop-out failed, going on
+    nio: ufs bu poll %d got dp=%d hcs=%08x
+    nio: ufs bu poll %d read
+    nio: ufs bu power-query dp=%d hcs=%08x
+    nio: ufs bu queue-up dp=%d hcs=%08x
+    nio: ufs bu smmu
+    nio: ufs bu stop-queue
+    nio: ufs driver is linked in
+    nio: ufs driver round %d
+    nio: ufs driver start enter
+    nio: ufs probe #%u provider=%s compatible="%s"
+    nio: ufs publish FAIL phase=%u window=%u publish
+    nio: ufs publish FAIL start window=%u
+    nio: ufs publish in place
+    nio: ufs published %s
+    nio: ufs startRoot enter
+    nio: ufs step 1 bringup
+    nio: ufs step 1 ok
+    nio: ufs step 2 layout
+    nio: ufs step 2 ok windows=%u objects=%u
+    nio: ufs step 3 ok
+    nio: ufs wait media %s
+    nio: uic recovery rst=%02x en=%02x ls=%02x hcs=%
+    nio: wake begin power=%08x
+    nio: wake done, polling LUN ready
+native (prelink input): 19642136 bytes, mtime 11-25 10:45:22, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+osfmk/DEVELOPMENT/startup.o: 113304 bytes, mtime 11-25 10:44:01, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/bsd_init.o: 178104 bytes, mtime 11-25 10:44:44, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/kern_exec.o: 468072 bytes, mtime 11-25 10:44:49, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+iokit/DEVELOPMENT/IOService.cpo: 923976 bytes, mtime 11-25 10:43:22, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+object directory totals: 888 .o, 123 .cpo, 9 .filelist, 1 .a
+filelist bsd/DEVELOPMENT/bsd.filelist: 461 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_syscalls.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_gss.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_serv.o
+filelist iokit/DEVELOPMENT/iokit.filelist: 97 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSObject.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSAction.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.iig.cpo
+filelist osfmk/DEVELOPMENT/osfmk.filelist: 333 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/gssd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/lockd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/KUNCUserNotifications.o
+startup.c source: mtime 11-25 10:42:51, HB=no, old-format=no
+IOService.cpp source: mtime 11-25 10:42:51, STALL=no, U1=no
+bsd_init.c source: mtime 11-25 10:42:51, BSDINIT=no
+kern_exec.c source: mtime 11-25 10:42:51, 283848 bytes
+  exec marks PRESENT in source: 
+  exec marks ABSENT  in source: M01 M02 M03 M04 M05 M06 M16 D01 D02 D03 D04 D05 D06 D07 D08 D09 D10 D11 D12 D13 C02 C05 C06 E05 E06 UB01
+startup.c sha256: 80c4cc3b5db23f09a368b5f7aee4cb6c
+startup.o nio literals: []
+startup.o nio symbols: none
+startup.o stat: inode=3158950 links=1 size=113304
+kern_exec.o [ios-obj]: 468072 bytes, mtime 11-25 10:44:49, sha256 06231f6628ea9aa8
+  PRESENT: 
+  ABSENT : M02 M03 D01 D02 D06 D07 D08 D12 D13 C02 E05 E06 UB01
+kern_exec.o [bootstrap-obj]: MISSING out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o
+LINK CHOOSES kern_exec.o: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o
+  chosen object: 468072 bytes, sha256 06231f6628ea9aa8, UB01=False M02=False D07=False
+compile record: present
+compile record entries: 1
+startup.o compile: /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -xc /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/.cache/xnu-work/osfmk/kern/startup.c -o startup.o -c -g -nostdlibinc -ferror-limit=10000 -fno-builtin -fno-common -ftrivial-auto-var-init=zero -fsigned-bitfields -fmerge-all-constants -fc++-static-destructors=none -fsanitize-minimal-runtime -fsanitize-ignorelist=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/san/kasan-blacklist-arm64 -fsanitize=signed-integer-overflow -D ARM64_BOARD_CONFIG_BCM2837 -arch arm64 -D arm64 -D ARM64 -D __ARM64__ -D LP64 -D PAGE_SIZE_FI
