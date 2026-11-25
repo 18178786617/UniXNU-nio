@@ -1,38 +1,16 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // Shared production command path. Included inside the root transport namespace.
 // The host harness replaces only MMIO, DMA synchronization, clock and lock primitives.
-
-/* nio: a place for the board's driver to say where a command has got to.
- *
- * The host harness has no console, so the report is a no-op there.  It is
- * a macro rather than a function because the shared path is compiled on
- * the host as well, and a function would need a definition in both trees.
- *
- * The reports sit around the doorbell on purpose.  Run 478 stopped with
- * the NOP OUT begun and nothing after it, and the difference between a
- * wait that does not end and a read that never returns has to be seen
- * from the inside: a report that reads nothing of the controller can
- * still be written after the doorbell, and one that comes before it
- * says the command was on its way out.
- */
-#ifndef NIO_UFS_REPORT
-#define NIO_UFS_REPORT(text) ((void) 0)
-#endif
-
 struct HardwareTransferPort {
   uint64_t deadline;
   uint32_t doorbell () { return read32 (gHost.hc, 0x58); }
   uint32_t interrupt () { return read32 (gHost.hc, 0x20); }
   uint32_t completedOcs () {
-    // Cached mapping: the controller wrote the OCS over our dirty cache
-    // lines. Invalidate the UTRD line before reading (harness recipe).
     cacheInvalidate (gHost.virt, 64);
     return *reinterpret_cast<volatile uint32_t *> (gHost.virt + 8) & 0xff;
   }
   bool expired () { return mach_absolute_time () >= deadline; }
-  /* nio: the poll's pause is a read of the controller's status, not a
-   * delay from the kernel -- ufsWaitTicks() in RootQueue.h says why. */
-  void delay () { IODelay (2); }  // j716f: IODelay works on this SM8250 batch
+  void delay () { IODelay (2); }
 };
 
 static void putBe32 (uint8_t *at, uint32_t value)
@@ -79,19 +57,11 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   gRootDiagnostic.sense = 0;
   uint8_t *utrd = gHost.virt;
   uint64_t ucdPhys = gHost.phys + kUcdOffset;
-  // nio run-62: the kernel runs with SCTLR.A=1, and the compiler merged
-  // the adjacent 32-bit UTRD stores into a 64-bit stur at +4, which is
-  // only 4-byte aligned in the device-mapped list region -- alignment
-  // fault. volatile keeps every store 32-bit and in order.
-  volatile uint32_t *words = reinterpret_cast<volatile uint32_t *> (utrd);
+  uint32_t *words = reinterpret_cast<uint32_t *> (utrd);
   for (unsigned index = 0; index < 8; index++) {
     words[index] = 0;
   }
-  /* nio run-484: bit 24 is set here for the reason given in NioUfs.cpp:
-   * the reference implementation that runs on this controller writes it,
-   * and the two recipes this one was written from do not.  Both paths
-   * build the same descriptor, so they get the same word. */
-  words[0] = 0x10000000U | (direction << 25);  // poll-only: no bit24 IRQ request (official fd420df)
+  words[0] = 0x10000000U | (direction << 25);
   words[2] = 0x0fU;
   words[4] = static_cast<uint32_t> (ucdPhys);
   words[5] = static_cast<uint32_t> (ucdPhys >> 32);
@@ -99,21 +69,17 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   words[7] = (dataBytes ? 1U : 0U) | ((kPrdtOffset >> 2) << 16);
   if (dataBytes) {
     uint64_t dataPhys = gHost.phys + kDataOffset;
-    volatile uint32_t *prd = reinterpret_cast<volatile uint32_t *> (gHost.virt + kUcdOffset + kPrdtOffset);
+    uint32_t *prd = reinterpret_cast<uint32_t *> (gHost.virt + kUcdOffset + kPrdtOffset);
     prd[0] = static_cast<uint32_t> (dataPhys);
     prd[1] = static_cast<uint32_t> (dataPhys >> 32);
     prd[2] = 0;
     prd[3] = dataBytes - 1;
   }
-  // The region is cached again (run-280, harness recipe): clean it so the
-  // controller's DMA fetch sees every UTRD/UCD store above.
-  cacheCivac (gHost.virt, kDataOffset + dataBytes);  // j716f: clean+invalidate, used region only
+  cacheCivac (gHost.virt, kDataOffset + dataBytes);
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
-  NIO_UFS_REPORT ("nio: ufs bu doorbell about to ring");
   hostWrite (0x58, 1);
-  NIO_UFS_REPORT ("nio: ufs bu doorbell rang");
   UfsTransferPoll state;
   UfsTransferEnd end = pollUfsTransfer (port, state);
   gRootDiagnostic.polls = state.polls;
@@ -127,9 +93,7 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
     gHost.ready = false;
     return recordTransport (end == UfsTransferEnd::Timeout ? kIOReturnTimeout : kIOReturnIOError, *ocs);
   }
-  // The controller wrote the response UPIU (and possibly data) over our
-  // cache lines: clean+invalidate the whole region before reading results.
-  cacheInvalidate (gHost.virt, kDataOffset + dataBytes);  // j716f
+  cacheInvalidate (gHost.virt, kDataOffset + dataBytes);
   gRootDiagnostic.response = loadBe32 (gHost.virt + kUcdOffset + kRspOffset);
   return recordTransport (*ocs == 0 ? kIOReturnSuccess : kIOReturnIOError, *ocs);
 }
@@ -150,7 +114,7 @@ static bool hostClearUcd (void)
     recordTransport (kIOReturnIOError, 15);
     return false;
   }
-  volatile uint32_t *words = reinterpret_cast<volatile uint32_t *> (gHost.virt + kUcdOffset);
+  uint32_t *words = reinterpret_cast<uint32_t *> (gHost.virt + kUcdOffset);
   for (unsigned index = 0; index < (kPrdtOffset + 16) / 4; index++) {
     words[index] = 0;
   }
@@ -325,44 +289,20 @@ static bool hostStoreOpen (uint64_t first, uint64_t blocks)
   return true;
 }
 
-// Set once by the panic path (native_ufs_log_panic): the CPUs that still run may hold the host lock forever, so it is tried for 200 ms
-// and the command is then issued without it. Commands only poll (TransferPoll.h), so they also run with interrupts masked.
-static bool gHostPanic = false;
-
-static bool hostLock (void)
-{
-  if (!gHostPanic) {
-    IOLockLock (gHost.lock);
-    return true;
-  }
-  for (unsigned tries = 0; tries < 200000; tries++) {
-    if (IOLockTryLock (gHost.lock)) return true;
-    ufsWaitTicks (1);
-  }
-  return false;
-}
-
-static void hostUnlock (bool held)
-{
-  if (held) IOLockUnlock (gHost.lock);
-}
-
-// WRITE(10) of `blocks` 4096-byte blocks from src to lba on the board's userdata LUN;
-// the range must lie inside one open window.
+// WRITE(10) of `blocks` 4096-byte blocks from src to lba on LUN 0; the range must lie inside one open window.
 static IOReturn hostWrite4k (uint8_t lun, uint64_t lba, uint32_t blocks, const void *src, bool fua = false)
 {
-  if (!gHost.ready || !src || !blocks || blocks > kDataMax / 4096 ||
-      lun != NIO_UFS_USERDATA_LUN || !hostInWindow (lba, blocks)) {
+  if (!gHost.ready || !src || !blocks || blocks > kDataMax / 4096 || lun != 0 || !hostInWindow (lba, blocks)) {
     return kIOReturnBadArgument;
   }
-  const bool held = hostLock ();
+  IOLockLock (gHost.lock);
   gRootDiagnostic.lba = lba;
   memcpy (gHost.virt + kDataOffset, src, blocks * 4096U);
   uint8_t cdb[10] = { 0x2a, uint8_t (fua ? 0x08 : 0), uint8_t (lba >> 24), uint8_t (lba >> 16), uint8_t (lba >> 8), uint8_t (lba),
                       0, uint8_t (blocks >> 8), uint8_t (blocks), 0 };
   uint32_t scsi = 0;
-  IOReturn status = hostScsiDir (lun, cdb, 10, 1, blocks * 4096U, 2000000, &scsi);
-  hostUnlock (held);
+  IOReturn status = hostScsiDir (0, cdb, 10, 1, blocks * 4096U, 2000000, &scsi);
+  IOLockUnlock (gHost.lock);
   return status;
 }
 
@@ -370,11 +310,11 @@ static IOReturn hostWrite4k (uint8_t lun, uint64_t lba, uint32_t blocks, const v
 static IOReturn hostSyncCache (void)
 {
   if (!gHost.ready || (!gStoreOpen && !gLogOpen)) return kIOReturnNotReady;
-  const bool held = hostLock ();
+  IOLockLock (gHost.lock);
   uint8_t cdb[10] = { 0x35 };
   uint32_t scsi = 0;
-  IOReturn status = hostScsiDir (NIO_UFS_USERDATA_LUN, cdb, 10, 0, 0, 10000000, &scsi);
-  hostUnlock (held);
+  IOReturn status = hostScsiDir (0, cdb, 10, 0, 0, 10000000, &scsi);
+  IOLockUnlock (gHost.lock);
   return status;
 }
 

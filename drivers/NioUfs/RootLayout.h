@@ -16,8 +16,6 @@ struct RootLayout {
   uint32_t gptHeaderCrc, gptEntriesCrc, gptEntryCount;
   uint32_t windows;
   RootWindow window[4];
-  uint32_t objects;                       // version 2: data the kernel reads itself (policy tables, firmware)
-  RootWindow object[4];
   uint32_t manifestStatus;                // 0 ok, 1 no manifest magic, 2 bad version/count, 3 hash, 4 bounds, 5 names, 6 overlap, 7 attributes
   uint32_t magic0, magic1;                // first 8 bytes of the partition's first block
   uint32_t ext4Magic;                     // 16 bits at byte 1080 of the partition (0xef53 on Linux ext4)
@@ -56,40 +54,13 @@ static bool rootEntryUsed (const uint8_t *entry)
   return used != 0;
 }
 
-// Find the partition named "unixnu" in the board's userdata LUN's primary
-// GPT (4096-byte sectors), then read the manifest at its first block.
-// nio keeps Android's "userdata" intact and carves "unixnu" out of the tail
-// of that same LUN for the SHNGROOT image; reading "userdata" here finds
-// Android's ext4 and fails at manifest status 1. Read-only. Returns false
-// only if the GPT itself is unusable.
-//
-// The LUN is not assumed: nio has six of them and the userdata partition is
-// on LUN 4, while sheng had one and used LUN 0. The GPT header is looked
-// for on every LUN the device has, and the LUN that actually carries the
-// "userdata" entry is the one that is used. The result is checked against
-// NIO_UFS_USERDATA_LUN, so a board whose layout differs is refused rather
-// than silently written to the wrong place.
+// Find the partition named "userdata" in LUN 0's primary GPT (4096-byte sectors), then read the
+// manifest at its first block. Read-only. Returns false only if the GPT itself is unusable.
 static bool findRootLayout (RootLayout *layout, const char **why)
 {
   gRootDiagnostic.stage = "GPT header";
   bzero (layout, sizeof (*layout));
-
-  // Boards whose bootloader owns the GPT (Motorola `partition`) reject any
-  // runtime GPT edit, so a dedicated unixnu partition cannot be created.
-  // `nio-root-lba` supplies the 4096-byte LBA of a root image written into
-  // space already freed inside userdata. When set, the GPT partition-name
-  // lookup below is skipped and this LBA is used as the manifest origin.
-  // Default to the LBA the 21H461 root image was actually written to (verified
-  // by reading SHNGROOT back at boot).  The loader's boot-arg channel is not
-  // reliable on this board: the screen shows the pre-change args, so the
-  // boot-arg could be absent even though the packed toml carries it.  A 0 here
-  // would send the lookup below to the stock GPT, which has no "unixnu"
-  // partition, and root mounting fails with systemPartitionSize=0.  A boot-arg,
-  // when it does arrive, still overrides this default.
-  uint64_t forcedRootLba = 58840832ULL;
-  PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
-
-  if (hostRead4k (NIO_UFS_USERDATA_LUN, 1, 1, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (0, 1, 1, gScratch) != kIOReturnSuccess) {
     *why = "GPT header read";
     return false;
   }
@@ -124,7 +95,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     return false;
   }
   gRootDiagnostic.stage = "GPT entries";
-  if (hostRead4k (NIO_UFS_USERDATA_LUN, entriesLba, blocks, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (0, entriesLba, blocks, gScratch) != kIOReturnSuccess) {
     *why = "GPT entries read";
     return false;
   }
@@ -132,20 +103,9 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     *why = "GPT entries CRC";
     return false;
   }
-  if (forcedRootLba) {
-    // Validate the forced LBA against the live GPT usable range before use.
-    if (forcedRootLba < first || forcedRootLba > last) {
-      *why = "forced root LBA outside GPT usable range";
-      return false;
-    }
-    layout->userdataFirst = forcedRootLba;
-    // The appended root image is 9.4 GiB; bound the manifest checks to 12 GiB.
-    layout->userdataLast = forcedRootLba + (12ULL * (1ULL << 30)) / 4096ULL - 1;
-    if (layout->userdataLast > last) layout->userdataLast = last;
-  }
-  static const char wanted[] = "unixnu";
-  bool found = forcedRootLba != 0;
-  for (uint32_t index = 0; !forcedRootLba && index < count; index++) {
+  static const char wanted[] = "userdata";
+  bool found = false;
+  for (uint32_t index = 0; index < count; index++) {
     const uint8_t *entry = gScratch + index * 128;
     if (!rootEntryUsed (entry)) continue;
     uint64_t entryFirst = le64 (entry + 32), entryLast = le64 (entry + 40);
@@ -169,7 +129,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     }
     if (match) {
       if (found) {
-        *why = "duplicate unixnu partition";
+        *why = "duplicate userdata partition";
         return false;
       }
       layout->userdataFirst = le64 (entry + 32);
@@ -178,14 +138,24 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     }
   }
   if (!found || layout->userdataLast < layout->userdataFirst) {
-    *why = "no unixnu partition";
+    *why = "no userdata partition";
     return false;
+  }
+  // nio board difference: Motorola's bootloader refuses GPT edits, so the
+  // root image is flashed into free space inside userdata at a fixed LBA.
+  // Override the partition start with that LBA (default from the 21H461
+  // image); everything below -- manifest parse and window offsets -- stays
+  // exactly the J716F reference code.
+  uint64_t forcedRootLba = 58840832ULL;
+  PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
+  if (forcedRootLba >= layout->userdataFirst && forcedRootLba <= layout->userdataLast) {
+    layout->userdataFirst = forcedRootLba;
   }
   gRootDiagnostic.first = layout->userdataFirst;
   gRootDiagnostic.last = layout->userdataLast;
   gRootDiagnostic.stage = "root manifest";
   // First block of the partition: manifest if the root image was flashed, ext4 otherwise.
-  if (hostRead4k (NIO_UFS_USERDATA_LUN, layout->userdataFirst, 1, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (0, layout->userdataFirst, 1, gScratch) != kIOReturnSuccess) {
     *why = "userdata first block read";
     return false;
   }
@@ -198,9 +168,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     uint32_t version = le32 (gScratch + 8), n = le32 (gScratch + 12);
     uint64_t imageBytes = le64 (gScratch + 16);
     layout->manifestStatus = 2;
-    // Version 1 holds windows only. Version 2 adds data objects (flags 3, 4096-byte blocks), which are read
-    // by the kernel and never published as block devices; a version 1 parser refuses such a manifest.
-    if ((version == 1 && n && n <= 4) || (version == 2 && n && n <= 8)) {
+    if (version == 1 && n && n <= 4) {
       SHA256_CTX context;
       uint8_t digest[32];
       SHA256_Init (&context);
@@ -214,14 +182,12 @@ static bool findRootLayout (RootLayout *layout, const char **why)
         for (uint32_t index = 0; index < n && bounds; index++) {
           const uint8_t *entry = gScratch + 24 + 128 * index;
           uint64_t offset = le64 (entry + 32), size = le64 (entry + 40);
-          const bool isWindow = le32 (entry + 48) == 512 && le32 (entry + 52) == 1;
-          const bool isObject = version == 2 && le32 (entry + 48) == 4096 && le32 (entry + 52) == 3;
-          if ((offset & 4095) || offset < 4096 || (isWindow && (size & 511)) || !size || offset >= imageBytes ||
+          if ((offset & 4095) || offset < 4096 || (size & 511) || !size || offset >= imageBytes ||
               size > imageBytes - offset || ((size + 4095) & ~4095ULL) > imageBytes - offset) {
             bounds = false;
             break;
           }
-          if ((!isWindow && !isObject) || (isWindow && layout->windows == 4) || (isObject && layout->objects == 4)) {
+          if (le32 (entry + 48) != 512 || le32 (entry + 52) != 1) {
             layout->manifestStatus = 7; bounds = false; break;
           }
           unsigned length = 0;
@@ -229,8 +195,8 @@ static bool findRootLayout (RootLayout *layout, const char **why)
           if (!length || length == 32 || entry[length] != 0) {
             layout->manifestStatus = 5; bounds = false; break;
           }
-          for (uint32_t prior = 0; prior < layout->windows + layout->objects; ++prior) {
-            const RootWindow &other = prior < layout->windows ? layout->window[prior] : layout->object[prior - layout->windows];
+          for (uint32_t prior = 0; prior < index; ++prior) {
+            const RootWindow &other = layout->window[prior];
             if (!strcmp (reinterpret_cast<const char *> (entry), other.name)) {
               layout->manifestStatus = 5; bounds = false; break;
             }
@@ -241,22 +207,16 @@ static bool findRootLayout (RootLayout *layout, const char **why)
             }
           }
           if (!bounds) break;
-          RootWindow &slot = isWindow ? layout->window[layout->windows++] : layout->object[layout->objects++];
-          memcpy (slot.name, entry, 32);
-          slot.name[31] = 0;
-          slot.offset = offset;
-          slot.size = size;
-          memcpy (slot.sha256, entry + 56, 32);
-        }
-        if (bounds && !layout->windows) {
-          layout->manifestStatus = 7;
-          bounds = false;
+          memcpy (layout->window[index].name, entry, 32);
+          layout->window[index].name[31] = 0;
+          layout->window[index].offset = offset;
+          layout->window[index].size = size;
+          memcpy (layout->window[index].sha256, entry + 56, 32);
         }
         if (bounds) {
+          layout->windows = n;
           layout->imageBytes = imageBytes;
           layout->manifestStatus = 0;
-        } else {
-          layout->windows = layout->objects = 0;
         }
       }
     }
