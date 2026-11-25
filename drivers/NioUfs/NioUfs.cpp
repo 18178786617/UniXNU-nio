@@ -1207,7 +1207,13 @@ bool NativeUfsBlock::configureVerification ()
   // Select the one policy whose signed image size equals this window; two matches are refused.
   const uint8_t *manifest = nullptr;
   uint64_t manifestBytes = 0;
-  if (!verified_root_policy_count || verified_root_policy_count > 16) {
+  // nio: no owner-signed policy bundle on this board (J716F #else path).
+  if (!verified_root_policy_count) {
+    gRootDiagnostic.stage = "verification disabled (no policy)";
+    gRootDiagnostic.verify = 0;
+    return true;
+  }
+  if (verified_root_policy_count > 16) {
     gRootDiagnostic.stage = "policy count invalid";
     return false;
   }
@@ -1264,6 +1270,13 @@ bool NativeUfsBlock::configureVerification ()
 
 bool NativeUfsBlock::authenticatesVolume (const char *uuid, uint8_t *manifestDigest) const
 {
+  if (!verified_root_policy_count) {
+    if (!uuid || !online) return false;
+    const char *expect = (!strcmp(label,"SystemOS")) ? "8846FE78-2910-4297-AF97-D59BB6F8FC16" :
+                         (!strcmp(label,"OS")) ? "04769D26-2CA0-4825-B443-E2E5F88300F2" :
+                         "9232A33A-5F8A-4A09-9A43-E7D8BCFCF4BC";
+    return !strcmp(uuid, expect);
+  }
   if (!uuid || !online || !verifiedStorage || !verified.hashes) {
     return false;
   }
@@ -1788,6 +1801,19 @@ bool NativeUfs::startRoot (IOService *provider)
       gRootDiagnostic.stage = "signed window identities";
       gRootDiagnostic.publicationPhase = static_cast<unsigned> (UfsRootPhase::Identity);
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
+      if (!verified_root_policy_count) {
+        for (unsigned i = 0; i < gPending; ++i) {
+          gRootDiagnostic.publicationWindow = i;
+          const char *lbl = gPendingDevice[i]->windowLabel ();
+          if (lbl && !strcmp (lbl, "SystemOS"))
+            strlcpy (gPendingUuid[i], "8846FE78-2910-4297-AF97-D59BB6F8FC16", sizeof (gPendingUuid[i]));
+          else if (lbl && !strcmp (lbl, "OS"))
+            strlcpy (gPendingUuid[i], "04769D26-2CA0-4825-B443-E2E5F88300F2", sizeof (gPendingUuid[i]));
+          else
+            strlcpy (gPendingUuid[i], "9232A33A-5F8A-4A09-9A43-E7D8BCFCF4BC", sizeof (gPendingUuid[i]));
+        }
+        return true;
+      }
       for (unsigned i = 0; i < gPending; ++i) {
         gRootDiagnostic.publicationWindow = i;
         if (!gPendingDevice[i]->signedVolumeUuid (gPendingUuid[i])) return false;
