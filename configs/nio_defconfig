@@ -50,7 +50,13 @@ CONFIG_XNU_SHENG_PMGR=n
 # The root volume is selected by UUID through payload.adt's
 # root_match_volume_uuid.
 CONFIG_XNU_NATIVE_UFS=y
-CONFIG_XNU_NATIVE_AES=n
+# Run 722 died at the NativeVirtioBlock qualification gate because nio had
+# overridden the arch profile's NATIVE_AES=y with n.  Alioth (same SM8250 +
+# 21H461 stack) leaves the arch value on, and this board already selects the
+# SoftwareAES component plus build-software-aes-bindings.py.  Turning it back
+# on satisfies the NativeVirtioBlock / NATIVE_RAM_BLOCK prelink closure without
+# another build-script exemption.
+CONFIG_XNU_NATIVE_AES=y
 # Run 721: OWNER_ROOT_AUDIT/TRUST need a provider for
 # native_verified_block_root_authorized(); the NativeUfs gate exemption only
 # silenced the build-time check, it did not supply the symbol.  Alioth selects
