@@ -208,8 +208,8 @@ volatile uint32_t native_ufs_uic_status = 0;
 volatile uint32_t native_ufs_uic_result = 0;
 }
 
-class NioUfs : public IOService {
-  OSDeclareDefaultStructors (NioUfs)
+class NativeUfs : public IOService {
+  OSDeclareDefaultStructors (NativeUfs)
   OSSharedPtr<IOMemoryMap> fMap;
   OSSharedPtr<IOBufferMemoryDescriptor> fCmdDesc;
   void inspect (void);
@@ -225,7 +225,7 @@ public:
   void stop (IOService *provider) override;
 };
 
-OSDefineMetaClassAndStructors (NioUfs, IOService)
+OSDefineMetaClassAndStructors (NativeUfs, IOService)
 
 /*
  * nio: say that the driver is in the kernel at all.
@@ -274,7 +274,7 @@ static bool contains (const char *data, size_t length, const char *needle)
   return false;
 }
 
-IOService *NioUfs::probe (IOService *provider, SInt32 *score)
+IOService *NativeUfs::probe (IOService *provider, SInt32 *score)
 {
   native_ufs_probe_calls = native_ufs_probe_calls + 1;
   // Say what the probe was handed.  The panel shows no "nio: ufs driver start
@@ -343,7 +343,7 @@ IOService *NioUfs::probe (IOService *provider, SInt32 *score)
   return this;
 }
 
-bool NioUfs::waitSet (uintptr_t base, unsigned offset, uint32_t mask, unsigned loops)
+bool NativeUfs::waitSet (uintptr_t base, unsigned offset, uint32_t mask, unsigned loops)
 {
   for (unsigned index = 0; index < loops; index++) {
     if ((read32 (base, offset) & mask) == mask) {
@@ -369,7 +369,7 @@ static uintptr_t mapPhys (uint64_t phys, uint64_t length, OSSharedPtr<IOMemoryMa
   return keep ? static_cast<uintptr_t> (keep->getVirtualAddress ()) : 0;
 }
 
-void NioUfs::inspect (void)
+void NativeUfs::inspect (void)
 {
   OSSharedPtr<IOMemoryMap> gccMap, memPhyMap, hcMap;
   uintptr_t gcc = mapPhys (GCC_BASE + 0x77000, 0x1000, gccMap);
@@ -561,7 +561,7 @@ static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, u
   report[2] = sctlr;
 }
 
-void NioUfs::adoptAndRead (unsigned level)
+void NativeUfs::adoptAndRead (unsigned level)
 {
   OSSharedPtr<IOMemoryMap> hcMap;
   uintptr_t hc = mapPhys (UFS_HC_BASE, UFS_HC_SIZE, hcMap);
@@ -1971,7 +1971,7 @@ static uint32_t dumpWord (const volatile uint32_t *base, unsigned index)
   return base[index];
 }
 
-void NioUfs::dumpFirmwareList (void)
+void NativeUfs::dumpFirmwareList (void)
 {
   OSSharedPtr<IOMemoryMap> hcMap, listMap, ucdMap;
   uintptr_t hc = mapPhys (UFS_HC_BASE, UFS_HC_SIZE, hcMap);
@@ -2019,7 +2019,7 @@ void NioUfs::dumpFirmwareList (void)
 // Read-only dump of the apps SMMU (apps_smmu@15000000) global register space and the stream
 // match entry for the UFS stream ID 0x60 (native-ufs-probe=7). SMMUv2 layout: sCR0 0x0,
 // IDR0 0x20, sGFSR 0x48, SMR(n) 0x800+4n, S2CR(n) 0xc00+4n. Nothing is written.
-void NioUfs::inspectSmmu (void)
+void NativeUfs::inspectSmmu (void)
 {
   OSSharedPtr<IOMemoryMap> map;
   uintptr_t smmu = mapPhys (0x15000000ULL, 0x1000, map);
@@ -2058,7 +2058,7 @@ void NioUfs::inspectSmmu (void)
 
 // Read-only context-bank survey (native-ufs-probe=8): CBAR/CBA2R in gr1 and SCTLR/TTBR0 in the
 // context banks, to find a bank the hypervisor leaves to us. Nothing is written.
-void NioUfs::inspectContextBanks (void)
+void NativeUfs::inspectContextBanks (void)
 {
   OSSharedPtr<IOMemoryMap> map;
   uintptr_t smmu = mapPhys (0x15000000ULL, 0xd0000, map);
@@ -2982,7 +2982,7 @@ OSDefineMetaClassAndStructors (NioUfsBlock, IOBlockStorageDevice)
 // has loaded. No second IOKit personality starts this service in that mode.
 extern "C" IOService *native_ufs_source_create (void)
 {
-  return new NioUfs;
+  return new NativeUfs;
 }
 #endif
 
@@ -3380,7 +3380,7 @@ static unsigned gPending;
 static bool gPendingAttached[4];
 static char gPendingUuid[4][37];
 static UfsRootPlan gPublicationPlan;
-static NioUfs *gPendingProvider;
+static NativeUfs *gPendingProvider;
 
 static bool mediaWithUuidExists (const char *uuid, NioUfsBlock *window)
 {
@@ -3627,7 +3627,7 @@ static void mediaReportThread (void *, wait_result_t)
   panic ("%s", gMediaReport);
 }
 
-bool NioUfs::start (IOService *provider)
+bool NativeUfs::start (IOService *provider)
 {
   printf ("nio: ufs driver start enter\n");
   // The board's round number, so that a screen says which revision of this
@@ -3859,7 +3859,7 @@ static bool windowVolumeIdentity (uint64_t absolute, uint64_t windowBytes,
 }
 
 // Boot the root image's windows as block devices. Soft-fails (logs, publishes nothing).
-bool NioUfs::startRoot (IOService *provider)
+bool NativeUfs::startRoot (IOService *provider)
 {
   const char *why = "";
   printf ("nio: ufs startRoot enter\n");
@@ -3923,7 +3923,7 @@ bool NioUfs::startRoot (IOService *provider)
   gPending = 0;
   gPendingProvider = this;
   struct Operations {
-    NioUfs *owner;
+    NativeUfs *owner;
     RootLayout *layout;
     bool prepare (unsigned index) {
       gRootDiagnostic.stage = "root window allocation/configuration";
@@ -4008,7 +4008,7 @@ bool NioUfs::startRoot (IOService *provider)
   return true;
 }
 
-void NioUfs::stop (IOService *provider)
+void NativeUfs::stop (IOService *provider)
 {
   fCmdDesc.reset ();
   fMap.reset ();
