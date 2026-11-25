@@ -12,3 +12,8 @@
 # at a time, after the kernel reaches the console, in the order the trace needs.
 #
 # The enabled series is arch (56) + soc (2) + os (3) = 61 patches.
+
+# Publish NioUfs static personalities so IOKit actually starts the driver.
+# Without this the root IOMedia (UUID 04769D26-...) is never published and the
+# boot panics at "Failed to mount root device" @IOKitBSDInit.cpp.
+device/nio-static-personalities.patch
