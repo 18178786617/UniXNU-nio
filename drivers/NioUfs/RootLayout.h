@@ -60,7 +60,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
 {
   gRootDiagnostic.stage = "GPT header";
   bzero (layout, sizeof (*layout));
-  if (hostRead4k (0, 1, 1, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (NIO_UFS_USERDATA_LUN, 1, 1, gScratch) != kIOReturnSuccess) {
     *why = "GPT header read";
     return false;
   }
@@ -95,7 +95,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     return false;
   }
   gRootDiagnostic.stage = "GPT entries";
-  if (hostRead4k (0, entriesLba, blocks, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (NIO_UFS_USERDATA_LUN, entriesLba, blocks, gScratch) != kIOReturnSuccess) {
     *why = "GPT entries read";
     return false;
   }
@@ -103,9 +103,18 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     *why = "GPT entries CRC";
     return false;
   }
+  // nio: Motorola GPT has no "userdata" partition; use fixed LBA (validated driver logic).
+  uint64_t forcedRootLba = 58840832ULL;
+  PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
+  if (forcedRootLba) {
+    if (forcedRootLba < first || forcedRootLba > last) { *why = "forced root LBA outside GPT usable range"; return false; }
+    layout->userdataFirst = forcedRootLba;
+    layout->userdataLast = forcedRootLba + (12ULL * (1ULL << 30)) / 4096ULL - 1;
+    if (layout->userdataLast > last) layout->userdataLast = last;
+  }
   static const char wanted[] = "userdata";
-  bool found = false;
-  for (uint32_t index = 0; index < count; index++) {
+  bool found = forcedRootLba != 0;
+  for (uint32_t index = 0; !forcedRootLba && index < count; index++) {
     const uint8_t *entry = gScratch + index * 128;
     if (!rootEntryUsed (entry)) continue;
     uint64_t entryFirst = le64 (entry + 32), entryLast = le64 (entry + 40);
@@ -141,21 +150,11 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     *why = "no userdata partition";
     return false;
   }
-  // nio board difference: Motorola's bootloader refuses GPT edits, so the
-  // root image is flashed into free space inside userdata at a fixed LBA.
-  // Override the partition start with that LBA (default from the 21H461
-  // image); everything below -- manifest parse and window offsets -- stays
-  // exactly the J716F reference code.
-  uint64_t forcedRootLba = 58840832ULL;
-  PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
-  if (forcedRootLba >= layout->userdataFirst && forcedRootLba <= layout->userdataLast) {
-    layout->userdataFirst = forcedRootLba;
-  }
   gRootDiagnostic.first = layout->userdataFirst;
   gRootDiagnostic.last = layout->userdataLast;
   gRootDiagnostic.stage = "root manifest";
   // First block of the partition: manifest if the root image was flashed, ext4 otherwise.
-  if (hostRead4k (0, layout->userdataFirst, 1, gScratch) != kIOReturnSuccess) {
+  if (hostRead4k (NIO_UFS_USERDATA_LUN, layout->userdataFirst, 1, gScratch) != kIOReturnSuccess) {
     *why = "userdata first block read";
     return false;
   }

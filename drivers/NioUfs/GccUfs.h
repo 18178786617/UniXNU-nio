@@ -6,6 +6,7 @@
 #define GCC_BASE                      0x00100000ULL
 #define GCC_UFS_BASE                  0x00177000ULL
 #define UFS_HC_BASE                   0x01d84000ULL
+#define NIO_UFS_USERDATA_LUN          4U
 #define UFS_HC_SIZE                   0x3000ULL
 
 #define GCC_UFS_PHY_GDSCR             0x004

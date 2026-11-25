@@ -960,7 +960,7 @@ extern "C" int native_ufs_store_read (uint64_t rel, uint32_t blocks, void *dst)
   if (!gStoreRegionBlocks || !dst || !blocks || rel >= gStoreRegionBlocks || blocks > gStoreRegionBlocks - rel) return 0;
   while (blocks) {
     uint32_t chunk = blocks > kDataMax / 4096 ? static_cast<uint32_t> (kDataMax / 4096) : blocks;
-    if (hostRead4k (0, gStoreRegionFirst + rel, chunk, dst) != kIOReturnSuccess) return 0;
+    if (hostRead4k (NIO_UFS_USERDATA_LUN, gStoreRegionFirst + rel, chunk, dst) != kIOReturnSuccess) return 0;
     dst = static_cast<uint8_t *> (dst) + chunk * 4096ULL;
     rel += chunk;
     blocks -= chunk;
@@ -1072,13 +1072,13 @@ extern "C" unsigned native_ufs_store_gpt_check (void)
 {
   if (!gStoreGeometry.valid || !gHost.ready) return 1;
   static uint8_t block[4096];
-  if (hostRead4k (0, 1, 1, block) != kIOReturnSuccess) return 2;
+  if (hostRead4k (NIO_UFS_USERDATA_LUN, 1, 1, block) != kIOReturnSuccess) return 2;
   uint32_t headerBytes = le32 (block + 12);
   if (headerBytes < 92 || headerBytes > 4096 || rootCrc32 (block, headerBytes, true) != le32 (block + 16) ||
       le32 (block + 16) != gStoreGeometry.headerCrc) return 3;
   uint32_t blocks = (gStoreGeometry.entryCount * 128 + 4095) / 4096;
   static uint8_t entries[4096 * 4];
-  if (blocks > 4 || hostRead4k (0, gStoreGeometry.entriesLba, blocks, entries) != kIOReturnSuccess) return 4;
+  if (blocks > 4 || hostRead4k (NIO_UFS_USERDATA_LUN, gStoreGeometry.entriesLba, blocks, entries) != kIOReturnSuccess) return 4;
   return rootCrc32 (entries, gStoreGeometry.entryCount * 128) == gStoreGeometry.entriesCrc ? 0 : 5;
 }
 
@@ -1348,7 +1348,7 @@ IOReturn NativeUfsBlock::doAsyncReadWrite (IOMemoryDescriptor *buffer, UInt64 bl
     void unlock () { IOLockUnlock (mutex); }
     IOReturn read (uint64_t lba, uint32_t blocks, void *out) {
       uint64_t t0 = timerTicks ();
-      IOReturn r = hostRead4k (0, lba, blocks, out);
+      IOReturn r = hostRead4k (NIO_UFS_USERDATA_LUN, lba, blocks, out);
       __atomic_fetch_add (&native_ufs_read_ticks, timerTicks () - t0, __ATOMIC_RELAXED);
       return r;
     }
@@ -1661,7 +1661,7 @@ bool NativeUfs::start (IOService *provider)
     uint32_t seen[4] = {};
     for (uint32_t index = 0; index < layout->windows && index < 4; index++) {
       uint64_t absolute = layout->userdataFirst * 4096ULL + layout->window[index].offset;
-      if (hostRead4k (0, absolute / 4096, 1, gScratch) == kIOReturnSuccess) {
+      if (hostRead4k (NIO_UFS_USERDATA_LUN, absolute / 4096, 1, gScratch) == kIOReturnSuccess) {
         seen[index] = 1;
         sig[index][0] = le32 (gScratch + 512);
         sig[index][1] = le32 (gScratch + 516);
