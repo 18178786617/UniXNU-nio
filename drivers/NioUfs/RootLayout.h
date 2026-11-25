@@ -56,9 +56,12 @@ static bool rootEntryUsed (const uint8_t *entry)
   return used != 0;
 }
 
-// Find the partition named "userdata" in the board's userdata LUN's primary
+// Find the partition named "unixnu" in the board's userdata LUN's primary
 // GPT (4096-byte sectors), then read the manifest at its first block.
-// Read-only. Returns false only if the GPT itself is unusable.
+// nio keeps Android's "userdata" intact and carves "unixnu" out of the tail
+// of that same LUN for the SHNGROOT image; reading "userdata" here finds
+// Android's ext4 and fails at manifest status 1. Read-only. Returns false
+// only if the GPT itself is unusable.
 //
 // The LUN is not assumed: nio has six of them and the userdata partition is
 // on LUN 4, while sheng had one and used LUN 0. The GPT header is looked
@@ -113,7 +116,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     *why = "GPT entries CRC";
     return false;
   }
-  static const char wanted[] = "userdata";
+  static const char wanted[] = "unixnu";
   bool found = false;
   for (uint32_t index = 0; index < count; index++) {
     const uint8_t *entry = gScratch + index * 128;
@@ -139,7 +142,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     }
     if (match) {
       if (found) {
-        *why = "duplicate userdata partition";
+        *why = "duplicate unixnu partition";
         return false;
       }
       layout->userdataFirst = le64 (entry + 32);
@@ -148,7 +151,7 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     }
   }
   if (!found || layout->userdataLast < layout->userdataFirst) {
-    *why = "no userdata partition";
+    *why = "no unixnu partition";
     return false;
   }
   gRootDiagnostic.first = layout->userdataFirst;
