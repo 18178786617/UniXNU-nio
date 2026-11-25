@@ -79,7 +79,14 @@ static bool findRootLayout (RootLayout *layout, const char **why)
   // `nio-root-lba` supplies the 4096-byte LBA of a root image written into
   // space already freed inside userdata. When set, the GPT partition-name
   // lookup below is skipped and this LBA is used as the manifest origin.
-  uint64_t forcedRootLba = 0;
+  // Default to the LBA the 21H461 root image was actually written to (verified
+  // by reading SHNGROOT back at boot).  The loader's boot-arg channel is not
+  // reliable on this board: the screen shows the pre-change args, so the
+  // boot-arg could be absent even though the packed toml carries it.  A 0 here
+  // would send the lookup below to the stock GPT, which has no "unixnu"
+  // partition, and root mounting fails with systemPartitionSize=0.  A boot-arg,
+  // when it does arrive, still overrides this default.
+  uint64_t forcedRootLba = 58840832ULL;
   PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
 
   if (hostRead4k (NIO_UFS_USERDATA_LUN, 1, 1, gScratch) != kIOReturnSuccess) {
