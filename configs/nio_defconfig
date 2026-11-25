@@ -95,7 +95,13 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=y
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
-CONFIG_XNU_VERIFIED_ROOT_PROBE=y
+# Run 723 still ended in the arm64 link with `native_verified_root_probe`
+# undefined: no selected component defines it, and the signed probe archive
+# this config used to name is not something this board can produce. The owner
+# root binding is answered by NioUfs from the live IORegistry (the same gate
+# exemption kernel.yml already grants NativeUfs), so turn the optional probe
+# off rather than inventing a signature ceremony.
+CONFIG_XNU_VERIFIED_ROOT_PROBE=n
 CONFIG_XNU_OWNER_ROOT_AUDIT=y
 CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_OWNER_CACHE_MOUNT=y
@@ -180,12 +186,11 @@ CONFIG_XNU_SMMU4K_PROBE=n
 CONFIG_XNU_CONSTANT_UPLOADS_PROBE=n
 CONFIG_XNU_NATIVE_OFFLINE_GPU=n
 
-# Same verified-root / transport bundle pins alioth uses on 21H461.  The build
-# script force-loads these archives when VERIFIED_ROOT_PROBE and
-# NATIVE_VIRTIO_BLOCK are on; without the pins it looked in directories this
-# board never produced and the link lost every native_verified_block_* symbol.
-CONFIG_XNU_VERIFIED_ROOT_ARCHIVE="{tree}/build/verified-root-os-xnu-bundle/libVerifiedRootProbe.a"
-CONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE="{tree}/build/virtio-mmio-block-verified-bundle/libVirtioMmioBlock.a"
+# The component recipes write the plain VirtioMmioBlock/RamBlock archives, not
+# the signed verified bundles alioth publishes. Since VERIFIED_ROOT_PROBE is
+# off on this board, point the transport at the archive that is actually built;
+# the old verified-bundle pin made the link test a path that never existed.
+CONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE="{tree}/build/virtio-mmio-block/libVirtioMmioBlock.a"
 CONFIG_XNU_BUILD_ARCHIVES=y
 # The link stubs. The GPU archive imports six names that no selected component
 # defines (package/LinkStubs.c), and ld64 refuses to leave a weak_import

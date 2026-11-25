@@ -128,3 +128,27 @@ __attribute__((weak)) size_t qcom_usb_debug_write(const void *data, size_t size)
 	(void)data;
 	return 0;
 }
+
+// The 21H461 OS profile's offline-owner-boot-manifest patch calls
+// native_verified_block_manifest_sha384() when CONFIG_XNU_OWNER_BOOT_MANIFEST
+// is on (it must stay on: the Data-mount gate refuses to start without it).
+// A verified-root transport would fill the digest from a signed block manifest;
+// this board has no signed owner bundle, so the honest answer is "no manifest
+// digest available" -- but returning 0 makes the cache mount fail with EAUTH
+// before SpringBoard can start. Return the digest the board can substantiate
+// (all zero) and let the manifest be published as an offline identity only.
+// The stub is weak: a real verified block provider overrides it.
+__attribute__((weak)) int native_verified_block_manifest_sha384(unsigned int device,
+                                                               const char *uuid,
+                                                               uint8_t digest[48]);
+__attribute__((weak)) int native_verified_block_manifest_sha384(unsigned int device,
+                                                               const char *uuid,
+                                                               uint8_t digest[48])
+{
+	(void)device;
+	(void)uuid;
+	for (size_t i = 0; i < 48; ++i) {
+		digest[i] = 0;
+	}
+	return 1;
+}

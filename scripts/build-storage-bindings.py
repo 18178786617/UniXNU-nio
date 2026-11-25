@@ -150,8 +150,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('sources', nargs='*', help='ignored; kept so older board.toml entries still run')
+    # The arch/alioth recipe language passes these flags.  Earlier nio rounds
+    # used only the default archive, so the flags were never implemented; run
+    # 723 then failed after selecting VirtioMmioBlock with
+    #   "unrecognized arguments: --component ... --archive ... --subset".
+    # Implement the small subset the kernel link actually consumes: write the
+    # original-class aliases into the component's archive and record the
+    # component object's digest next to it for build-xnu-4k-baseline.sh.
+    ap.add_argument('--component', default=None, help='logical component name')
+    ap.add_argument('--archive', default=None, help='archive basename to extend')
+    ap.add_argument('--directory', default=None, help='build directory containing the component archive')
+    ap.add_argument('--subset', action='store_true', help='accept a component that imports only part of the pin')
     args = ap.parse_args()
-    del args
 
     if not PIN.is_file():
         fail(f'missing {PIN}; regenerate it with scripts/scan-prelink-storage.py')
@@ -166,6 +176,11 @@ def main() -> int:
         fail('the pin disagrees with itself about which slots live in the kext')
 
     OUT.mkdir(parents=True, exist_ok=True)
+    # Keep the reference compile in the shared directory: its command line is
+    # keyed to OUT and every component calls it with the same pin.  The aliases
+    # and report go where the selected component's archive lives.
+    out = (ROOT / args.directory) if args.directory else OUT
+    out.mkdir(parents=True, exist_ok=True)
     reference = compile_reference(OUT / (CLASS + '.reference.o'))
     names = vtable_names(reference)
 
@@ -189,10 +204,10 @@ def main() -> int:
     for symbol in (CONSTRUCTOR + '1EPK11OSMetaClass', CONSTRUCTOR + '2EPK11OSMetaClass'):
         bindings.setdefault(symbol, int(pin['protected_constructor'], 16))
 
-    assembly = OUT / 'original-bindings.S'
+    assembly = out / 'original-bindings.S'
     assembly.write_text(''.join(f'.globl {name}\n.set {name}, {value:#x}\n'
                                for name, value in sorted(bindings.items())))
-    obj = OUT / 'original-bindings.o'
+    obj = out / 'original-bindings.o'
     result = subprocess.run(['xcrun', 'clang', '-target', 'arm64-apple-ios17.0',
                              '-Werror', '-Wno-incompatible-sysroot', '-c', str(assembly),
                              '-o', str(obj)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -200,8 +215,25 @@ def main() -> int:
     if result.returncode:
         fail('the binding assembly did not assemble:\n' + (result.stdout or '')[-2000:])
 
-    archive = OUT / 'libStorageBindings.a'
-    archive.unlink(missing_ok=True)
+    if args.archive:
+        archive = out / args.archive
+        if not archive.is_file():
+            fail(f'missing {archive}; the component recipe must run before this one')
+        # build-xnu-4k-baseline.sh hashes the driver object that sits next to
+        # the archive, not the alias object, before it trusts this report.
+        component_object = out / (args.archive.removeprefix('lib').removesuffix('.a') + '.o')
+        if not component_object.is_file():
+            fail(f'missing {component_object}; the component recipe must run before this one')
+        component_sha256 = hashlib.sha256(component_object.read_bytes()).hexdigest()
+        # `ar r` replaces an existing member with the same basename; repeated
+        # rounds must not accumulate stale alias objects in the same archive.
+        for previous in ('original-bindings.o', 'IOBlockStorageDevice.original.o'):
+            subprocess.run(['xcrun', 'ar', '-d', str(archive), previous],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    else:
+        archive = out / 'libStorageBindings.a'
+        archive.unlink(missing_ok=True)
+        component_sha256 = None
     result = subprocess.run(['xcrun', 'ar', 'rcs', str(archive), str(obj)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode:
@@ -226,8 +258,10 @@ def main() -> int:
                   vtable_slots=SLOTS, kext_owned_slots=owned,
                   bindings={name: hex(value) for name, value in sorted(bindings.items())},
                   archive=str(archive), archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
-                  original_code_modified=False)
-    (OUT / 'bindings.json').write_text(json.dumps(report, indent=2) + '\n')
+                  original_code_modified=False,
+                  component=args.component, subset=args.subset,
+                  compiled_object_sha256=component_sha256)
+    (out / 'bindings.json').write_text(json.dumps(report, indent=2) + '\n')
     print('PASS: %s -> %d absolute bindings over %d kext-owned slots (%s)'
           % (archive.name, len(bindings), len(owned), pin['kext']))
     for name in sorted(bindings):
