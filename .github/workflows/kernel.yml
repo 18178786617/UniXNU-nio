@@ -519,7 +519,16 @@ jobs:
             # this repository, so it is placed there before the configuration
             # is resolved.
             mkdir -p drivers
+            # Remove any directory left by a previous build on a reused runner.
+            # Without this, cp -r nests the new source as drivers/NioUfs/NioUfs/
+            # and the build keeps compiling the stale copy: a source change here
+            # then produces a kernel with unchanged strings, and rounds are
+            # spent wondering why the edit did not take effect (run 733).
+            rm -rf drivers/NioUfs
             cp -r device/drivers/NioUfs drivers/NioUfs
+            # Fail loudly if the tree does not hold exactly what this checkout
+            # carries, instead of building a kernel from a stale nested copy.
+            cmp device/drivers/NioUfs/NioUfs.cpp drivers/NioUfs/NioUfs.cpp
             ls drivers/NioUfs
           fi
 
