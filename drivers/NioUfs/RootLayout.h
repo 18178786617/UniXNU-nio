@@ -73,6 +73,15 @@ static bool findRootLayout (RootLayout *layout, const char **why)
 {
   gRootDiagnostic.stage = "GPT header";
   bzero (layout, sizeof (*layout));
+
+  // Boards whose bootloader owns the GPT (Motorola `partition`) reject any
+  // runtime GPT edit, so a dedicated unixnu partition cannot be created.
+  // `nio-root-lba` supplies the 4096-byte LBA of a root image written into
+  // space already freed inside userdata. When set, the GPT partition-name
+  // lookup below is skipped and this LBA is used as the manifest origin.
+  uint64_t forcedRootLba = 0;
+  PE_parse_boot_argn ("nio-root-lba", &forcedRootLba, sizeof (forcedRootLba));
+
   if (hostRead4k (NIO_UFS_USERDATA_LUN, 1, 1, gScratch) != kIOReturnSuccess) {
     *why = "GPT header read";
     return false;
@@ -116,9 +125,20 @@ static bool findRootLayout (RootLayout *layout, const char **why)
     *why = "GPT entries CRC";
     return false;
   }
+  if (forcedRootLba) {
+    // Validate the forced LBA against the live GPT usable range before use.
+    if (forcedRootLba < first || forcedRootLba > last) {
+      *why = "forced root LBA outside GPT usable range";
+      return false;
+    }
+    layout->userdataFirst = forcedRootLba;
+    // The appended root image is 9.4 GiB; bound the manifest checks to 12 GiB.
+    layout->userdataLast = forcedRootLba + (12ULL * (1ULL << 30)) / 4096ULL - 1;
+    if (layout->userdataLast > last) layout->userdataLast = last;
+  }
   static const char wanted[] = "unixnu";
-  bool found = false;
-  for (uint32_t index = 0; index < count; index++) {
+  bool found = forcedRootLba != 0;
+  for (uint32_t index = 0; !forcedRootLba && index < count; index++) {
     const uint8_t *entry = gScratch + index * 128;
     if (!rootEntryUsed (entry)) continue;
     uint64_t entryFirst = le64 (entry + 32), entryLast = le64 (entry + 40);
