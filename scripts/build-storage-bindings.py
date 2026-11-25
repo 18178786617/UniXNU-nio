@@ -221,10 +221,19 @@ def main() -> int:
             fail(f'missing {archive}; the component recipe must run before this one')
         # build-xnu-4k-baseline.sh hashes the driver object that sits next to
         # the archive, not the alias object, before it trusts this report.
-        component_object = out / (args.archive.removeprefix('lib').removesuffix('.a') + '.o')
-        if not component_object.is_file():
-            fail(f'missing {component_object}; the component recipe must run before this one')
+        # build-arm-driver.py names the object after the component's runtime
+        # id (legacy_name), which is not the archive stem: run 724 stopped at
+        #   missing .../build/virtio-mmio-block/VirtioMmioBlock.o
+        # while the recipe had written NativeVirtioBlock.o.  Try both, and
+        # record the name we actually found for the link gate to verify.
+        names = [args.component + '.o'] if args.component else []
+        names.append(args.archive.removeprefix('lib').removesuffix('.a') + '.o')
+        component_object = next((out / name for name in dict.fromkeys(names)
+                                 if (out / name).is_file()), None)
+        if component_object is None:
+            fail(f'missing {out / names[0]}; the component recipe must run before this one')
         component_sha256 = hashlib.sha256(component_object.read_bytes()).hexdigest()
+        component_object_name = component_object.name
         # `ar r` replaces an existing member with the same basename; repeated
         # rounds must not accumulate stale alias objects in the same archive.
         for previous in ('original-bindings.o', 'IOBlockStorageDevice.original.o'):
@@ -234,6 +243,7 @@ def main() -> int:
         archive = out / 'libStorageBindings.a'
         archive.unlink(missing_ok=True)
         component_sha256 = None
+        component_object_name = None
     result = subprocess.run(['xcrun', 'ar', 'rcs', str(archive), str(obj)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode:
@@ -260,6 +270,7 @@ def main() -> int:
                   archive=str(archive), archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
                   original_code_modified=False,
                   component=args.component, subset=args.subset,
+                  compiled_object_name=component_object_name,
                   compiled_object_sha256=component_sha256)
     (out / 'bindings.json').write_text(json.dumps(report, indent=2) + '\n')
     print('PASS: %s -> %d absolute bindings over %d kext-owned slots (%s)'

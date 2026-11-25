@@ -650,6 +650,31 @@ jobs:
           print('owner verification: NioUfs compiles with -DNATIVE_VERIFIED_BLOCK=1')
           PY
 
+      - name: Let the link gate find the runtime-named storage objects
+        run: |
+          # The link gate in build-xnu-4k-baseline.sh derives the object it
+          # audits from the archive stem, but build-arm-driver.py names the
+          # object after the component's runtime id (legacy_name).  Run 724
+          # ended at
+          #   build-storage-bindings: missing .../build/virtio-mmio-block/VirtioMmioBlock.o
+          # although the component had just written NativeVirtioBlock.o.  The
+          # device recipe now records the object it actually verified in
+          # bindings.json; make the gate read that name instead of guessing it
+          # from the archive.  The same applies to RamBlock/NativeRamBlock.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/build-xnu-4k-baseline.sh')
+          text = path.read_text()
+          old = "    obj = path.with_name(path.stem.removeprefix('lib') + '.o')\n"
+          new = "    obj = path.with_name(record.get('compiled_object_name', path.stem.removeprefix('lib') + '.o'))\n"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit('the storage object gate matched %d times, expected 1' % count)
+          path.write_text(text.replace(old, new))
+          print('the storage link gate now reads compiled_object_name from bindings.json')
+          PY
+          bash -n scripts/build-xnu-4k-baseline.sh
+
       - name: Resolve the configuration
         run: |
           ./unixnu defconfig "$DEFCONFIG" -D "$UNIXNU_DEVICE"
