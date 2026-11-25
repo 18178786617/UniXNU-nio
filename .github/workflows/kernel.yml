@@ -631,7 +631,7 @@ jobs:
           # The second condition is the one that turns owner verification on for
           # the transport. NioUfs authenticates every root window against a
           # signed bundle (vr_open, SHA-384, the trusted key), so it needs
-          # kits/VerifiedRoot/include and -DNATIVE_VERIFIED_BLOCK=1 exactly as
+          # kits/VerifiedRoot/include and -DNATIVE_VERIFIED_BLOCK=1 were added
           # the transports the pipeline knows about do. Run 45 would stop at
           #   'verified_root.h' file not found
           # without it. The policy table itself comes from
@@ -644,8 +644,11 @@ jobs:
           edits = [
               ("if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):",
                "if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs', 'NioUfs'):"),
-              ("if component == 'NativeUfs':",
-               "if component in ('NativeUfs', 'NioUfs'):"),
+              # nio: keep NioUfs OUT of the owner-verification branch, as J716F's
+              # ShengUfs is. No signed policy bundle exists for this board, so
+              # NATIVE_VERIFIED_BLOCK would reject every window (verified_root_policy_count=0).
+              # Leaving the macro undefined takes the driver's #else path (hardcoded UUIDs),
+              # exactly the device-verified J716F configuration.
           ]
           for old, new in edits:
               count = text.count(old)
@@ -656,7 +659,7 @@ jobs:
           path.write_text(text)
           compile(path.read_text(), str(path), 'exec')
           print('storage headers: NioUfs is given build/storage-abi/include')
-          print('owner verification: NioUfs compiles with -DNATIVE_VERIFIED_BLOCK=1')
+          print('owner verification: NioUfs compiles WITHOUT -DNATIVE_VERIFIED_BLOCK (J716F style)')
           PY
 
       - name: Let the link gate find the runtime-named storage objects
