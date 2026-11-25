@@ -1,0 +1,2 @@
+usage: build-storage-bindings.py [-h] [sources ...]
+build-storage-bindings.py: error: unrecognized arguments: --component --archive libVirtioMmioBlock.a --directory build/virtio-mmio-block --subset
