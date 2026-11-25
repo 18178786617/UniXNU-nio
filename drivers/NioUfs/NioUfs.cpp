@@ -3649,11 +3649,9 @@ bool NativeUfs::start (IOService *provider)
   unsigned diagnostic = 0;
   PE_parse_boot_argn ("native-ufs-diagnostics", &diagnostic, sizeof (diagnostic));
   gRootDiagnosticEnabled = diagnostic == 1;
-  // READ-ONLY DIAGNOSTIC: print the real UFS controller state on the panel.
-  // The boot-arg channel is not reliable on this board, so run inspect()
-  // unconditionally on the root-personality path (the only path that reaches
-  // hostBringUp). inspect() panics with the numbers; remove after reading.
-  inspect ();
+  if (probe == 2) {
+    inspect ();
+  }
   if (probe == 8) {
     inspectContextBanks ();
   }
