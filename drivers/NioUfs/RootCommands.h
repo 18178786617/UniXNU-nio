@@ -32,7 +32,7 @@ struct HardwareTransferPort {
   bool expired () { return mach_absolute_time () >= deadline; }
   /* nio: the poll's pause is a read of the controller's status, not a
    * delay from the kernel -- ufsWaitTicks() in RootQueue.h says why. */
-  void delay () { ufsWaitTicks (2); }
+  void delay () { IODelay (2); }  // j716f: IODelay works on this SM8250 batch
 };
 
 static void putBe32 (uint8_t *at, uint32_t value)
@@ -107,7 +107,7 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   }
   // The region is cached again (run-280, harness recipe): clean it so the
   // controller's DMA fetch sees every UTRD/UCD store above.
-  cacheClean (gHost.virt, kDmaBytes);
+  cacheCivac (gHost.virt, kDataOffset + dataBytes);  // j716f: clean+invalidate, used region only
   hostWrite (0x20, 1);  // Acknowledge completion only; preserve error evidence.
   HardwareTransferPort port;
   clock_interval_to_deadline (timeoutUs, kMicrosecondScale, &port.deadline);
@@ -129,7 +129,7 @@ static IOReturn hostSubmit (uint32_t direction, uint32_t dataBytes, uint32_t tim
   }
   // The controller wrote the response UPIU (and possibly data) over our
   // cache lines: clean+invalidate the whole region before reading results.
-  cacheCleanInvalidate (gHost.virt, kDmaBytes);
+  cacheInvalidate (gHost.virt, kDataOffset + dataBytes);  // j716f
   gRootDiagnostic.response = loadBe32 (gHost.virt + kUcdOffset + kRspOffset);
   return recordTransport (*ocs == 0 ? kIOReturnSuccess : kIOReturnIOError, *ocs);
 }
