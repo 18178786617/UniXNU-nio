@@ -1367,6 +1367,7 @@ IOReturn NativeUfsBlock::doAsyncReadWrite (IOMemoryDescriptor *buffer, UInt64 bl
     }
     IOReturn verify (uint64_t index, const void *data, size_t length) {
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
+      if (!verified_root_policy_count) return kIOReturnSuccess;  // no policy: J716F #else path
       uint64_t t0 = timerTicks ();
       int status = vr_verify_block (view, index, data, length, &vr_xnu_crypto);
       __atomic_fetch_add (&native_ufs_verify_ticks, timerTicks () - t0, __ATOMIC_RELAXED);
