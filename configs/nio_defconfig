@@ -201,7 +201,16 @@ CONFIG_XNU_BUILD_ARCHIVES=y
 #
 # {tree} is substituted by xnu_env() with the absolute path of the assembled tree,
 # which is what the build script and the kernel's own link both need.
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/io-storage-family/libStorageBindings.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a"
+# Run 725 ended in the arm64 link with `ld: 18 duplicate symbols`: both
+# libVirtioMmioBlock.a[3](original-bindings.o) and
+# libStorageBindings.a[2](original-bindings.o) define the same absolute
+# IOBlockStorageDevice aliases.  Since run 721 the board embeds those aliases
+# in the transport archives the kernel force-loads, and
+# build-xnu-4k-baseline.sh already keeps one exact definition by linking the
+# raw RAM transport object instead of force-loading libRamBlock.a.  The old
+# global alias archive is now a second, redundant definition, so drop it from
+# the force-load list rather than choose between two copies of every slot.
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a"
 
 # The storage base class. drivers/NioUfs subclasses IOBlockStorageDevice, which
 # is not in XNU: it lives in the prelinked IOStorageFamily kext. Run 35 stopped at
@@ -215,9 +224,10 @@ CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_
 # slot the class owns, so the subclass keeps its own vtable while every inherited
 # slot resolves to the code IOKit is actually running.
 #
-# Both archives are force-loaded for the same reason: the kernel link has no
-# ordinary reference to them. libStorageBindings.a is pure absolute aliases (an
-# archive argument would drop every member), and libVerifiedRoot.a satisfies
-# NioUfs's vr_open/vr_verify_block references, which the linker can only reach by
-# force-loading the members that define them.
+# libVerifiedRoot.a is force-loaded because it satisfies NioUfs's
+# vr_open/vr_verify_block references, which the linker can only reach by
+# force-loading the members that define them. The storage aliases themselves
+# now come from the force-loaded transport archive (libVirtioMmioBlock.a),
+# not from the standalone libStorageBindings.a: see the CONFIG_XNU_EXTRA_LD_ARCHIVES
+# note above for the run 725 duplicate-symbol failure.
 CONFIG_XNU_NATIVE_IOSTORAGE=y
