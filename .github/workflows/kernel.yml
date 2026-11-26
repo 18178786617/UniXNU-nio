@@ -219,11 +219,11 @@ jobs:
         run: |
           hour=$(TZ=Asia/Shanghai date +%H)
           hour=$((10#$hour))
-          # 2026-11-26 21:00: the owner cancelled every queued run because both
-          # arm64 pools (macos-26 and macos-15) were busy.  Force the Intel
-          # pool until the owner restores the by-hour rule.  ~20 min/round.
-          echo "runner=macos-15-intel" >> "$GITHUB_OUTPUT"
-          echo "hour in Asia/Shanghai: $hour (forced macos-15-intel per owner)" >> "$GITHUB_STEP_SUMMARY"
+          # 2026-11-26 23:00: Intel took 33 min/round; owner asked to switch
+          # back to the faster arm64 image.  macos-26 is UniXNU's own build
+          # image.  (Intel was forced at 21:00 when both arm64 pools queued.)
+          echo "runner=macos-26" >> "$GITHUB_OUTPUT"
+          echo "hour in Asia/Shanghai: $hour (macos-26 per owner: intel too slow)" >> "$GITHUB_STEP_SUMMARY"
 
   kernel:
     needs: choose-runner
@@ -1438,6 +1438,14 @@ jobs:
               echo '```'
               grep -nE -B8 -A12 '(^|[^a-z])error:|fatal error' "$log" | head -100 || true
               echo '```'
+              if grep -q 'Undefined symbols for architecture' "$log"; then
+                echo
+                echo "### undefined symbols (kernel link)"
+                echo
+                echo '```'
+                grep -n -A40 'Undefined symbols for architecture' "$log" | head -60 || true
+                echo '```'
+              fi
               echo
             done
             echo "## status.txt"
