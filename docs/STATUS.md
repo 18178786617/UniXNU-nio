@@ -295,3 +295,10 @@ ok, frame = cap.read()          # 逐帧读，自己按 fps 定位
 提高可读性的三招：① 用 `Laplacian` 方差挑最清晰的一帧；
 ② `addWeighted(g, 2.6, blur, -1.6, 0)` 做 unsharp mask；
 ③ 按水平投影找文本行带再逐行 6 倍切出，避免坐标漂移。
+
+## 2026-11-26 GPU 探针进展（board 自己的 GpuProbe）
+
+- GPU 探针已能在真机上跑：USB `gpu.status` 从 `step=0` 变为逐级 mode 1/2/3/5/6/7 的实测输出（GCC/CC、CX/SMMU 时钟、GMU 状态、AOP command DB）。两个曾让探针从不运行的 bug 已修：`patches/xnu/series` 里 gpu-probe-start.patch 的路径基准（commit 1f3d236），以及 hook 上一个从不定义的 `XNU_NATIVE_ADRENO` 编译守卫（commit 99a30c5）。
+- 当前 boot-arg `nio-gpu=7`（commit c7d68cc）；mode 7 的 GMU SMMU context 仍需排查，参考同 SoC 板与联想 tb128fu 的 S2CR fault/translate 写入经验。
+- `package/UsbDebugCdc.cpp` 里 `native_gpu_rows` 的 extern 步长从 120 改为 256，与 `package/GpuProbe.cpp` 的定义一致（commit d58b348）：此前 USB 打印按错误步长读取，GPU 行号与内容被截断，任何基于 GPU[N] 行号的判读都不可靠。
+- 判据始终是 USB `gpu.status` 的真机输出，不以内核字符串搜索或静态反汇编下结论。
