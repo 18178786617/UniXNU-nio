@@ -185,3 +185,10 @@ __attribute__((weak)) volatile uint32_t native_gop_gpu_offers;
 __attribute__((weak)) char native_gpu_rows[16][120];
 __attribute__((weak)) volatile uint32_t native_gpu_step;
 __attribute__((weak)) volatile uint64_t native_legacy_gop_bytes;
+
+// The USB console's status command also reads the boot-progress stages. The
+// 21H461 OS series' boot-progress probe is dropped for kona (no sheng_pmgr
+// block), so no component provides these; zeroed / no-op is the truth.
+__attribute__((weak)) char boot_progress_ext[8][48];
+__attribute__((weak)) void boot_progress_init(void) {}
+__attribute__((weak)) void boot_progress_stage(const char *text) { (void)text; }
