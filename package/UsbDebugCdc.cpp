@@ -202,6 +202,16 @@ static void drawHudString2x(volatile uint32_t *fb, uint32_t fbW, uint32_t fbH,
 }
 
 static void renderHudOverlay() {
+    // The on-screen HUD writes straight into native_legacy_gop_virtual, the
+    // framebuffer mapping owned by NativeLegacyDisplay.  That mapping is set
+    // up during late probe and can still be moved/replaced while the USB
+    // thread is running; a 2026-11-27 boot showed a data abort here
+    // (usb_debug_draw_hud -> drawHudString2x, far=0xfffffff88da61ac1) that
+    // killed the USB console before the desktop came up.  The HUD is only a
+    // debugging overlay -- the USB log channel is the real diagnostic -- so
+    // make it opt-in.  Enable with usb-hud=1 when the mapping is known stable.
+    unsigned hudEnabled = 0;
+    if (PE_parse_boot_argn("usb-hud", &hudEnabled, sizeof(hudEnabled)) != 8 || !hudEnabled) return;
     if (!&native_legacy_gop_virtual || !native_legacy_gop_virtual) return;
     if (&native_gop_gpu_completions && native_gop_gpu_completions > 0u) return;
     const uint32_t w = (&native_legacy_gop_width && native_legacy_gop_width) ? native_legacy_gop_width : 2560u;
