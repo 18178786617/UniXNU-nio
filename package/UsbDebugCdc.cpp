@@ -37,6 +37,7 @@ extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import))
 // patch. weak_import keeps the link safe if a symbol is absent.
 extern "C" uint32_t nprocs __attribute__((weak_import));
 extern "C" void *initproc __attribute__((weak_import));
+extern "C" void proc_name(int pid, char *buf, int buflen) __attribute__((weak_import));
 
 extern volatile unsigned native_touch_stage __attribute__((weak_import));
 extern volatile unsigned native_touch_stroke_count __attribute__((weak_import));
@@ -629,7 +630,9 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     if (strEq(raw, "procs")) {
         const uint32_t np = &nprocs ? nprocs : 0u;
         const void *ip = &initproc ? initproc : nullptr;
-        snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p\r\n", np, ip);
+        char name[32] = {0};
+        if (&proc_name) proc_name(1, name, (int)sizeof(name));
+        snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p pid1=%s\r\n", np, ip, name);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
