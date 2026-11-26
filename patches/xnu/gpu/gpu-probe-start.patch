@@ -1,11 +1,11 @@
 diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
-@@ -1295,6 +1295,22 @@ bsd_autoconf(void)
+@@ -1295,6 +1295,21 @@ bsd_autoconf(void)
  	}
  
  	kern_return_t result = IOKitBSDInit();
-+#if (DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_ADRENO) && XNU_NATIVE_ADRENO
++
 +	/* nio's Adreno 650 probe (package/GpuProbe.cpp).
 +	 *
 +	 * The reference board starts the same probe from its legacy-display late probe, because
@@ -20,7 +20,6 @@ diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 +	 */
 +	extern void native_gpu_probe(void);
 +	native_gpu_probe();
-+#endif
  #if (DEVELOPMENT || DEBUG) && defined(XNU_NATIVE_LEGACY_DISPLAY) && XNU_NATIVE_LEGACY_DISPLAY
  	/* The original IOSurface personality requires the genuine IOBSD resource.
  	 * The default-off framebuffer instrument may start only after publication.
