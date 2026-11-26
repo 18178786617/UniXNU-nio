@@ -1,0 +1,46 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+== kernel: prepare storage headers
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/prepare-storage-headers.py
+== kernel: archive-01-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py
+== kernel: archive-02-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py --namespace
+== kernel: component-ArmDTPlatform
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmDTPlatform
+== kernel: component-ArmCpu
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmCpu
+== kernel: component-SoftwareAES
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py SoftwareAES
+== kernel: archive-06-build-software-aes-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-software-aes-bindings.py
+== kernel: archive-07-build-mockfs-fixture
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-mockfs-fixture.py
+== kernel: archive-08-build-libpthread-kernel
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-libpthread-kernel.py
+== kernel: archive-09-build-adreno650
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-adreno650.py
+== kernel: component-AppleKeyStoreState
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py AppleKeyStoreState
+== kernel: archive-11-build-gop-legacy-display
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-gop-legacy-display.py
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:629:78: warning: implicit conversion loses integer precision: 'uint64_t' (aka 'unsigned long long') to 'uint32_t' (aka 'unsigned int') [-Wshorten-64-to-32]
+  629 |         native_legacy_reached_geometry = ((uint64_t)rowbytes << 32) | (width << 16) | (height & 0xFFFF);
+      |                                        ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:1173:12: warning: declaration shadows a local variable [-Wshadow]
+ 1173 |                                                 bool attached = false;
+      |                                                      ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:1094:48: note: previous declaration is here
+ 1094 |         bool nubAttached = false, nubStarted = false, attached = false, started = false;
+      |                                                       ^
+2 warnings generated.
+NativeLegacyDisplay: -Werror build and arm64-apple-ios17.0 object audit passed
+NativeGOPPresenter: -Werror build and arm64-apple-ios17.0 object audit passed
+Traceback (most recent call last):
+  File "/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-gop-legacy-display.py", line 275, in <module>
+    next(ROOT.glob('kits/*/NativeLegacyDisplay.cpp')),         # display driver
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+unixnu: python3 failed (1); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/logs/archive-11-build-gop-legacy-display.log
