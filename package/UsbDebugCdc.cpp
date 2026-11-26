@@ -32,6 +32,12 @@ extern volatile uint32_t native_legacy_transfer_calls __attribute__((weak_import
 extern volatile uint32_t native_legacy_retirement_calls __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
+// Kernel process-state symbols (present in the 17.7.11 symbol table). Read
+// them directly to answer "did launchd exec and run?" without any kernel
+// patch. weak_import keeps the link safe if a symbol is absent.
+extern "C" uint32_t nprocs __attribute__((weak_import));
+extern "C" int initproc_spawned __attribute__((weak_import));
+extern "C" void *initproc __attribute__((weak_import));
 
 extern volatile unsigned native_touch_stage __attribute__((weak_import));
 extern volatile unsigned native_touch_stroke_count __attribute__((weak_import));
@@ -621,10 +627,17 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     if (!*raw) return;
     char buf[512];
 
-    if (strEq(raw, "ping")) {
+    if (strEq(raw, "procs")) {
+        const uint32_t np = &nprocs ? nprocs : 0u;
+        const int spawned = &initproc_spawned ? initproc_spawned : -1;
+        const void *ip = &initproc ? initproc : nullptr;
+        snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc_spawned=%d initproc=%p\r\n",
+                 np, spawned, ip);
+        s.reply.writeStr(buf);
+    } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
         s.reply.writeStr("Commands: ping features info uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {

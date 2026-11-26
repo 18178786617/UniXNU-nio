@@ -18,4 +18,4 @@
 # (CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n), so without this hook the compiled-in
 # GpuProbe.cpp is never called and gpu.status stays at step=0. gated by nio-gpu=<n>.
 gpu/gpu-probe-start.patch
-exec-progress.patch
+
