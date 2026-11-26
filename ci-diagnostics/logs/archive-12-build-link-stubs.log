@@ -1,0 +1,2 @@
+compiled LinkStubs.c (legacy display 1, mobile display 0, deployment 17.0)
+link stubs do not define: _native_gop_handoff_call, _native_gop_handoff_memory
