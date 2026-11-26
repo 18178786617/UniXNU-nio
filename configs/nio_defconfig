@@ -161,10 +161,13 @@ CONFIG_XNU_NATIVE_PAN=y
 # So the switch stays off, and the screen comes back through the blob.
 CONFIG_XNU_BOOT_PROGRESS=n
 
-# Display stays off. The UEFI firmware leaves a GOP surface at
-# 0x9c000000, but the legacy path needs umi's absolute IOMobileFramebuffer
-# bindings, which are not qualified for this kernel yet.
-CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
+# Display: enable the board's GOP framebuffer path.  The kernel is the same
+# 21H461 (Darwin 23.6.0) core j716f verified, so the IOMobileFramebufferLegacy
+# ABI and its bindings are qualified here.  A minimal display-only archive
+# (scripts/build-gop-legacy-display.py) supplies NativeLegacyDisplay +
+# NativeGOPPresenter + LegacyDisplayProbe; screen geometry comes from the
+# firmware GOP at runtime, not from a hardcoded panel size.
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
 CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
 # The GPU is on now, but only as far as mode 8 (power, clocks, GMU cold start,
 # GX up). The Metal accelerator is not built on this board: the accelerator is

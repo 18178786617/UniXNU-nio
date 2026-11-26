@@ -78,7 +78,7 @@ kit = "nio"
 # build stops at that line, before a single file is compiled. Runs 29 and 30
 # ended exactly there: "component:NioUfs" had been added to the archives list
 # when the UFS path was turned on, and this list was not.
-include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VirtioMmioBlock", "RamBlock", "VerifiedRoot"]
+include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "ArmSmmu4K", "AdrenoPM4", "AdrenoFirmware", "NioUfs", "VirtioMmioBlock", "RamBlock", "VerifiedRoot", "GopFramebuffer", "AppleKeyStoreState"]
 
 [kernel]
 defconfig = "nio_defconfig"
@@ -156,6 +156,9 @@ archives = [
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
   "build-adreno650.py",
+  # board's own GOP framebuffer: display-only archive (NativeLegacyDisplay +
+  # NativeGOPPresenter + LegacyDisplayProbe), linked when NATIVE_LEGACY_DISPLAY=y.
+  "build-gop-legacy-display.py",
   "build-link-stubs.py",
   # The board's UFS driver. build-arm-driver.py compiles it from the
   # device repository's drivers/NioUfs and names the archive after the
