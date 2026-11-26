@@ -171,3 +171,17 @@ __attribute__((weak)) volatile uint32_t native_mdss_step;
 __attribute__((weak)) char native_touch_rows[4][120];
 __attribute__((weak)) volatile unsigned native_touch_stage;
 __attribute__((weak)) volatile unsigned native_touch_stroke_count;
+
+// More J716F diagnostic counters read by the USB console's status command
+// (battery / GPU / flip / GOP). Same story: nio has none of those kits yet,
+// so zeroed weak definitions are the truthful answer. All 21 native_* names
+// referenced by UsbDebugCdc.cpp are covered by this block and the one above.
+__attribute__((weak)) volatile int native_battery_error;
+__attribute__((weak)) volatile unsigned native_battery_published;
+__attribute__((weak)) char native_battery_row[120];
+__attribute__((weak)) char native_flip_rows[16][120];
+__attribute__((weak)) volatile uint32_t native_gop_gpu_completions;
+__attribute__((weak)) volatile uint32_t native_gop_gpu_offers;
+__attribute__((weak)) char native_gpu_rows[16][120];
+__attribute__((weak)) volatile uint32_t native_gpu_step;
+__attribute__((weak)) volatile uint64_t native_legacy_gop_bytes;
