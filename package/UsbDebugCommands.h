@@ -101,7 +101,10 @@ static bool usbCaptureAndQueueGsc1(UsbScreenState &sc, UsbReplyRing &reply, bool
     const uint32_t srcW = native_legacy_gop_width;
     const uint32_t srcH = native_legacy_gop_height;
     const uint64_t srcBytes = native_legacy_gop_bytes;
-    volatile const uint32_t *fb = reinterpret_cast<volatile const uint32_t *>(native_legacy_gop_virtual);
+    // GOP fb base is NOT 4-byte aligned on this board (phys 0x9c000001,
+    // virtual ...001). A uint32_t ldr there is an Alignment fault in the
+    // kernel (ESR FSC 0x21, seen 2026-11-27). Byte loads only.
+    volatile const uint8_t *fb = reinterpret_cast<volatile const uint8_t *>(native_legacy_gop_virtual);
     if (!fb || srcW < 64 || srcH < 64 || srcBytes < static_cast<uint64_t>(srcW) * srcH * 4ULL) {
         if (isSnapshot) reply.writeStr("GIULIA SCREEN: framebuffer not ready\r\n");
         return false;
@@ -147,11 +150,15 @@ static bool usbCaptureAndQueueGsc1(UsbScreenState &sc, UsbReplyRing &reply, bool
     for (uint32_t y = 0; y < outH; ++y) {
         uint32_t sy = (y * safeH) / outH;
         if (sy >= safeH) sy = safeH - 1u;
-        volatile const uint32_t *row = fb + static_cast<size_t>(sy) * srcW;
+        volatile const uint8_t *row = fb + static_cast<size_t>(sy) * srcW * 4u;
         uint8_t *dst = sc.rgbBuf + static_cast<size_t>(y) * outW * 2u;
         for (uint32_t x = 0; x < outW; ++x) {
             const uint32_t sx = (x * srcW) / outW;
-            const uint32_t px = row[sx];
+            const volatile uint8_t *p4 = row + static_cast<size_t>(sx) * 4u;
+            const uint32_t px = static_cast<uint32_t>(p4[0]) |
+                                (static_cast<uint32_t>(p4[1]) << 8) |
+                                (static_cast<uint32_t>(p4[2]) << 16) |
+                                (static_cast<uint32_t>(p4[3]) << 24);
             const uint32_t b = (px >> 0) & 0xFFu;
             const uint32_t g = (px >> 8) & 0xFFu;
             const uint32_t r = (px >> 16) & 0xFFu;
