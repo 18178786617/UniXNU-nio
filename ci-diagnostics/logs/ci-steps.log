@@ -1,0 +1,10 @@
+13:27:10 prepare: started in /Users/runner/work/UniXNU-nio/UniXNU-nio
+13:27:10 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+13:27:10 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist
+13:27:10 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o
+13:27:10 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+13:27:10 no build tree yet: out/nio/*/nio/tree/scripts/build-xnu-4k-baseline.sh absent
+traced script start: scripts/build-xnu-4k-baseline.sh
+traced before/after make: scripts/build-xnu-4k-baseline.sh
+13:27:10 syntax ok: scripts/build-xnu-4k-baseline.sh
+13:27:10 prepare: done
