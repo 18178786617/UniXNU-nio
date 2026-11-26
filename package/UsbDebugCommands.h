@@ -133,9 +133,20 @@ static bool usbCaptureAndQueueGsc1(UsbScreenState &sc, UsbReplyRing &reply, bool
         return false;
     }
 
-    // Point-sample XNU BGRA8888 GOP framebuffer -> little-endian RGB565
+    // Point-sample XNU BGRA8888 GOP framebuffer -> little-endian RGB565.
+    // The mapping can be only partially backed by pages even when getLength()
+    // reports the full frame size (a 2026-11-27 boot faulted at fb+4.9MB with
+    // ESR translation fault). Clamp every sampled row to the bytes we were
+    // told are mapped, and stop early rather than read past the mapping.
+    const uint32_t maxRows = static_cast<uint32_t>(srcBytes / 4ULL / srcW);
+    const uint32_t safeH = (maxRows < srcH) ? maxRows : srcH;
+    if (safeH < 16u) {
+        if (isSnapshot) reply.writeStr("GIULIA SCREEN: mapping too short\r\n");
+        return false;
+    }
     for (uint32_t y = 0; y < outH; ++y) {
-        const uint32_t sy = (y * srcH) / outH;
+        uint32_t sy = (y * safeH) / outH;
+        if (sy >= safeH) sy = safeH - 1u;
         volatile const uint32_t *row = fb + static_cast<size_t>(sy) * srcW;
         uint8_t *dst = sc.rgbBuf + static_cast<size_t>(y) * outW * 2u;
         for (uint32_t x = 0; x < outW; ++x) {
