@@ -17,5 +17,5 @@
 # the console and USB diagnostics work. nio has no legacy-display personality
 # (CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n), so without this hook the compiled-in
 # GpuProbe.cpp is never called and gpu.status stays at step=0. gated by nio-gpu=<n>.
-patches/xnu/gpu/gpu-probe-start.patch
+gpu/gpu-probe-start.patch
 
