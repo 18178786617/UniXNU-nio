@@ -152,3 +152,22 @@ __attribute__((weak)) int native_verified_block_manifest_sha384(unsigned int dev
 	}
 	return 1;
 }
+
+// The J716F USB debug console's status command reads these display/touch
+// diagnostic counters. They belong to j716f's GopFramebuffer / MdssProbe /
+// TouchProbe, which nio does not select (its display and Novatek touch are
+// separate milestones). Zeroed means "no such diagnostic", which is the
+// truthful answer, and lets the CDC console link and run without those kits.
+// Weak: if a display/touch kit is ever selected, its definition wins.
+__attribute__((weak)) volatile uint32_t native_legacy_gop_width;
+__attribute__((weak)) volatile uint32_t native_legacy_gop_height;
+__attribute__((weak)) volatile uint64_t native_legacy_gop_physical;
+__attribute__((weak)) volatile uint64_t native_legacy_gop_virtual;
+__attribute__((weak)) volatile uint32_t native_legacy_retirement_calls;
+__attribute__((weak)) volatile uint32_t native_legacy_stage;
+__attribute__((weak)) volatile uint32_t native_legacy_transfer_calls;
+__attribute__((weak)) char native_mdss_rows[31][120];
+__attribute__((weak)) volatile uint32_t native_mdss_step;
+__attribute__((weak)) char native_touch_rows[4][120];
+__attribute__((weak)) volatile unsigned native_touch_stage;
+__attribute__((weak)) volatile unsigned native_touch_stroke_count;
