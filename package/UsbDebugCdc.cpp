@@ -38,7 +38,7 @@ extern volatile unsigned native_touch_stroke_count __attribute__((weak_import));
 extern char native_touch_rows[4][120] __attribute__((weak_import));
 
 extern volatile unsigned native_gpu_step __attribute__((weak_import));
-extern char native_gpu_rows[31][120] __attribute__((weak_import));
+extern char native_gpu_rows[31][256] __attribute__((weak_import));
 extern volatile unsigned native_mdss_step __attribute__((weak_import));
 extern char native_mdss_rows[31][120] __attribute__((weak_import));
 extern char native_flip_rows[16][120] __attribute__((weak_import));
