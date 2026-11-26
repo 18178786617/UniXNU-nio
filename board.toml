@@ -156,6 +156,11 @@ archives = [
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
   "build-adreno650.py",
+  # AppleKeyStoreState has a kernel-stage build recipe, so it needs its own
+  # component: entry (unixnu archive_plan refuses a selected kernel component
+  # without one). GopFramebuffer is build_stage=embedded: built by the script
+  # below, not by a component: recipe.
+  "component:AppleKeyStoreState",
   # board's own GOP framebuffer: display-only archive (NativeLegacyDisplay +
   # NativeGOPPresenter + LegacyDisplayProbe), linked when NATIVE_LEGACY_DISPLAY=y.
   "build-gop-legacy-display.py",
