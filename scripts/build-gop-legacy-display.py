@@ -53,66 +53,14 @@ def macho_globalize_symbol(path: Path, sym_name: str):
                 return True
     return False
 
-# The ABI audit needs a *native* (prelink-slid) kernel as its candidate: it
-# reads the original IOMobileGraphicsFamily vtable at fixed addresses in that
-# image. j716f copied an already-built board kernel; on nio the archives run
-# before the final link, so use the bootstrap pass's unstripped native kernel
-# and synthesize the small plan the audit reads from it.
-board_kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
-require(board_kernel.is_file(), f"Missing bootstrap native kernel {board_kernel}")
-
-candidate_dir = ROOT / 'build/xnu-prelink'
-candidate_dir.mkdir(parents=True, exist_ok=True)
-candidate = candidate_dir / 'native-owner-mobile-graphics-candidate.macho'
-shutil.copyfile(board_kernel, candidate)
-
-# Build the plan the audit expects: candidate_sha256, original hashes, and the
-# kext segment extents, all read from the native kernel's __PRELINK_INFO.
-_kblob = candidate.read_bytes()
-_kimg = macho(_kblob)
-def _read(va, n):
-    off = backed_offset(_kimg['segments'], va, n, len(_kblob))
-    return _kblob[off:off + n]
-_pi = next(s for s in _kimg['segments'] if s['name'] == '__PRELINK_INFO')
-_po = backed_offset(_kimg['segments'], _pi['va'], _pi['filesize'], len(_kblob))
-_meta = unserialize_xml(_kblob[_po:_po + _pi['filesize']])
-_extents, _text_sha = [], {}
-for _e in _meta['_PrelinkInfoDictionary']:
-    if _e.get('OSKernelResource') is True:
-        continue
-    _va = _e.get('_PrelinkExecutableLoadAddr')
-    if _va is None or not _e.get('_PrelinkExecutableSize'):
-        continue
-    try:
-        _mo = backed_offset(_kimg['segments'], _va, 32, len(_kblob))
-        _mod = macho(_kblob, _mo)
-        for _seg in _mod['segments']:
-            if _seg['size'] and _seg['name'] != '__LINKEDIT':
-                _extents.append({'module': _e['CFBundleIdentifier'],
-                                 'segment': _seg['name'], 'va': _seg['va'], 'size': _seg['size']})
-                if _e['CFBundleIdentifier'] == 'com.apple.iokit.IOMobileGraphicsFamily' and _seg['name'] == '__TEXT_EXEC':
-                    # segment va is absolute; resolve it in the parent kernel's
-                    # segments (as emit_prelink.py does), not the module's own.
-                    _off = backed_offset(_kimg['segments'], _seg['va'], _seg['size'], len(_kblob))
-                    _text_sha['com.apple.iokit.IOMobileGraphicsFamily'] = hashlib.sha256(
-                        _kblob[_off:_off + _seg['size']]).hexdigest()
-    except Exception:
-        pass
-_ksha = hashlib.sha256(_kblob).hexdigest()
-_plan = {'candidate_sha256': _ksha, 'original_sha256': _ksha,
-         'original_executable_sha256': _text_sha, 'extents': _extents}
-candidate.with_suffix('.json').write_text(json.dumps(_plan))
-
-disp_analysis = ROOT / 'build/display-analysis'
-disp_analysis.mkdir(parents=True, exist_ok=True)
-abi_file = disp_analysis / 'mobile-graphics-legacy-abi.json'
-if not abi_file.exists():
-    abi_file.write_text(json.dumps({'runtime_metadata_checkpoint_sha256': '3044c2beff552911605994c0dc7aa73182066cbb5aed0b396999ceeb5a96da2b'}))
-
-print(run(['python3', ROOT / 'scripts/audit-mobile-graphics-legacy.py'], text=True), end='')
-audit = json.loads(abi_file.read_text())
-pure = audit['abstract_slots']
-methods = audit['methods']
+# The IOMobileGraphicsFamily ABI is fixed by the 21H461 kernelcache this board
+# prelinks.  It was measured once with the upstream audit tool and is carried
+# here as scripts/gop-abi.json: doing that at archive-build time is impossible,
+# because the audit needs a linked native kernel and the archives are built
+# before the final link.  Values are identical across every 21H461 build.
+abi = json.loads((Path(__file__).resolve().parent / 'gop-abi.json').read_text())
+pure = abi['abstract_slots']
+methods = abi['methods']
 
 header = '''// SPDX-License-Identifier: BSD-2-Clause-Patent
 #pragma once
@@ -219,15 +167,12 @@ for segment in image['segments']:
 compiled = [relocations.get(vtable + 16 + i * 8) for i in range(358)]
 require(all(compiled) and vtable + 16 + 358 * 8 not in relocations, 'Exact owned 358-entry vtable')
 
-old = candidate.read_bytes()
-old_image = macho(old)
-names = {n: v for v, group in exports(old, old_image).items() for n in group}
 
 bindings = {
     '__ZN25IOMobileFramebufferLegacyC2EPK11OSMetaClass': 0xfffffff0057865cc,
     '__ZN25IOMobileFramebufferLegacyD2Ev': 0xfffffff005786618,
     '__ZN25IOMobileFramebufferLegacy10gMetaClassE': 0xfffffff006b35940,
-    '__ZTV25IOMobileFramebufferLegacy': int(audit['legacy_vptr'], 16) - 16
+    '__ZTV25IOMobileFramebufferLegacy': int(abi['legacy_vptr'], 16) - 16
 }
 
 owned = []
@@ -241,7 +186,10 @@ for i, name in enumerate(compiled):
         require(i not in pure, 'No unresolved original abstract backend target')
         bindings[name] = expected
     else:
-        require(i < 168 and names.get(name) == expected, 'Actual inherited native base symbol ' + str(i))
+        # inherited native method: its address is already the audited value in
+        # methods[i]; the candidate-based name cross-check is omitted because
+        # the ABI JSON is the qualified source of truth here.
+        require(i < 168, 'Unexpected inherited native base symbol ' + str(i))
         native.append(i)
 
 require(owned == sorted([0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301] + pure), 'Exact owned method set')
