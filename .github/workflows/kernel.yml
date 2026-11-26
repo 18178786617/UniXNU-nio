@@ -776,6 +776,12 @@ jobs:
             echo "### invalidated the patch stamp: $work"
           done
           find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
+          # run-771: startup.o.json survives across rounds, so unixnu skips the
+          # bootstrap pass, but git clean -fdx above removes link.filelist from
+          # .cache/xnu-work.  archive-01 then dies with "No XNU symbol names:
+          # run a kernel pass first".  Drop the bootstrap flag as well so the
+          # bootstrap pass always regenerates link.filelist before archives.
+          find out -path '*/startup.o.json' -type f -delete 2>/dev/null || true
 
           # The old seed kernel is gone (deleted above), so any kernel.macho
           # found below was linked by this round.  The official four-layer
