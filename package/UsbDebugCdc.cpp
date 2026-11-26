@@ -30,6 +30,13 @@ extern volatile uint32_t native_legacy_gop_height __attribute__((weak_import));
 extern volatile uint32_t native_legacy_stage __attribute__((weak_import));
 extern volatile uint32_t native_legacy_transfer_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_retirement_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_client_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_swap_validation_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_swap_accepted_count __attribute__((weak_import));
+extern volatile uint32_t native_legacy_swap_rejected_count __attribute__((weak_import));
+extern volatile uint32_t native_legacy_swap_validation_reason __attribute__((weak_import));
+extern volatile int native_legacy_client_pid __attribute__((weak_import));
+extern char native_legacy_client_class[64] __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
 // Kernel process-state symbols (present in the 17.7.11 symbol table). Read
@@ -668,6 +675,16 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_retirement_calls ? native_legacy_retirement_calls : 0u,
                  &native_gop_gpu_offers ? native_gop_gpu_offers : 0u,
                  &native_gop_gpu_completions ? native_gop_gpu_completions : 0u);
+        s.reply.writeStr(buf);
+        snprintf(buf, sizeof(buf),
+                 "[usb] CLIENT: calls=%u pid=%d class=%s swap_val=%u acc=%u rej=%u reason=%u\r\n",
+                 &native_legacy_client_calls ? native_legacy_client_calls : 0u,
+                 &native_legacy_client_pid ? native_legacy_client_pid : -1,
+                 (&native_legacy_client_class && native_legacy_client_class[0]) ? native_legacy_client_class : "-",
+                 &native_legacy_swap_validation_calls ? native_legacy_swap_validation_calls : 0u,
+                 &native_legacy_swap_accepted_count ? native_legacy_swap_accepted_count : 0u,
+                 &native_legacy_swap_rejected_count ? native_legacy_swap_rejected_count : 0u,
+                 &native_legacy_swap_validation_reason ? native_legacy_swap_validation_reason : 0u);
         s.reply.writeStr(buf);
         if (&native_mdss_rows) {
             for (unsigned i = 0; i < 31; ++i) {
