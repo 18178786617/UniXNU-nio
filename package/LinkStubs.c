@@ -236,3 +236,11 @@ __attribute__((weak)) volatile unsigned native_touch_stage_total;
 __attribute__((weak)) volatile unsigned native_touch_stage_value;
 __attribute__((weak)) volatile unsigned native_touch_tlmm_probe;
 __attribute__((weak)) volatile unsigned native_ufs_dpu_state;
+
+// 2026-11-27: three more weak_import hooks in LegacyDisplayProbe.cpp that the
+// static kernel link refuses to leave undefined. nio has none of these
+// components: no UFS DPU (smmu base), no QcomXnuUsbDebug framebuffer sink,
+// no cpufreq probe yet. No-op / zero is truthful.
+__attribute__((weak)) uintptr_t native_ufs_smmu_base(void) { return 0; }
+__attribute__((weak)) int qcom_usb_debug_register_framebuffer(const void *fb) { (void)fb; return 0; }
+__attribute__((weak)) void sheng_cpufreq_probe(void) {}
