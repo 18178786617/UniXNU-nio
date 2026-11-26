@@ -1614,11 +1614,12 @@ static void mediaReportThread (void *, wait_result_t)
   panic ("%s", gMediaReport);
 }
 
+extern "C" void native_usb_debug_probe(void);
+
 bool NativeUfs::start (IOService *provider)
 {
   // nio: start the DWC3 USB CDC debug console (J716F SM8250 reference).
   // Idempotent (atomic guard); self-disables unless j716f-usb=1.
-  extern "C" void native_usb_debug_probe(void);
   native_usb_debug_probe();
   unsigned probe = 0, rootMode = 0;
   PE_parse_boot_argn ("native-ufs-probe", &probe, sizeof (probe));
