@@ -1,0 +1,38 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -4862,6 +4862,20 @@
+ 	 * switch the tasks, terminating the current task without the switch would
+ 	 * result in loosing the SIGKILL status.
+ 	 */
++	/* nio: wake the new exec thread BEFORE terminating the old task.
++	 * task_terminate_internal(old_task) can retire the current thread when
++	 * exec swapped tasks, so a FINAL_WAIT clear placed after it may never
++	 * execute -- the new thread stays parked and process 1 never reaches
++	 * userspace (nprocs stays 1 though pid1 is already "launchd").
++	 */
++	if (imgp != NULL && imgp->ip_new_thread) {
++		uint32_t clearwait_flags = TCRW_CLEAR_FINAL_WAIT;
++		if (!spawn_no_exec && !exec_done && error != 0) {
++			clearwait_flags |= TCRW_CLEAR_EXEC_COMPLETE;
++		}
++		task_clear_return_wait(get_threadtask(imgp->ip_new_thread), clearwait_flags);
++	}
++
+ 	if (task_did_exec(old_task)) {
+ 		/* Terminate the current task, since exec will start in new task */
+ 		task_terminate_internal(old_task);
+@@ -4869,13 +4883,6 @@
+ 
+ 	/* Release the thread ref returned by cloneproc/fork1 */
+ 	if (imgp != NULL && imgp->ip_new_thread) {
+-		/* clear the exec complete flag if there is an error before point of no-return */
+-		uint32_t clearwait_flags = TCRW_CLEAR_FINAL_WAIT;
+-		if (!spawn_no_exec && !exec_done && error != 0) {
+-			clearwait_flags |= TCRW_CLEAR_EXEC_COMPLETE;
+-		}
+-		/* wake up the new thread */
+-		task_clear_return_wait(get_threadtask(imgp->ip_new_thread), clearwait_flags);
+ 		thread_deallocate(imgp->ip_new_thread);
+ 		imgp->ip_new_thread = NULL;
+ 	}
