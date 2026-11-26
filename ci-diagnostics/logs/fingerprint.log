@@ -1,0 +1,42 @@
+kernel.macho (published): 52518912 bytes, mtime 11-26 09:27:35, nio: bsd_init: =no, nio: MT thread=no, 
+D1=yes, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+nio literals in the published kernel (0):
+native (prelink input): 19677096 bytes, mtime 11-26 09:27:30, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+osfmk/DEVELOPMENT/startup.o: 113304 bytes, mtime 11-26 09:26:06, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/bsd_init.o: 178280 bytes, mtime 11-26 09:26:58, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+bsd/DEVELOPMENT/kern_exec.o: 468072 bytes, mtime 11-26 09:27:01, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+iokit/DEVELOPMENT/IOService.cpo: 923976 bytes, mtime 11-26 09:25:30, nio: bsd_init: =no, nio: MT thread=no, 
+D1=no, 
+S1=no, nio: STALL rounds==no, nio: HB =no, the matching path stalled=no, nio: U1=no
+object directory totals: 888 .o, 123 .cpo, 9 .filelist, 1 .a
+filelist bsd/DEVELOPMENT/bsd.filelist: 461 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_syscalls.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_gss.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/nfs_serv.o
+filelist iokit/DEVELOPMENT/iokit.filelist: 97 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSObject.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/OSAction.iig.cpo | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.iig.cpo
+filelist osfmk/DEVELOPMENT/osfmk.filelist: 333 entries; first: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/gssd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/lockd_mach.o | /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/KUNCUserNotifications.o
+startup.c source: mtime 11-26 09:24:54, HB=no, old-format=no
+IOService.cpp source: mtime 11-26 09:24:54, STALL=no, U1=no
+bsd_init.c source: mtime 11-26 09:24:54, BSDINIT=no
+kern_exec.c source: mtime 11-26 09:24:54, 283848 bytes
+  exec marks PRESENT in source: 
+  exec marks ABSENT  in source: M01 M02 M03 M04 M05 M06 M16 D01 D02 D03 D04 D05 D06 D07 D08 D09 D10 D11 D12 D13 C02 C05 C06 E05 E06 UB01
+startup.c sha256: 80c4cc3b5db23f09a368b5f7aee4cb6c
+startup.o nio literals: []
+startup.o nio symbols: none
+startup.o stat: inode=3160603 links=1 size=113304
+kern_exec.o [ios-obj]: 468072 bytes, mtime 11-26 09:27:01, sha256 42acc48dad686169
+  PRESENT: 
+  ABSENT : M02 M03 D01 D02 D06 D07 D08 D12 D13 C02 E05 E06 UB01
+kern_exec.o [bootstrap-obj]: MISSING out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o
+LINK CHOOSES kern_exec.o: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o
+  chosen object: 468072 bytes, sha256 42acc48dad686169, UB01=False M02=False D07=False
+compile record: present
+compile record entries: 1
+startup.o compile: /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -xc /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/.cache/xnu-work/osfmk/kern/startup.c -o startup.o -c -g -nostdlibinc -ferror-limit=10000 -fno-builtin -fno-common -ftrivial-auto-var-init=zero -fsigned-bitfields -fmerge-all-constants -fc++-static-destructors=none -fsanitize-minimal-runtime -fsanitize-ignorelist=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/san/kasan-blacklist-arm64 -fsanitize=signed-integer-overflow -D ARM64_BOARD_CONFIG_BCM2837 -arch arm64 -D arm64 -D ARM64 -D __ARM64__ -D LP64 -D PAGE_SIZE_FI
