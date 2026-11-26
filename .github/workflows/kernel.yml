@@ -774,43 +774,12 @@ jobs:
             rm -f "$work/xnu-inputs.json" "$work/xnu-patches.list"
             echo "### invalidated the patch stamp: $work"
           done
-          # xnu_symbols.py prefers build/xnu/checkpoints/native-4k-user-abi/kernel.macho
-          # over link.filelist.  The bootstrap link intentionally fails and make
-          # removes the half-written link.filelist, so archive-01 dies with
-          # "No XNU symbol names" (run-771/773).  Keep the previous round's
-          # freshly linked kernel as the symbol checkpoint before removing it.
-          for oldkernel in $(find out -path '*/kernel/kernel.macho' -type f 2>/dev/null); do
-            tree="${oldkernel%/kernel/kernel.macho}"
-            ckdir="$tree/build/xnu/checkpoints/native-4k-user-abi"
-            mkdir -p "$ckdir" && cp "$oldkernel" "$ckdir/kernel.macho"
-            echo "### saved symbol checkpoint: $ckdir/kernel.macho"
-          done
+          # A kernel left by an earlier round is NOT a result of this round.
+          # Delete it so the loop below can only succeed on a kernel linked now.
           find out -path '*/kernel/kernel.macho' -type f -delete 2>/dev/null || true
-          # run-771: startup.o.json survives across rounds, so unixnu skips the
-          # bootstrap pass, but git clean -fdx above removes link.filelist from
-          # .cache/xnu-work.  archive-01 then dies with "No XNU symbol names:
-          # run a kernel pass first".  Drop the bootstrap flag as well so the
-          # bootstrap pass always regenerates link.filelist before archives.
+          # Drop the bootstrap flag so a stale startup.o.json cannot make
+          # unixnu skip the pass that regenerates compile records.
           find out -path '*/startup.o.json' -type f -delete 2>/dev/null || true
-
-          # xnu_symbols.py needs symbol names before any kernel is linked this
-          # round (bootstrap intentionally fails its link and make removes
-          # link.filelist).  Seed the checkpoint from the last green kernel,
-          # published on ci-kernel/run-765, so archive builders can read
-          # symbols even on a cold out/ directory (runs 771/773/777).
-          # The tree is assembled by `unixnu build`; seed the checkpoint only
-          # after an explicit assemble so the directory really exists.
-          ./unixnu tree -D "$UNIXNU_DEVICE" >/dev/null 2>&1 || true
-          git fetch --no-tags origin refs/heads/ci-kernel/run-765:refs/remotes/origin/ci-kernel-run-765 2>/dev/null || true
-          for tree in out/nio/*/nio/tree; do
-            ckdir="$tree/build/xnu/checkpoints/native-4k-user-abi"
-            if [ ! -s "$ckdir/kernel.macho" ]; then
-              mkdir -p "$ckdir"
-              git show refs/remotes/origin/ci-kernel-run-765:ci-kernel/kernel.macho > "$ckdir/kernel.macho" 2>/dev/null || rm -f "$ckdir/kernel.macho"
-            fi
-            echo "### xnu_symbols checkpoint $(wc -c < "$ckdir/kernel.macho" 2>/dev/null || echo 0) bytes in $tree"
-          done
-
           # The old seed kernel is gone (deleted above), so any kernel.macho
           # found below was linked by this round.  The official four-layer
           # series carries no nio probe strings; accept the kernel on presence
