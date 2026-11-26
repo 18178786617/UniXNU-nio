@@ -17,7 +17,7 @@ for p in [ROOT / 'kits/XnuPrelink', Path('/home/test/tb-j716f-unixnu/sources/Uni
     if p.exists():
         sys.path.insert(0, str(p))
         break
-from native_prelink import macho, backed_offset, exports
+from native_prelink import macho, backed_offset, exports, unserialize_xml
 
 def run(cmd, **kw):
     return subprocess.check_output([str(x) for x in cmd], timeout=90, **kw)
@@ -53,15 +53,53 @@ def macho_globalize_symbol(path: Path, sym_name: str):
                 return True
     return False
 
-board_kernel = ROOT.parent / 'kernel/kernel.macho'
-require(board_kernel.exists(), f"Missing board kernel {board_kernel}")
+# The ABI audit needs a *native* (prelink-slid) kernel as its candidate: it
+# reads the original IOMobileGraphicsFamily vtable at fixed addresses in that
+# image. j716f copied an already-built board kernel; on nio the archives run
+# before the final link, so use the bootstrap pass's unstripped native kernel
+# and synthesize the small plan the audit reads from it.
+board_kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
+require(board_kernel.is_file(), f"Missing bootstrap native kernel {board_kernel}")
 
-# Ensure prelink candidate and audit inputs exist and match current kernel
 candidate_dir = ROOT / 'build/xnu-prelink'
 candidate_dir.mkdir(parents=True, exist_ok=True)
 candidate = candidate_dir / 'native-owner-ufs-cpu-desktop-j716f-candidate.macho'
 shutil.copyfile(board_kernel, candidate)
-shutil.copyfile(board_kernel.with_suffix('.json'), candidate.with_suffix('.json'))
+
+# Build the plan the audit expects: candidate_sha256, original hashes, and the
+# kext segment extents, all read from the native kernel's __PRELINK_INFO.
+_kblob = candidate.read_bytes()
+_kimg = macho(_kblob)
+def _read(va, n):
+    off = backed_offset(_kimg['segments'], va, n, len(_kblob))
+    return _kblob[off:off + n]
+_pi = next(s for s in _kimg['segments'] if s['name'] == '__PRELINK_INFO')
+_po = backed_offset(_kimg['segments'], _pi['va'], _pi['filesize'], len(_kblob))
+_meta = unserialize_xml(_kblob[_po:_po + _pi['filesize']])
+_extents, _text_sha = [], {}
+for _e in _meta['_PrelinkInfoDictionary']:
+    if _e.get('OSKernelResource') is True:
+        continue
+    _va = _e.get('_PrelinkExecutableLoadAddr')
+    if _va is None or not _e.get('_PrelinkExecutableSize'):
+        continue
+    try:
+        _mo = backed_offset(_kimg['segments'], _va, 32, len(_kblob))
+        _mod = macho(_kblob, _mo)
+        for _seg in _mod['segments']:
+            if _seg['size'] and _seg['name'] != '__LINKEDIT':
+                _extents.append({'module': _e['CFBundleIdentifier'],
+                                 'segment': _seg['name'], 'va': _seg['va'], 'size': _seg['size']})
+                if _e['CFBundleIdentifier'] == 'com.apple.iokit.IOMobileGraphicsFamily' and _seg['name'] == '__TEXT_EXEC':
+                    _off = backed_offset(_mod['segments'], _seg['va'], _seg['size'], len(_kblob))
+                    _text_sha['com.apple.iokit.IOMobileGraphicsFamily'] = hashlib.sha256(
+                        _kblob[_off:_off + _seg['size']]).hexdigest()
+    except Exception:
+        pass
+_ksha = hashlib.sha256(_kblob).hexdigest()
+_plan = {'candidate_sha256': _ksha, 'original_sha256': _ksha,
+         'original_executable_sha256': _text_sha, 'extents': _extents}
+candidate.with_suffix('.json').write_text(json.dumps(_plan))
 
 disp_analysis = ROOT / 'build/display-analysis'
 disp_analysis.mkdir(parents=True, exist_ok=True)
