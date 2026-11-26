@@ -105,6 +105,10 @@ CONFIG_XNU_VERIFIED_ROOT_PROBE=n
 CONFIG_XNU_OWNER_ROOT_AUDIT=y
 CONFIG_XNU_OWNER_ROOT_TRUST=y
 CONFIG_XNU_OWNER_CACHE_MOUNT=y
+# SystemCryptex (dyld shared cache) volume UUID, read from the very same
+# 21H461 userdata image that supplies our root/data UUIDs (apfs-volumes.py:/n# 8846fe78-... -> DawnUpdate21H461...SystemCryptex). launchd exec failed with
+# "Library not loaded: /usr/lib/libSystem.B.dylib" without the cache volume bound.
+CONFIG_XNU_OWNER_CACHE_VOLUME_UUID="8846FE78-2910-4297-AF97-D59BB6F8FC16"
 CONFIG_XNU_OWNER_CACHE_STARTUP=y
 CONFIG_XNU_OWNER_BOOT_MANIFEST=y
 # The offline owner chain is keyed by volume UUID (build-xnu-4k-baseline.sh's
