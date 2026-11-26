@@ -1,0 +1,74 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+== kernel: prepare storage headers
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/prepare-storage-headers.py
+== kernel: archive-01-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py
+== kernel: archive-02-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py --namespace
+== kernel: component-ArmDTPlatform
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmDTPlatform
+== kernel: component-ArmCpu
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmCpu
+== kernel: component-SoftwareAES
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py SoftwareAES
+== kernel: archive-06-build-software-aes-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-software-aes-bindings.py
+== kernel: archive-07-build-mockfs-fixture
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-mockfs-fixture.py
+== kernel: archive-08-build-libpthread-kernel
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-libpthread-kernel.py
+== kernel: archive-09-build-adreno650
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-adreno650.py
+== kernel: component-AppleKeyStoreState
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py AppleKeyStoreState
+== kernel: archive-11-build-gop-legacy-display
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-gop-legacy-display.py
+== kernel: archive-12-build-link-stubs
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-link-stubs.py
+== kernel: component-NioUfs
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py NioUfs
+== kernel: archive-14-build-nio-ufs-archive
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-nio-ufs-archive.py
+== kernel: archive-15-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py
+== kernel: component-VirtioMmioBlock
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py VirtioMmioBlock
+== kernel: archive-17-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py --component NativeVirtioBlock --archive libVirtioMmioBlock.a --directory build/virtio-mmio-block --subset
+== kernel: component-RamBlock
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py RamBlock
+== kernel: archive-19-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py --component NativeRamBlock --archive libRamBlock.a --directory build/ram-block --subset
+== kernel: archive-20-build-verified-root
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-verified-root.py
+== kernel: archive-21-build-usb-debug
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-usb-debug.py
++ bash /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-xnu-4k-baseline.sh
+Restored 0 omitted public headers from Apple; blob hashes verified
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py", line 546, in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_abc.py", line 632, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pathlib/_local.py", line 537, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/native-legacy-display/build-report.json'
+build-xnu-4k-baseline.sh: line 802: python3 - "$LEGACY_DISPLAY_ARCHIVE" "$ROOT"  <<'PY_LEGACY_DISPLAY'
+import hashlib, json, sys
+from pathlib import Path
+archive=Path(sys.argv[1]);root=Path(sys.argv[2]);report=json.loads(archive.with_name('build-report.json').read_text())
+if hashlib.sha256(archive.read_bytes()).hexdigest()!=report['archive_sha256']:
+    raise SystemExit('Rebuild and qualify the exact owned Legacy archive before linking')
+for name,digest in report['source_sha256'].items():
+    if hashlib.sha256((root/name).read_bytes()).hexdigest()!=digest:
+        raise SystemExit('Rebuild the owned Legacy archive after changing '+name)
+PY_LEGACY_DISPLAY
+ failed
+unixnu: bash failed (1); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/logs/kernel.log
