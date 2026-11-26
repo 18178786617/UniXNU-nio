@@ -237,8 +237,16 @@ while i < len(args):
         cmd.append(value)
     i += 1
 
-cmd += ['-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-Wno-unnecessary-virtual-specifier', '-Wno-c99-designator', '-Wno-reorder-init-list',
-        '-Wno-deprecated-enum-enum-conversion', '-Wno-missing-designated-field-initializers', '-Wno-unused-but-set-variable', '-Wno-unused-but-set-global', '-I', str(ROOT / '.cache/xnu-work/osfmk')]
+# The XNU 17.7.11 headers emit deprecated-volatile warnings under Xcode 26's
+# clang; they are noise from the donor headers, not from this probe.  No
+# -Werror here, and no -Wno-unused-but-set-global (this clang does not know
+# that flag, which itself becomes an error under -Werror).
+cmd += ['-Wall', '-Wextra', '-Wno-unknown-warning-option',
+        '-Wno-unused-parameter', '-Wno-unnecessary-virtual-specifier',
+        '-Wno-c99-designator', '-Wno-reorder-init-list',
+        '-Wno-deprecated-enum-enum-conversion', '-Wno-deprecated-volatile',
+        '-Wno-missing-designated-field-initializers', '-Wno-unused-but-set-variable',
+        '-I', str(ROOT / '.cache/xnu-work/osfmk')]
 run(cmd, cwd=r['directory'])
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeGOPPresenter'], text=True), end='')
 gop = ROOT / 'build/native-gop-presenter'
