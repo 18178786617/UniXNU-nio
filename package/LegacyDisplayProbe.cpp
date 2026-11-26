@@ -475,6 +475,14 @@ __attribute__((noinline)) bool native_legacy_gop_mapping_observed(IOService *obj
 	if ((uintptr_t)object != native_legacy_object) {
 		panic("NativeLegacyDisplay: wrong mapping owner");
 	}
+	// Keep this mapping alive for the whole boot. We publish its virtual
+	// address to the USB console (HUD/snapshot) and read it from a separate
+	// thread long after the display framework has finished its late probe.
+	// Without our own reference the framework can release the mapping, leaving
+	// native_legacy_gop_virtual dangling: a 2026-11-27 boot faulted in both
+	// usb_debug_draw_hud (write) and screen.snapshot (read) on that stale
+	// address. Retain once per distinct mapping.
+	if ((uintptr_t)mapping != native_legacy_gop_map && mapping) mapping->retain();
 	native_legacy_gop_map = (uintptr_t)mapping;
 	native_legacy_gop_virtual = mapping->getVirtualAddress();
 	native_legacy_gop_physical = mapping->getPhysicalAddress();
