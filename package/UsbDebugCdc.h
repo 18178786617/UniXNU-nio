@@ -45,7 +45,7 @@ void native_usb_debug_probe(void);
 #define J716F_RSC_TCS_OFFSET          0x0D00u
 
 // Ramoops DBGC persistent ring (BootRamoops.c) & warm-fastboot registers
-#define J716F_RAMOOPS_BASE            0xB0000000ULL
+#define J716F_RAMOOPS_BASE            0xAF040000ULL  // nio: ramoops console zone (blob writes 'DBGC' header here)
 #define J716F_RAMOOPS_SIZE            0x00080000ULL
 #define J716F_RAMOOPS_SIG             0x43474244u  // "DBGC"
 #define J716F_RAMOOPS_HEAD            12u
