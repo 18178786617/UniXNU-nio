@@ -219,12 +219,11 @@ jobs:
         run: |
           hour=$(TZ=Asia/Shanghai date +%H)
           hour=$((10#$hour))
-          if [ "$hour" -ge 22 ] || [ "$hour" -lt 6 ]; then
-            echo "runner=macos-15-intel" >> "$GITHUB_OUTPUT"
-          else
-            echo "runner=macos-26" >> "$GITHUB_OUTPUT"
-          fi
-          echo "hour in Asia/Shanghai: $hour" >> "$GITHUB_STEP_SUMMARY"
+          # 2026-11-26 21:00: the owner cancelled every queued run because both
+          # arm64 pools (macos-26 and macos-15) were busy.  Force the Intel
+          # pool until the owner restores the by-hour rule.  ~20 min/round.
+          echo "runner=macos-15-intel" >> "$GITHUB_OUTPUT"
+          echo "hour in Asia/Shanghai: $hour (forced macos-15-intel per owner)" >> "$GITHUB_STEP_SUMMARY"
 
   kernel:
     needs: choose-runner
