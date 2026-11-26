@@ -265,4 +265,19 @@ run(['xcrun', 'ar', 'rcs', archive,
      OUT / 'LegacyDisplayProbe.o',
      gop_late,
     ])
+# build-xnu-4k-baseline.sh verifies this report before linking the archive.
+# Record the archive hash and the sources that actually produced it; only
+# files that exist in the tree may be listed (the verifier reads each one).
+source_files = [
+    Path(__file__).resolve(),                                  # this recipe
+    Path(__file__).resolve().parent / 'gop-abi.json',          # frozen ABI
+    next(ROOT.glob('kits/*/LegacyDisplayProbe.cpp')),          # board probe
+    next(ROOT.glob('kits/*/NativeLegacyDisplay.cpp')),         # display driver
+    next(ROOT.glob('kits/*/NativeGOPPresenter.cpp')),          # presenter
+]
+report = {
+    'archive_sha256': sha(archive),
+    'source_sha256': {str(p.relative_to(ROOT)): sha(p) for p in source_files},
+}
+(OUT / 'build-report.json').write_text(json.dumps(report, indent=2) + '\n')
 print(f"PASS: built nio display archive {archive} ({archive.stat().st_size} bytes)")
