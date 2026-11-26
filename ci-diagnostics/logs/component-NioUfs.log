@@ -1,0 +1,8 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/drivers/NioUfs/NioUfs.cpp:1621:10: error: expected unqualified-id
+ 1621 |   extern "C" void native_usb_debug_probe(void);
+      |          ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/drivers/NioUfs/NioUfs.cpp:1622:3: error: use of undeclared identifier 'native_usb_debug_probe'
+ 1622 |   native_usb_debug_probe();
+      |   ^~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+
