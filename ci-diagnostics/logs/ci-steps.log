@@ -1,0 +1,24 @@
+19:39:01 prepare: started in /Users/runner/work/UniXNU-nio/UniXNU-nio
+19:39:01 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+19:39:01 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist
+19:39:01 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o
+19:39:01 absent : out/nio/ios-16.5-20F66/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOService.o
+19:39:01 no build tree yet: out/nio/*/nio/tree/scripts/build-xnu-4k-baseline.sh absent
+traced script start: scripts/build-xnu-4k-baseline.sh
+traced before/after make: scripts/build-xnu-4k-baseline.sh
+19:39:01 syntax ok: scripts/build-xnu-4k-baseline.sh
+19:39:01 prepare: done
+base=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio
+record=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json exists=True
+tree object=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o exists=False
+recorded file=/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/.cache/xnu-work/osfmk/kern/startup.c output=startup.o
+replaying 452 arguments in /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT
+replay rc=0
+preprocess rc=0
+preprocessed bytes=1410883 has HB=False
+preprocessed bytes=1410883 has hb-started=False
+replay object missing=False
+assembly rc=0
+assembly lines=28499 has HB=False
+assembly calls to nio_dc_puts=0
+  asm: no _nio_heartbeat_thread label

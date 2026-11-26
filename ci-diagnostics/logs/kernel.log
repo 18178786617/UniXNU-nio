@@ -1,0 +1,3 @@
+Restored 0 omitted public headers from Apple; blob hashes verified
+/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python: can't open file '/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-boot-progress.py': [Errno 2] No such file or directory
+build-xnu-4k-baseline.sh: line 111: python3 scripts/build-boot-progress.py failed
