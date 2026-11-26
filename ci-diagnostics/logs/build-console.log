@@ -1,0 +1,5 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+unixnu: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/series:20: patch missing: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/patches/xnu/gpu/gpu-probe-start.patch
