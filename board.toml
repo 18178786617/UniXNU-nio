@@ -200,8 +200,6 @@ archives = [
   # generated empty and root verification is disabled rather than approximated
   # (the driver logs which of the two it is doing).
   "build-verified-root.py",
-  # USB CDC debug console from the J716F SM8250 reference (SoC-level DWC3).
-  "build-usb-debug.py",
 ]
 
 # The prelink contract for the 16.5 kernelcache.

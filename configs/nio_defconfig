@@ -210,7 +210,7 @@ CONFIG_XNU_BUILD_ARCHIVES=y
 # raw RAM transport object instead of force-loading libRamBlock.a.  The old
 # global alias archive is now a second, redundant definition, so drop it from
 # the force-load list rather than choose between two copies of every slot.
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a -Wl,-force_load,{tree}/build/usbdebug/libUsbDebug.a"
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a -Wl,-force_load,{tree}/build/verified-root/libVerifiedRoot.a"
 
 # The storage base class. drivers/NioUfs subclasses IOBlockStorageDevice, which
 # is not in XNU: it lives in the prelinked IOStorageFamily kext. Run 35 stopped at
