@@ -35,7 +35,7 @@ initrd = "Payloads/scratch-data.img"
 # that a hand-built ADT does not have. amfi_get_out_of_my_way cannot help:
 # the panic happens before AMFI reads that argument. The kernel patch of the
 # same name makes the bootstrap skip the load when this is present.
-args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam native-ufs-root=1 native-ufs-allow-unverified=1 root-unverified=1 sheng-data-persist=2 sheng-smp=1 armcpu-self-ipi=1 armcpu-spi-ipi=1 nio-root-lba=58840832 native-ufs-stream=0xe0 native-ufs-stream2=0x4e0 offline-apfs-load=1 -apfs_shared_datavolume panic_on_crash_disabled=1 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1"
+args = "-v keepsyms=1 kt_fixed_zones=120 -enable_kprintf_spam native-ufs-root=1 j716f-usb=1 native-ufs-allow-unverified=1 root-unverified=1 sheng-data-persist=2 sheng-smp=1 armcpu-self-ipi=1 armcpu-spi-ipi=1 nio-root-lba=58840832 native-ufs-stream=0xe0 native-ufs-stream2=0x4e0 offline-apfs-load=1 -apfs_shared_datavolume panic_on_crash_disabled=1 amfi_get_out_of_my_way=1 amfi_allow_any_signature=1 nio_skip_security_extensions=1 unentitled_ios_sim_launch=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1"
 
 # No rd=md0: the root is the OS volume NioUfs publishes from userdata. No
 # debug=0x1 or startup_debug=1: those are DB_HALT and wait for a debugger that

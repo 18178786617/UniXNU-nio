@@ -200,6 +200,7 @@ archives = [
   # generated empty and root verification is disabled rather than approximated
   # (the driver logs which of the two it is doing).
   "build-verified-root.py",
+  "build-usb-debug.py",
 ]
 
 # The prelink contract for the 16.5 kernelcache.
