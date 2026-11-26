@@ -1407,6 +1407,14 @@ jobs:
                 echo '```'
                 grep -nE -B6 -A10 '(^|[^a-z])error:|Undefined symbols|ld: error|fatal error' "$log" | head -120 || true
                 echo '```'
+                if grep -q 'Undefined symbols for architecture' "$log"; then
+                  echo
+                  echo '### undefined symbols (kernel link)'
+                  echo
+                  echo '```'
+                  grep -A45 'Undefined symbols for architecture' "$log" | head -60 || true
+                  echo '```'
+                fi
                 echo
               fi
               echo "### the tail"
