@@ -63,7 +63,7 @@ require(board_kernel.is_file(), f"Missing bootstrap native kernel {board_kernel}
 
 candidate_dir = ROOT / 'build/xnu-prelink'
 candidate_dir.mkdir(parents=True, exist_ok=True)
-candidate = candidate_dir / 'native-owner-ufs-cpu-desktop-j716f-candidate.macho'
+candidate = candidate_dir / 'native-owner-mobile-graphics-candidate.macho'
 shutil.copyfile(board_kernel, candidate)
 
 # Build the plan the audit expects: candidate_sha256, original hashes, and the
@@ -91,7 +91,9 @@ for _e in _meta['_PrelinkInfoDictionary']:
                 _extents.append({'module': _e['CFBundleIdentifier'],
                                  'segment': _seg['name'], 'va': _seg['va'], 'size': _seg['size']})
                 if _e['CFBundleIdentifier'] == 'com.apple.iokit.IOMobileGraphicsFamily' and _seg['name'] == '__TEXT_EXEC':
-                    _off = backed_offset(_mod['segments'], _seg['va'], _seg['size'], len(_kblob))
+                    # segment va is absolute; resolve it in the parent kernel's
+                    # segments (as emit_prelink.py does), not the module's own.
+                    _off = backed_offset(_kimg['segments'], _seg['va'], _seg['size'], len(_kblob))
                     _text_sha['com.apple.iokit.IOMobileGraphicsFamily'] = hashlib.sha256(
                         _kblob[_off:_off + _seg['size']]).hexdigest()
     except Exception:
