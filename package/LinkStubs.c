@@ -39,6 +39,7 @@
 // one definition and not two.
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // The driver imports this one weakly and asks it first whether the exporter exists:
 //   const int stored = valid && boot_log_export_put ? boot_log_export_put(...) : -1;
@@ -192,3 +193,46 @@ __attribute__((weak)) volatile uint64_t native_legacy_gop_bytes;
 __attribute__((weak)) char boot_progress_ext[8][48];
 __attribute__((weak)) void boot_progress_init(void) {}
 __attribute__((weak)) void boot_progress_stage(const char *text) { (void)text; }
+
+// 2026-11-26: the nio display-only LegacyDisplayProbe.cpp is derived from the
+// alioth (same-SoC) board package. Its late probe calls a set of alioth/kit
+// diagnostics that this board does not select (touch, HID, keystore, backlight,
+// buttons, PCIe, UFS DPU). Most are weak_import in the probe, but ld64 refuses
+// to leave a weak_import undefined in a static kernel link, so each needs a
+// weak definition here. Zero / no-op is the truthful answer on this board.
+// Functions:
+__attribute__((weak)) void alioth_backlight_probe(void) {}
+__attribute__((weak)) void alioth_buttons_probe(void) {}
+__attribute__((weak)) void alioth_pcie_init(void) {}
+__attribute__((weak)) int native_hid_input_probe(void) { return 0; }
+__attribute__((weak)) void native_keystore_probe(void) {}
+__attribute__((weak)) void native_ufs_dpu_map(void) {}
+__attribute__((weak)) int native_ufs_dpu_window_build(uintptr_t x) { (void)x; return 0; }
+// C++ entry point of the touch kit (mangled name); no touch kit on nio yet.
+// LegacyDisplayProbe declares this as C++ (mangled __Z15touchProbeStartv).
+// Define under the exact mangled name with an asm label.
+__attribute__((weak)) bool touch_probe_stub(void) __asm__("__Z15touchProbeStartv");
+__attribute__((weak)) bool touch_probe_stub(void) { return false; }
+// Diagnostic counters (weak_import in the probe):
+__attribute__((weak)) volatile unsigned native_touch_app_id;
+__attribute__((weak)) volatile unsigned native_touch_app_rc;
+__attribute__((weak)) volatile unsigned native_touch_crc_expected;
+__attribute__((weak)) volatile unsigned native_touch_crc_received;
+__attribute__((weak)) volatile unsigned native_touch_data0;
+__attribute__((weak)) volatile unsigned native_touch_data1;
+__attribute__((weak)) volatile unsigned native_touch_data2;
+__attribute__((weak)) volatile unsigned native_touch_fail_step;
+__attribute__((weak)) volatile unsigned native_touch_hdr0;
+__attribute__((weak)) volatile unsigned native_touch_hdr1;
+__attribute__((weak)) volatile unsigned native_touch_hdr2;
+__attribute__((weak)) volatile unsigned native_touch_hdr3;
+__attribute__((weak)) volatile unsigned native_touch_pin_cfg;
+__attribute__((weak)) volatile unsigned native_touch_pin_want;
+__attribute__((weak)) volatile unsigned native_touch_ready;
+__attribute__((weak)) volatile unsigned native_touch_ready_ms;
+__attribute__((weak)) char native_touch_stage_name[32];
+__attribute__((weak)) volatile int native_touch_stage_result;
+__attribute__((weak)) volatile unsigned native_touch_stage_total;
+__attribute__((weak)) volatile unsigned native_touch_stage_value;
+__attribute__((weak)) volatile unsigned native_touch_tlmm_probe;
+__attribute__((weak)) volatile unsigned native_ufs_dpu_state;
