@@ -98,6 +98,12 @@ subprocess.run(['xcrun', 'ar', 'rcs', str(archive), str(obj)], check=True)
 # definition: an undefined symbol in here would move the failure back to the kernel link.
 REQUIRED = ['_boot_log_export_put', '_native_gop_handoff_call', '_native_gop_handoff_memory',
             '_native_gpu_dcvs', '_native_pmap_user_mappings', '_qcom_usb_debug_write']
+# When a display component is selected, its NativeGOPPresenter archive defines
+# the hand-off pair itself and LinkStubs.c compiles them out (#if above).  The
+# kernel link then gets them from that archive, so they must not be required
+# from this one.
+if legacy_display or mobile_display:
+    REQUIRED = [n for n in REQUIRED if n not in ('_native_gop_handoff_call', '_native_gop_handoff_memory')]
 nm = subprocess.run(['xcrun', 'nm', '-gP', str(archive)], capture_output=True, text=True, check=True).stdout
 table = {}
 for line in nm.splitlines():
