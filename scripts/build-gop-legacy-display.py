@@ -272,8 +272,6 @@ source_files = [
     Path(__file__).resolve(),                                  # this recipe
     Path(__file__).resolve().parent / 'gop-abi.json',          # frozen ABI
     next(ROOT.glob('kits/*/LegacyDisplayProbe.cpp')),          # board probe
-    next(ROOT.glob('kits/*/NativeLegacyDisplay.cpp')),         # display driver
-    next(ROOT.glob('kits/*/NativeGOPPresenter.cpp')),          # presenter
 ]
 report = {
     'archive_sha256': sha(archive),
