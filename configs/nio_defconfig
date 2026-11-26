@@ -94,7 +94,7 @@ CONFIG_XNU_NATIVE_RAM_BLOCK=y
 # while AMFI is not loaded, so the state it leaves behind is the honest one.
 CONFIG_XNU_TRUST_CACHE_RUNTIME=y
 CONFIG_XNU_SOURCE_MOCKFS=n
-CONFIG_XNU_NATIVE_CS_HASH_CACHE=n
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 # Run 723 still ended in the arm64 link with `native_verified_root_probe`
 # undefined: no selected component defines it, and the signed probe archive
 # this config used to name is not something this board can produce. The owner
