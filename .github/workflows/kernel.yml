@@ -798,14 +798,17 @@ jobs:
           # link.filelist).  Seed the checkpoint from the last green kernel,
           # published on ci-kernel/run-765, so archive builders can read
           # symbols even on a cold out/ directory (runs 771/773/777).
+          # The tree is assembled by `unixnu build`; seed the checkpoint only
+          # after an explicit assemble so the directory really exists.
+          ./unixnu tree -D "$UNIXNU_DEVICE" >/dev/null 2>&1 || true
           git fetch --no-tags origin refs/heads/ci-kernel/run-765:refs/remotes/origin/ci-kernel-run-765 2>/dev/null || true
           for tree in out/nio/*/nio/tree; do
             ckdir="$tree/build/xnu/checkpoints/native-4k-user-abi"
-            if [ ! -f "$ckdir/kernel.macho" ]; then
+            if [ ! -s "$ckdir/kernel.macho" ]; then
               mkdir -p "$ckdir"
-              git show refs/remotes/origin/ci-kernel-run-765:ci-kernel/kernel.macho > "$ckdir/kernel.macho" 2>/dev/null && \
-                echo "### seeded xnu_symbols checkpoint from run-765" || rm -f "$ckdir/kernel.macho"
+              git show refs/remotes/origin/ci-kernel-run-765:ci-kernel/kernel.macho > "$ckdir/kernel.macho" 2>/dev/null || rm -f "$ckdir/kernel.macho"
             fi
+            echo "### xnu_symbols checkpoint $(wc -c < "$ckdir/kernel.macho" 2>/dev/null || echo 0) bytes in $tree"
           done
 
           # The old seed kernel is gone (deleted above), so any kernel.macho
