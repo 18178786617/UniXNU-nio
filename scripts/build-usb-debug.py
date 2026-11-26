@@ -3,7 +3,7 @@
 
 The DWC3 USB0 gadget controller (0x0A600000), its DMA layout and the CDC-ACM
 protocol are SoC-level: SM8250-AC / Kona is shared by Lenovo J716F and MOTO nio,
-so the reference driver is copied here (package/) rather than rewritten.
+so the reference driver is copied here (package/usbdebug/) rather than rewritten.
 Only the SMMU stream id is board data; it is declared in UsbDebugCdc.h and can
 be corrected from nio's IORT if the console does not enumerate.
 
@@ -28,7 +28,7 @@ cxx_recipe = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iok
 out = ROOT / 'build/usbdebug'
 out.mkdir(parents=True, exist_ok=True)
 
-USB = ROOT / 'package'
+USB = ROOT / 'package/usbdebug'
 PACKAGE = ROOT / 'package'
 KITS = Path(os.environ.get('ADRENO650_KITS', str(ROOT / 'kits')))
 
