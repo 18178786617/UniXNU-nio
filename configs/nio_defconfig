@@ -159,7 +159,7 @@ CONFIG_XNU_NATIVE_PAN=y
 # worked with this switch off (R56-R118 all ran with BOOT_PROGRESS=n).
 #
 # So the switch stays off, and the screen comes back through the blob.
-CONFIG_XNU_BOOT_PROGRESS=y
+CONFIG_XNU_BOOT_PROGRESS=n
 
 # Display: enable the board's GOP framebuffer path.  The kernel is the same
 # 21H461 (Darwin 23.6.0) core j716f verified, so the IOMobileFramebufferLegacy

@@ -418,7 +418,7 @@ timeout = -1
 # IOStorageFamily to publish the root windows, prints every IOMedia with its
 # BSD name, size and UUID, and then panics. Remove it once the owner chain has
 # been seen to agree with these values on the device.
-kernel_args = ["-v", "boot-progress=2", "keepsyms=1", "kt_fixed_zones=120", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1", "-disable_procref_tracking"]
+kernel_args = ["-v", "offline-legacy-reached=1", "keepsyms=1", "kt_fixed_zones=120", "native-ufs-diagnostics=1", "nio_skip_security_extensions=1", "unentitled_ios_sim_launch=1", "ignition_level=1", "launchd_unsecure_cache=1", "-wdt_no_pmu", "wdt=-1", "wdt_test=no_user_checkin", "amfi_get_out_of_my_way=1", "amfi_allow_any_signature=1", "-disable_procref_tracking"]
 
 ["adt"."defaults"."u32"]
 # No Apple PMGR or SEP on kona: report a virtual platform so AMFI does not
