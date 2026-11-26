@@ -793,6 +793,21 @@ jobs:
           # bootstrap pass always regenerates link.filelist before archives.
           find out -path '*/startup.o.json' -type f -delete 2>/dev/null || true
 
+          # xnu_symbols.py needs symbol names before any kernel is linked this
+          # round (bootstrap intentionally fails its link and make removes
+          # link.filelist).  Seed the checkpoint from the last green kernel,
+          # published on ci-kernel/run-765, so archive builders can read
+          # symbols even on a cold out/ directory (runs 771/773/777).
+          git fetch --no-tags origin refs/heads/ci-kernel/run-765:refs/remotes/origin/ci-kernel-run-765 2>/dev/null || true
+          for tree in out/nio/*/nio/tree; do
+            ckdir="$tree/build/xnu/checkpoints/native-4k-user-abi"
+            if [ ! -f "$ckdir/kernel.macho" ]; then
+              mkdir -p "$ckdir"
+              git show refs/remotes/origin/ci-kernel-run-765:ci-kernel/kernel.macho > "$ckdir/kernel.macho" 2>/dev/null && \
+                echo "### seeded xnu_symbols checkpoint from run-765" || rm -f "$ckdir/kernel.macho"
+            fi
+          done
+
           # The old seed kernel is gone (deleted above), so any kernel.macho
           # found below was linked by this round.  The official four-layer
           # series carries no nio probe strings; accept the kernel on presence
