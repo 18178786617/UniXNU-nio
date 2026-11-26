@@ -1,4 +1,5 @@
 # UniXNU-nio — MOTO Edge S (XT2125-4) / kona / SM8250-AC
+# 2026-11-26: display bring-up in progress; see docs/DISPLAY-PORT-NOTES and the ledger.
 #
 # The port's target is iOS 16.5 (build 20F66), not iPadOS: the ADT forges an
 # iPhone X identity (iPhone10,3 / D22AP), the userland is the iPhone X 16.5
