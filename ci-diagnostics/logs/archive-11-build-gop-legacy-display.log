@@ -1,0 +1,13 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:656:78: warning: implicit conversion loses integer precision: 'uint64_t' (aka 'unsigned long long') to 'uint32_t' (aka 'unsigned int') [-Wshorten-64-to-32]
+  656 |         native_legacy_reached_geometry = ((uint64_t)rowbytes << 32) | (width << 16) | (height & 0xFFFF);
+      |                                        ~ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:1201:12: warning: declaration shadows a local variable [-Wshadow]
+ 1201 |                                                 bool attached = false;
+      |                                                      ^
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/LegacyDisplayProbe.cpp:1121:48: note: previous declaration is here
+ 1121 |         bool nubAttached = false, nubStarted = false, attached = false, started = false;
+      |                                                       ^
+2 warnings generated.
+NativeLegacyDisplay: -Werror build and arm64-apple-ios17.0 object audit passed
+NativeGOPPresenter: -Werror build and arm64-apple-ios17.0 object audit passed
+PASS: built nio display archive /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/build/native-legacy-display/libNativeLegacyDisplay.late.a (980064 bytes)
