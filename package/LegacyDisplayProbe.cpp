@@ -566,7 +566,7 @@ __attribute__((noinline)) bool native_legacy_gop_mapping_observed(IOService *obj
 	PE_Video video = {};
 	if (enabled < 1 || enabled > 3 || phase != 4 || PE_current_console(&video) ||
 	    video.v_width != width || video.v_height != height || video.v_rotate ||
-	    mapping->getPhysicalAddress() != video.v_baseAddr) {
+	    mapping->getPhysicalAddress() != (video.v_baseAddr & ~3ULL)) { // nio: compare masked marker
 		return false;
 	}
 	IORegistryEntry *chosen = IORegistryEntry::fromPath("/chosen", gIODTPlane);
@@ -1122,7 +1122,7 @@ void native_legacy_display_late_probe(void) {
 	IORegistryEntry *displayTreeParent = nullptr;
 	bool dtAttached = false;
 	IOService *parent = IOService::getResourceService();
-	IODeviceMemory *memory = IODeviceMemory::withRange(video.v_baseAddr, video.v_rowBytes * video.v_height);
+	IODeviceMemory *memory = IODeviceMemory::withRange(video.v_baseAddr & ~3ULL, video.v_rowBytes * video.v_height); // nio: mask DarwinBoot bit0 physical marker (kernel console masks & ~3UL); map the true base so CPU-copy dst is aligned and pixel-exact
 	OSArray *ranges = OSArray::withCapacity(1);
 	if (nub && memory && ranges && parent && nub->init()) {
 		ranges->setObject(memory);

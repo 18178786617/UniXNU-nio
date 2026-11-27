@@ -196,6 +196,41 @@ if req_src.count(req_old)==1:
 else:
     require('nio: GOP base carries DarwinBoot' in req_src, 'nio byte-store patch anchor (fill_pixels)')
     print('nio: NativeLegacyRequest.h already byte-store patched')
+# nio: the nub range is now created from the masked GOP base (LegacyDisplayProbe
+# masks DarwinBoot's bit0/bit1 physical marker, same contract as the kernel's
+# video_console & ~3UL). Every physical==PE comparison in the component must
+# therefore compare the masked PE value, or the transfer gate rejects the swap
+# with kIOReturnNotReady. In-place patch of the compiled CI-tree copy only;
+# upstream source untouched. Idempotent, anchor-checked like the byte-store patch.
+disp = ROOT / 'drivers/GopFramebuffer/NativeLegacyDisplay.cpp'
+disp_src = disp.read_text()
+disp_pairs = [
+    ('video.v_baseAddr!=bootMapping->getPhysicalAddress()',
+     '(video.v_baseAddr&~3ULL)!=bootMapping->getPhysicalAddress()', 2),
+    ('blank.v_baseAddr!=bootMapping->getPhysicalAddress()',
+     '(blank.v_baseAddr&~3ULL)!=bootMapping->getPhysicalAddress()', 1),
+    ('mapping->getPhysicalAddress()==video.v_baseAddr',
+     'mapping->getPhysicalAddress()==(video.v_baseAddr&~3ULL)', 1),
+]
+for old, new, want in disp_pairs:
+    n = disp_src.count(old)
+    if n:
+        require(n == want, f'nio mask anchor count {old!r}: {n} != {want}')
+        disp_src = disp_src.replace(old, new)
+    else:
+        require(new in disp_src, f'nio mask anchor missing: {old!r}')
+disp.write_text(disp_src)
+print('nio: masked DarwinBoot marker in NativeLegacyDisplay.cpp comparisons')
+pres = ROOT / 'drivers/GopFramebuffer/NativeGOPPresenter.cpp'
+pres_src = pres.read_text()
+pold = 'mapping->getPhysicalAddress()!=video.v_baseAddr'
+pnew = 'mapping->getPhysicalAddress()!=(video.v_baseAddr&~3ULL)'
+if pold in pres_src:
+    require(pres_src.count(pold) == 1, 'nio mask anchor count (presenter)')
+    pres.write_text(pres_src.replace(pold, pnew))
+else:
+    require(pnew in pres_src, 'nio mask anchor missing (presenter)')
+print('nio: masked DarwinBoot marker in NativeGOPPresenter.cpp comparison')
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeLegacyDisplay'], text=True), end='')
 obj = OUT / 'NativeLegacyDisplay.o'
 raw = obj.read_bytes()
@@ -237,8 +272,12 @@ for i, name in enumerate(compiled):
         owned.append(i)
         require(i in (0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301) or i in pure, 'Only qualified own methods and guarded leaves override')
     elif '25IOMobileFramebufferLegacy' in name:
-        require(i not in pure, 'No unresolved original abstract backend target')
-        bindings[name] = expected
+        # nio: slot 345 is now an inline mirror override (returns false), not a
+        # guarded leaf; it legitimately resolves to the mirror class symbol while
+        # still listed in abi abstract_slots. Exclude it from the pure-slot gate.
+        require(i not in pure or i == 345, 'No unresolved original abstract backend target')
+        if i != 345:
+            bindings[name] = expected
     else:
         # inherited native method: its address is already the audited value in
         # methods[i]; the candidate-based name cross-check is omitted because
