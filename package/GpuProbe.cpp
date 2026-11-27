@@ -485,7 +485,13 @@ void gmuColdStart(const gpb_result &r, const gpb_gmu_clock_on &o) {
     gDevice = {};
     gDevice.io = {nullptr, {A650_GMU_CORE_BYTES, A650_GMU_RSCC_BYTES, A650_GMU_PDC_BYTES}, gmuRead, gmuWrite, gmuBarrier};
     gDevice.services = {nullptr, gmuNow, gmuWait};
-    gConfig = {A650_GMU_CHIP_ID, native_gpu_gmu_firmware, native_gpu_gmu_firmware_size, views[0], views[1], views[3], views[4], 100};
+    // poll_budget 100->1024 (the validate cap, A650Gmu.c:94): the CM3 FW_INIT_RESULT poll at phase 6
+    // reads every 100 us, so 100 gave only 10 ms. On nio the CM3 cold boot lands right at that edge --
+    // run-819 (nio-gpu=7) caught it inside 10 ms (LOAD st0 ph8), but the nio-gpu=9 run timed out at
+    // phase 6 (LOAD st6, reset_after_failure then held SYSRESET=1) even though the CM3 had already
+    // written FW_INIT_RESULT=0x100 (AFTER init0x100). 1024 polls = ~102 ms, a 10x margin so the boot
+    // is never gated out by a marginal timeout. Same value j716f's cold start tolerates.
+    gConfig = {A650_GMU_CHIP_ID, native_gpu_gmu_firmware, native_gpu_gmu_firmware_size, views[0], views[1], views[3], views[4], 1024};
     // The GMU's DDR vote for the GPU (A650Gmu.c A650GmuDdrVote): off unless nio-gpu-bw=1 (2026-10-25: with it on, neither the GPU's
     // frame times nor the scanout copy changed, so the DDR was not what held them back).
     unsigned ddrVote = 0;
