@@ -37,6 +37,16 @@ extern volatile uint32_t native_legacy_swap_rejected_count __attribute__((weak_i
 extern volatile uint32_t native_legacy_swap_validation_reason __attribute__((weak_import));
 extern volatile int native_legacy_client_pid __attribute__((weak_import));
 extern char native_legacy_client_class[64] __attribute__((weak_import));
+extern volatile uint32_t native_legacy_start_result __attribute__((weak_import));
+extern volatile uint32_t native_legacy_probe_match __attribute__((weak_import));
+extern volatile uint32_t native_legacy_init_result __attribute__((weak_import));
+extern volatile uint32_t native_legacy_dt_attached __attribute__((weak_import));
+extern volatile uint32_t native_legacy_registration_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_properties_length __attribute__((weak_import));
+extern volatile uint32_t native_legacy_pm_stage __attribute__((weak_import));
+extern volatile uint32_t native_legacy_pm_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_pm_ordinal __attribute__((weak_import));
+extern volatile int native_legacy_pm_status __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
 // Kernel process-state symbols (present in the 17.7.11 symbol table). Read
@@ -641,10 +651,24 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         if (&proc_name) proc_name(1, name, (int)sizeof(name));
         snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p pid1=%s\r\n", np, ip, name);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "display2")) {
+        snprintf(buf, sizeof(buf),
+                 "[usb] DISP2: init=%u probe=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d\r\n",
+                 &native_legacy_init_result ? native_legacy_init_result : 0u,
+                 &native_legacy_probe_match ? native_legacy_probe_match : 0u,
+                 &native_legacy_start_result ? native_legacy_start_result : 0u,
+                 &native_legacy_dt_attached ? native_legacy_dt_attached : 0u,
+                 &native_legacy_registration_calls ? native_legacy_registration_calls : 0u,
+                 &native_legacy_properties_length ? native_legacy_properties_length : 0u,
+                 &native_legacy_pm_stage ? native_legacy_pm_stage : 0u,
+                 &native_legacy_pm_calls ? native_legacy_pm_calls : 0u,
+                 &native_legacy_pm_ordinal ? native_legacy_pm_ordinal : 0u,
+                 &native_legacy_pm_status ? native_legacy_pm_status : -999);
+        s.reply.writeStr(buf);
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs display2 ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
         s.reply.writeStr("Commands: ping features info uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
