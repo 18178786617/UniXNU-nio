@@ -21,4 +21,4 @@ gpu/gpu-probe-start.patch
 exec-wakeup-order.patch
 # skip-setup: seed 21H461 Setup-Assistant skip plists at launchd exec
 # (provider j716f_skip_setup_plist lives in the board NioUfs archive)
-device/j716f-skip-setup.patch
+j716f-skip-setup.patch
