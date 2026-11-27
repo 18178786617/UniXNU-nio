@@ -45,6 +45,10 @@ extern volatile uint32_t native_legacy_dt_attached __attribute__((weak_import));
 extern volatile uint32_t native_legacy_registration_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_properties_length __attribute__((weak_import));
 extern char native_legacy_properties[4096] __attribute__((weak_import));
+extern char native_legacy_reg_class[64] __attribute__((weak_import));
+extern char native_legacy_reg_name[64] __attribute__((weak_import));
+extern char native_legacy_reg_path[160] __attribute__((weak_import));
+extern volatile uint32_t native_legacy_backlight_found __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_stage __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_ordinal __attribute__((weak_import));
@@ -721,6 +725,15 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                 s.reply.write("\r\n", 2);
             }
         }
+    } else if (strEq(raw, "hukou")) {
+        snprintf(buf, sizeof(buf), "[usb] HUKOU: class=%s name=%s backlight=%u\r\n",
+                 &native_legacy_reg_class ? native_legacy_reg_class : "-",
+                 &native_legacy_reg_name ? native_legacy_reg_name : "-",
+                 &native_legacy_backlight_found ? native_legacy_backlight_found : 0u);
+        s.reply.writeStr(buf);
+        snprintf(buf, sizeof(buf), "[usb]   path=%s\r\n",
+                 &native_legacy_reg_path ? native_legacy_reg_path : "-");
+        s.reply.writeStr(buf);
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {

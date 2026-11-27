@@ -61,6 +61,8 @@ volatile uint64_t native_legacy_video_base, native_legacy_video_bytes;
 volatile uint64_t native_legacy_gop_map, native_legacy_gop_virtual, native_legacy_gop_physical, native_legacy_gop_bytes;
 volatile uint32_t native_legacy_gop_width, native_legacy_gop_height;
 volatile uint32_t native_legacy_registration_calls, native_legacy_properties_length;
+char native_legacy_reg_class[64], native_legacy_reg_name[64], native_legacy_reg_path[160];
+volatile uint32_t native_legacy_backlight_found;
 volatile uint32_t native_legacy_dt_attached;
 volatile int native_legacy_unit_scale_status = -1;
 volatile uint32_t native_legacy_unit_scale_calls, native_legacy_chosen_scale, native_legacy_chosen_rotation;
@@ -430,6 +432,22 @@ void native_legacy_vsync_observed(unsigned event, unsigned hz) {
 
 void native_legacy_registration_observed(IOService *display) {
 	native_legacy_registration_calls = native_legacy_registration_calls + 1;
+	/* "hukou" diagnostics: where the display service actually landed in the
+	 * IOService plane, and whether a backlight service exists for it. */
+	if (display) {
+		const char *cn = display->getMetaClass() ? display->getMetaClass()->getClassName() : nullptr;
+		const char *nm = display->getName();
+		if (cn) strlcpy(native_legacy_reg_class, cn, sizeof native_legacy_reg_class);
+		if (nm) strlcpy(native_legacy_reg_name, nm, sizeof native_legacy_reg_name);
+		int plen = (int)sizeof native_legacy_reg_path;
+		if (!display->getPath(native_legacy_reg_path, &plen, gIOServicePlane)) native_legacy_reg_path[0] = 0;
+	}
+	{
+		OSDictionary *bl = IOService::nameMatching("AppleARMBacklight");
+		IOService *b = bl ? IOService::copyMatchingService(bl) : nullptr;
+		native_legacy_backlight_found = b ? 1u : 2u;
+		OSSafeReleaseNULL(b); OSSafeReleaseNULL(bl);
+	}
 	// Band 7: the display reached registerService. This is the only marker that reports the
 	// service was actually published, and it sits right under the red band so a photograph
 	// reads the boot path and the publication question in one column.
