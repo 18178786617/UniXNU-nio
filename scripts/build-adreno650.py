@@ -29,7 +29,7 @@ What is compiled here:
 Left out on purpose: sheng's GMU platform nodes and service (NativeAdrenoGmuService/Platform/Config
 are sheng-hardware) and the staged accelerator.
 """
-import json, os, re, shutil, subprocess, sys
+import json, os, re, shutil, struct, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,11 +115,9 @@ sources += [driver / (name + '.cpp') for name in (
     'NativeAdrenoMemory', 'NativeAdrenoCpu', 'NativeAdrenoVm', 'NativeAdrenoRing', 'NativeAdrenoSubmit', 'NativeAdrenoTimer',
     'NativeAdrenoUserClient', 'NativeAdrenoPublish', 'NativeAdrenoCpInit', 'NativeAdrenoIrq',
     'NativeAdrenoGmuContext', 'NativeAdrenoGmuMemory')]
-# nio 828: the staged Metal accelerator IS built now. 827's runtime metal probe proved the
-# prelinked IOGPUFamily kext already carries IOAcceleratorES (136 B) and IOGPUDevice, so the
-# original base class exists at link/run time; only the board's AGXAccelerator subclass and
-# the probe's mode-12 path were missing. Its ABI header lives at package/AdrenoMetal.
-sources += [driver / 'NativeAdrenoAccelerator.cpp']
+# nio 828/829: the staged Metal accelerator is built separately below (late-bind), not in the
+# plain source loop: its static initializer must be staged out of __mod_init_func and globalized
+# so the board probe can run it after IOGPUFamily loads (j716f-verified mechanism).
 
 objects = []
 
@@ -220,6 +218,78 @@ if failures:
     print(summary)
     sys.exit(1)
 
+# --- nio 829: staged AGXAccelerator late-bind (j716f-verified mechanism) ---
+def macho_globalize_symbol(path, sym_name):
+    data = bytearray(path.read_bytes())
+    _, _, _, _, ncmds, _, _, _ = struct.unpack_from('<8I', data, 0)
+    at = 32
+    symoff = None
+    for _ in range(ncmds):
+        cmd, cmdsize = struct.unpack_from('<2I', data, at)
+        if cmd == 2:
+            _, _, symoff, nsyms, stroff, strsize = struct.unpack_from('<6I', data, at)
+            break
+        at += cmdsize
+    if symoff is None:
+        return False
+    strings = data[stroff:stroff + strsize]
+    for i in range(nsyms):
+        offset = symoff + i * 16
+        n_strx, n_type = struct.unpack_from('<IB', data, offset)
+        if n_strx < len(strings):
+            end = strings.find(b'\0', n_strx)
+            name = strings[n_strx:end].decode('latin1', errors='ignore')
+            if name == sym_name:
+                data[offset + 4] = n_type | 0x01
+                path.write_bytes(data)
+                return True
+    return False
+
+
+accel_src = driver / 'NativeAdrenoAccelerator.cpp'
+accel_obj = out / 'NativeAdrenoAccelerator.o'
+acmd, i = [], 0
+while i < len(cxx_recipe['arguments']):
+    v = cxx_recipe['arguments'][i]
+    if v == cxx_recipe['file']:
+        acmd.append(str(accel_src))
+    elif v == '-o':
+        acmd += ['-o', str(accel_obj)]; i += 1
+    elif v in ('-MF', '-MJ'):
+        i += 1
+    elif v == '-Xclang' and cxx_recipe['arguments'][i + 1].startswith('-W'):
+        i += 1
+    elif not v.startswith('-W') and v not in ('-MD', '-MP'):
+        acmd.append(v)
+    i += 1
+acmd += ['-I', str(KITS / 'AdrenoPM4'), '-I', str(KITS / 'ArmSmmu4K'), '-I', str(KITS / 'AdrenoFirmware'),
+         '-I', str(PIPA.parent), '-I', str(ROOT / '.cache/xnu-work/osfmk'), '-I', str(driver), '-I', str(PACKAGE),
+         '-Wall', '-Wextra', '-Werror'] + warning_flags
+r = subprocess.run(acmd, cwd=cxx_recipe['directory'], capture_output=True, text=True)
+(out / 'NativeAdrenoAccelerator.log').write_text(r.stdout + r.stderr)
+if r.returncode:
+    print('accelerator compile failed:\n' + r.stderr)
+    sys.exit(1)
+# Bind the original IOAcceleratorES protected ctor/dtor/metaclass to the audited 21H461 VAs.
+bindings = {
+    '__ZN15IOAcceleratorESC2EPK11OSMetaClass': 0xFFFFFFF004BD3B20,
+    '__ZN15IOAcceleratorESD2Ev': 0xFFFFFFF004BD3B64,
+    '__ZN15IOAcceleratorES10gMetaClassE': 0xFFFFFFF006AEB688,
+}
+asm = out / 'original-bindings.S'
+asm.write_text(''.join('.globl %s\n.set %s, %#x\n' % (n, n, a) for n, a in sorted(bindings.items())))
+sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
+bindings_obj = out / 'original-bindings.o'
+subprocess.run(['xcrun', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk,
+                '-c', str(asm), '-o', str(bindings_obj)], check=True)
+accel_late = out / 'NativeAdrenoAccelerator.late.o'
+_objcopy = shutil.which('llvm-objcopy')
+oc = [_objcopy] if _objcopy else ['xcrun', 'llvm-objcopy']
+subprocess.run(oc + ['--remove-section=__DATA,__mod_init_func', str(accel_obj), str(accel_late)], check=True)
+if not macho_globalize_symbol(accel_late, '__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp'):
+    sys.exit('Failed to globalize __GLOBAL__sub_I_NativeAdrenoAccelerator.cpp')
+objects.extend([accel_late, bindings_obj])
+
 archive = out / 'libAdreno740.a'
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, *objects], check=True)
@@ -234,7 +304,8 @@ if missing:
     sys.exit('NativeAdreno symbols used but not built here: ' + ', '.join(missing))
 required = ('_NativeAdrenoGpuContextBringup', '_NativeAdrenoGpuContextBuffers', '_NativeAdrenoGpuContextVm', '_native_adreno_publish',
             '_ArmSmmu4KAttachStreams', '_AdrenoPM4Type7', '_NativeAdrenoGmuContextBringupRoutes', '_NativeAdrenoGmuContextPayloads',
-            '_A650GmuColdStart', '_A650GmuBuildStartup')
+            '_A650GmuColdStart', '_A650GmuBuildStartup',
+            '__GLOBAL__sub_I_NativeAdrenoAccelerator.cpp', '_native_adreno_accelerator_allocate')
 absent = [s for s in required if s not in defined]
 if absent:
     sys.exit('Required definitions absent: ' + ', '.join(absent))
