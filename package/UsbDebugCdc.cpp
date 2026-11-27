@@ -45,7 +45,6 @@ extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import))
 extern "C" uint32_t nprocs __attribute__((weak_import));
 extern "C" void *initproc __attribute__((weak_import));
 extern "C" void proc_name(int pid, char *buf, int buflen) __attribute__((weak_import));
-extern "C" int proc_listpids(uint32_t type, uint32_t typeinfo, void *buffer, int bufsize) __attribute__((weak_import));
 
 extern volatile unsigned native_touch_stage __attribute__((weak_import));
 extern volatile unsigned native_touch_stroke_count __attribute__((weak_import));
@@ -642,29 +641,10 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         if (&proc_name) proc_name(1, name, (int)sizeof(name));
         snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p pid1=%s\r\n", np, ip, name);
         s.reply.writeStr(buf);
-    } else if (strStarts(raw, "ps")) {
-        // One-shot process list: kernel symbols proc_listpids/proc_name, no
-        // patch needed. Lets us see whether SpringBoard/backboardd are alive.
-        if (!&proc_listpids || !&proc_name) {
-            s.reply.writeStr("[usb] PS: unavailable\r\n");
-        } else {
-            int pids[160];
-            const int got = proc_listpids(1u, 0u, pids, (int)sizeof(pids));
-            const int n = got > 0 ? (got / (int)sizeof(int)) : 0;
-            snprintf(buf, sizeof(buf), "[usb] PS: count=%d\r\n", n);
-            s.reply.writeStr(buf);
-            for (int i = 0; i < n; ++i) {
-                char nm[32] = {0};
-                proc_name(pids[i], nm, (int)sizeof(nm));
-                if (!nm[0]) continue;
-                snprintf(buf, sizeof(buf), "[usb]   pid=%d %s\r\n", pids[i], nm);
-                s.reply.writeStr(buf);
-            }
-        }
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs ps ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
         s.reply.writeStr("Commands: ping features info uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
