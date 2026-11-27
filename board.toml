@@ -448,7 +448,7 @@ unique_chip_id = "required"
 # no 4 GiB run exists (alioth qualifies 4 GiB only on the hand-tuned UniXNU
 # firmware with 36 clean descriptors). 256 MiB is the WINDOW_SIZE fallback
 # that R42/R43 proved loadable on this exact firmware.
-owned_memory_size = "0x10000000"
+owned_memory_size = "0xC0000000"
 packed_data_ramdisk = true
 # The APFS volume UUID of the OS window in the 21H461 userdata image, read out
 # of the volume superblock with tools/apfs-volumes.py on 2026-11-24:
