@@ -13,6 +13,8 @@
 #include <libkern/c++/OSSharedPtr.h>
 #include <libkern/c++/OSSymbol.h>
 #include <libkern/c++/OSMetaClass.h>
+#include <libkern/c++/OSDictionary.h>
+#include <libkern/c++/OSIterator.h>
 #include <libkern/OSKextLib.h>
 #include <kern/task.h>
 #include <kern/thread.h>
@@ -795,11 +797,11 @@ static void handleCommand(TerminalSession &s, const char *raw) {
             s.reply.writeStr(buf);
             if (sym) sym->release();
         }
-        OSDictionary *mm = IOService::matching("IOAccelerator");
-        OSIterator *it = mm ? IOService::getMatchingServices(mm) : nullptr;
+        OSPtr<OSDictionary> mm = IOService::serviceMatching("IOAccelerator");
+        OSPtr<OSIterator> it;
+        if (mm) it = IOService::getMatchingServices(mm.get());
         unsigned mn = 0;
-        if (it) { while (it->getNextObject()) ++mn; it->release(); }
-        if (mm) mm->release();
+        if (it) { while (it->getNextObject()) ++mn; }
         snprintf(buf, sizeof(buf), "[usb] METAL: IOAccelerator services=%u\r\n", mn);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "bootargs")) {
