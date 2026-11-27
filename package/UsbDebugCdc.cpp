@@ -797,11 +797,12 @@ static void handleCommand(TerminalSession &s, const char *raw) {
             s.reply.writeStr(buf);
             if (sym) sym->release();
         }
-        OSPtr<OSDictionary> mm = IOService::serviceMatching("IOAccelerator");
-        OSPtr<OSIterator> it;
-        if (mm) it = IOService::getMatchingServices(mm.get());
+        // OSPtr<T> is a raw pointer typedef in this kernel build, so manage refs manually.
+        OSDictionary *mm = IOService::serviceMatching("IOAccelerator");
+        OSIterator *it = mm ? IOService::getMatchingServices(mm) : nullptr;
         unsigned mn = 0;
-        if (it) { while (it->getNextObject()) ++mn; }
+        if (it) { while (it->getNextObject()) ++mn; it->release(); }
+        if (mm) mm->release();
         snprintf(buf, sizeof(buf), "[usb] METAL: IOAccelerator services=%u\r\n", mn);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "bootargs")) {
