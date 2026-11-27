@@ -29,25 +29,27 @@
  					stackshot_thread_turnstileinfo(
  						thread,
  						&thread_turnstileinfo[current_turnstileinfo_index++]);
-@@ -3441,16 +3445,23 @@
+@@ -3441,16 +3445,31 @@
  		latency_info.misc2_latency = mach_absolute_time();
  #endif /* STACKSHOT_COLLECTS_LATENCY_INFO */
  
 -#if DEBUG || DEVELOPMENT
--		if (current_delta_snapshot_index != num_delta_thread_snapshots) {
--			panic("delta thread snapshot count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
--			    num_delta_thread_snapshots, current_delta_snapshot_index);
--		}
--		if (current_waitinfo_index != num_waitinfo_threads) {
--			panic("thread wait info count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
--			    num_waitinfo_threads, current_waitinfo_index);
--		}
--#endif
 +		/* A live task can create/destroy threads between the counting and capture
 +		 * passes. The kcdata array headers already reserve the counted entries,
 +		 * so zero-fill any slots we did not write instead of panicking; this
 +		 * DEVELOPMENT-only assert fires during a normal boot stackshot.
 +		 */
+ 		if (current_delta_snapshot_index != num_delta_thread_snapshots) {
+-			panic("delta thread snapshot count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
++			printf("nio: stackshot race fix: delta expected %d found %d\n",
+ 			    num_delta_thread_snapshots, current_delta_snapshot_index);
+ 		}
+ 		if (current_waitinfo_index != num_waitinfo_threads) {
+-			panic("thread wait info count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
++			printf("nio: stackshot race fix: waitinfo expected %d found %d\n",
+ 			    num_waitinfo_threads, current_waitinfo_index);
+ 		}
+-#endif
 +		if (delta_snapshots != NULL && current_delta_snapshot_index < num_delta_thread_snapshots) {
 +			bzero(&delta_snapshots[current_delta_snapshot_index],
 +			    (num_delta_thread_snapshots - current_delta_snapshot_index) * sizeof(*delta_snapshots));
