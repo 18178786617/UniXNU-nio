@@ -1,0 +1,4 @@
+USB debug compile failures:
+=== UsbDebugCdc.cpp ===
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:802:55: error: member reference type 'OSPtr<OSDictionary>' (aka 'OSDictionary *') is a pointer; did you mean to use '->'?
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:802:56: error: no member named 'get' in 'OSDictionary'

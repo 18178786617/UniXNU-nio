@@ -1,0 +1,55 @@
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio
+== submodules: drivers/GopFramebuffer has local changes, not updated
+== submodules /Users/runner/work/UniXNU-nio/UniXNU-nio/device
+== submodules: package/adreno650 has local changes, not updated
+== tree /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree
+== kernel: XNU
+== kernel: prepare storage headers
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/prepare-storage-headers.py
+== kernel: archive-01-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py
+== kernel: archive-02-build-corecrypto-14
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-corecrypto-14.py --namespace
+== kernel: component-ArmDTPlatform
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmDTPlatform
+== kernel: component-ArmCpu
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py ArmCpu
+== kernel: component-SoftwareAES
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py SoftwareAES
+== kernel: archive-06-build-software-aes-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-software-aes-bindings.py
+== kernel: archive-07-build-mockfs-fixture
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-mockfs-fixture.py
+== kernel: archive-08-build-libpthread-kernel
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-libpthread-kernel.py
+== kernel: archive-09-build-adreno650
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-adreno650.py
+== kernel: component-AppleKeyStoreState
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py AppleKeyStoreState
+== kernel: archive-11-build-gop-legacy-display
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-gop-legacy-display.py
+== kernel: archive-12-build-link-stubs
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-link-stubs.py
+== kernel: component-NioUfs
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py NioUfs
+== kernel: archive-14-build-nio-ufs-archive
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-nio-ufs-archive.py
+== kernel: archive-15-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py
+== kernel: component-VirtioMmioBlock
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py VirtioMmioBlock
+== kernel: archive-17-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py --component NativeVirtioBlock --archive libVirtioMmioBlock.a --directory build/virtio-mmio-block --subset
+== kernel: component-RamBlock
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-arm-driver.py RamBlock
+== kernel: archive-19-build-storage-bindings
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-storage-bindings.py --component NativeRamBlock --archive libRamBlock.a --directory build/ram-block --subset
+== kernel: archive-20-build-verified-root
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-verified-root.py
+== kernel: archive-21-build-usb-debug
++ python3 /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/scripts/build-usb-debug.py
+USB debug compile failures:
+=== UsbDebugCdc.cpp ===
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:802:55: error: member reference type 'OSPtr<OSDictionary>' (aka 'OSDictionary *') is a pointer; did you mean to use '->'?
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:802:56: error: no member named 'get' in 'OSDictionary'
+unixnu: python3 failed (1); full log: /Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/logs/archive-21-build-usb-debug.log
