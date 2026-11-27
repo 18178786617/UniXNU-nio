@@ -960,16 +960,6 @@ void native_legacy_display_late_probe(void) {
 	// "the kernel stopped earlier", which the panel otherwise cannot tell apart, because both
 	// leave the DarwinBoot frame in place.
 	native_legacy_paint_reached_band();
-	// DarwinBoot hands the GOP framebuffer as a *physical* address with bit0 set
-	// as the "needs ml_io_map_unmappable" marker (see DarwinBoot.c:760-764).
-	// initialize_screen() masks it into vinfo/v_physaddr, but PE_state.video
-	// keeps the marked value. Every display consumer here reads it through
-	// PE_current_console() and compares/maps it, and the GopFramebuffer
-	// CPU-copy path requires a 4-byte aligned destination (dst&3). With the
-	// marker still present (0x9c000001) the first swap fails with
-	// kIOReturnBadArgument (0xe00002c2) and the backend guard fires. The
-	// console itself uses vinfo, not PE_state.video, so masking here is safe.
-	PE_state.video.v_baseAddr &= ~3UL;
 	// The HID publisher. It is an IOHIDDevice compiled into this kernel, so IOKit has no
 	// personality for it and nothing would start it: the board starts it explicitly, which the
 	// driver adaption guide names as the second of the two start paths and places in this
