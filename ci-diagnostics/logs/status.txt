@@ -1,0 +1,1 @@
+unixnu: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/series:24: patch missing: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/j716f-skip-setup.patch
