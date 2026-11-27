@@ -285,7 +285,7 @@ for i, name in enumerate(compiled):
         require(i < 168, 'Unexpected inherited native base symbol ' + str(i))
         native.append(i)
 
-require(owned == sorted([0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301] + (pure - {345})), 'Exact owned method set')
+require(owned == sorted([0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301] + list(set(pure) - {345})), 'Exact owned method set')
 
 for name, address, field, wide in [
     ('descriptor', 0xfffffff004b9ead0, 48, True), ('width', 0xfffffff004b9ebbc, 88, True),
