@@ -51,6 +51,19 @@ extern volatile int native_legacy_surface_status __attribute__((weak_import));
 extern volatile uint32_t native_legacy_surface_found __attribute__((weak_import));
 extern volatile uint64_t native_legacy_video_base __attribute__((weak_import));
 extern volatile int native_legacy_meta_status __attribute__((weak_import));
+extern volatile uint32_t native_legacy_parent_match __attribute__((weak_import));
+extern volatile uint32_t native_legacy_object_size __attribute__((weak_import));
+extern volatile uint32_t native_legacy_released __attribute__((weak_import));
+extern volatile uint32_t native_legacy_guard_slot __attribute__((weak_import));
+extern volatile uint64_t native_legacy_guard_object __attribute__((weak_import));
+extern volatile uint64_t native_legacy_guard_caller __attribute__((weak_import));
+extern volatile int native_legacy_unit_scale_status __attribute__((weak_import));
+extern volatile uint32_t native_legacy_unit_scale_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_prepare_calls __attribute__((weak_import));
+extern volatile uint32_t native_legacy_prepare_failures __attribute__((weak_import));
+extern volatile uint32_t native_legacy_copy_n __attribute__((weak_import));
+extern volatile uint32_t native_legacy_frame_count __attribute__((weak_import));
+extern volatile int native_legacy_transfer_status __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
 // Kernel process-state symbols (present in the 17.7.11 symbol table). Read
@@ -673,10 +686,27 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_meta_status ? native_legacy_meta_status : -999,
                  &native_legacy_video_base ? (unsigned long long)native_legacy_video_base : 0ULL);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "diag")) {
+        snprintf(buf, sizeof(buf),
+                 "[usb] DIAG: parent=%u osize=%u released=%u guard=%u/%llx/%llx uscale=%d/%u prep=%u/%u copy=%u frames=%u xfer_st=%d\r\n",
+                 &native_legacy_parent_match ? native_legacy_parent_match : 0u,
+                 &native_legacy_object_size ? native_legacy_object_size : 0u,
+                 &native_legacy_released ? native_legacy_released : 0u,
+                 &native_legacy_guard_slot ? native_legacy_guard_slot : 0u,
+                 &native_legacy_guard_object ? (unsigned long long)native_legacy_guard_object : 0ULL,
+                 &native_legacy_guard_caller ? (unsigned long long)native_legacy_guard_caller : 0ULL,
+                 &native_legacy_unit_scale_status ? native_legacy_unit_scale_status : -999,
+                 &native_legacy_unit_scale_calls ? native_legacy_unit_scale_calls : 0u,
+                 &native_legacy_prepare_calls ? native_legacy_prepare_calls : 0u,
+                 &native_legacy_prepare_failures ? native_legacy_prepare_failures : 0u,
+                 &native_legacy_copy_n ? native_legacy_copy_n : 0u,
+                 &native_legacy_frame_count ? native_legacy_frame_count : 0u,
+                 &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
+        s.reply.writeStr(buf);
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs display2 ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs display2 diag ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
         s.reply.writeStr("Commands: ping features info uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
