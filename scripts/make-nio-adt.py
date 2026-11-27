@@ -74,6 +74,9 @@ def main():
     data.add_argument("--data-ramdisk", action="store_true")
     data.add_argument("--packed-data-ramdisk", action="store_true")
     parser.add_argument("--trust-cache", action="store_true")
+    parser.add_argument("--gpu-addon", action="store_true",
+                        help="declare the /chosen/memory-map/GpuAddon placeholder; "
+                             "requires kernel.macho.gpuaddon beside the kernel")
     parser.add_argument("--ipad-identity", action="store_true",
                         help="sheng's iPad7,1 / 21H461 userspace compatibility profile")
     args = parser.parse_args()
@@ -148,7 +151,8 @@ def main():
             root_match_volume_uuid=root_uuid,
             unique_chip_id=args.unique_chip_id, chip_id=args.chip_id,
             data_ramdisk=args.data_ramdisk, packed_data_ramdisk=args.packed_data_ramdisk,
-            trust_cache=args.trust_cache, ipad_identity=args.ipad_identity)
+            trust_cache=args.trust_cache, gpu_addon=args.gpu_addon,
+            ipad_identity=args.ipad_identity)
         if platform:
             apply_platform(tree, platform)
         blob = tree.encode()

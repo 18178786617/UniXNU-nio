@@ -276,7 +276,8 @@ def apply_smp_profile(tree, hardware):
 def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
                owned_memory_size=None, unique_chip_id=None, chip_id=None,
                root_match_volume_uuid=None, data_ramdisk=False,
-               packed_data_ramdisk=False, trust_cache=False, ipad_identity=False):
+               packed_data_ramdisk=False, trust_cache=False, gpu_addon=False,
+               ipad_identity=False):
     banks = hardware["memory_banks"]
     if dram_size != sum(bank["size"] for bank in banks):
         raise ValueError(
@@ -328,6 +329,13 @@ def build_tree(hardware, *, dram_size, cpu_regs=(0,), psci_method="smc",
         handoff["PackedRAMDisk" if packed_data_ramdisk else "RAMDisk"] = bytes(16)
     if trust_cache:
         handoff["TrustCache"] = bytes(16)
+    # zzy-native-gpu-addon-mount.patch reads the GPU addon from this
+    # /chosen/memory-map/GpuAddon placeholder; DarwinBoot fills it from the
+    # kernel.macho.gpuaddon file next to the kernel, and refuses the kernel as
+    # EFI_COMPROMISED_DATA if the file and the placeholder disagree.  Off by
+    # default so a payload without an addon stays bootable.
+    if gpu_addon:
+        handoff["GpuAddon"] = bytes(16)
     cpus = [Node(f"cpu{index}", {
         # The kernel compares this with strncmp(value, "running", size), so
         # the length is the number of bytes it compares.  A NUL terminated
