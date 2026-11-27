@@ -1,0 +1,2 @@
+PASS: 32 NativeAdreno a650 objects archived
+NativeAdreno symbols used but not built here: __GLOBAL__sub_I_NativeAdrenoAccelerator.cpp
