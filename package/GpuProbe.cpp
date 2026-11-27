@@ -1257,7 +1257,18 @@ bool zapLoad() {
 }
 // The zap shader, then CP_SET_SECURE_MODE(0) through the ring (hw_init after a6xx_zap_shader_init).
 bool leaveSecure() {
-    if (!zapLoad()) return false;
+    // nio-gpu-nozap=1: skip the zap shader PAS13 init_image. On the retail Moto TZ the zap init_image
+    // SMC is refused (run-821 ZAP stopped step3 init ffcfffbb, secure0), yet run-820 proved the CP
+    // already runs in non-secure mode (CP ok step7 marker a6500c0d, hwfault0). The zap shader only
+    // authenticates the secure->non-secure exit; when the GPU is already non-secure it is redundant,
+    // so go straight to CP_SET_SECURE_MODE(0) through the ring and let the IRQ + publication proceed.
+    unsigned nozap = 0;
+    PE_parse_boot_argn("nio-gpu-nozap", &nozap, sizeof nozap);
+    if (nozap) {
+        zapRow("skipped nozap");
+    } else if (!zapLoad()) {
+        return false;
+    }
     native_gpu_step = 135;
     uint32_t words[2] = {}, fence = 0, seen = 0;
     if (AdrenoPM4Type7(0x66, 1, &words[0]) != AdrenoPM4Success || gRing->submit(words, 2, &fence)) {zapRow("submit"); return false;}
