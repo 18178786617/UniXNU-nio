@@ -1,0 +1,283 @@
+name: NIO GPU Addon (iOS 17 Turnip + AdrenoMetal)
+
+# Builds the Phase 4b userspace 3D Metal addon for TB-J716F (Adreno 650 v2.0,
+# iPadOS 17.7.11 / arm64-apple-ios17.0) from pinned upstream UniXNU, Mesa Turnip
+# (freedreno Darwin KMD backend), and metal2vulkan translator sources.
+# Contains zero Apple IPSW content, zero OEM firmware, and zero device secrets.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nio-gpu-addon.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nio-gpu-addon-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-gpu-addon:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout UniXNU core (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: 8542980d02b4d2cc5c32ee3542de1760b2562aac
+          path: UniXNU
+
+      - name: Initialize required GPU submodules
+        working-directory: UniXNU
+        run: |
+          git submodule update --init --depth 1 \
+            drivers/Adreno740 \
+            drivers/AdrenoMetal \
+            drivers/GopFramebuffer \
+            kits/AdrenoPM4
+
+      - name: Install build toolchain (LLVM, shaders, Bison, Ninja, Rust 1.98.0)
+        run: |
+          brew install llvm glslang shaderc spirv-tools bison ninja cmake rustup
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+            echo "/opt/homebrew/opt/rustup/bin"
+          } >> "$GITHUB_PATH"
+          export PATH="/opt/homebrew/opt/rustup/bin:/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/bison/bin:$HOME/.cargo/bin:$PATH"
+          rustup toolchain install 1.98.0 --profile minimal --target aarch64-apple-ios
+          for tool in clang xcrun codesign llvm-as glslangValidator glslc spirv-val ninja cmake bison cargo; do
+            command -v "$tool" >/dev/null || { echo "Missing tool: $tool" >&2; exit 1; }
+          done
+          xcrun --sdk iphoneos --show-sdk-path
+          llvm-as --version | head -n 2
+          cargo +1.98.0 --version
+
+      - name: Checkout and patch pinned Mesa and metal2vulkan sources
+        working-directory: UniXNU
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+
+          root = Path.cwd()
+          pins = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
+          mesa_dir = root / '.cache/mesa-work'
+          mesa_dir.mkdir(parents=True, exist_ok=True)
+          subprocess.run(['git', 'init', '-q', str(mesa_dir)], check=True)
+          mirror = pins['mesa'].get('mirror', pins['mesa']['repository'])
+          subprocess.run(['git', '-C', str(mesa_dir), 'fetch', '--depth=1', mirror, pins['mesa']['commit']], check=True)
+          subprocess.run(['git', '-C', str(mesa_dir), 'checkout', '--detach', 'FETCH_HEAD'], check=True)
+          for patch in pins['patches']:
+              subprocess.run(['git', '-C', str(mesa_dir), 'apply', str(root / patch)], check=True)
+          print('PASS: Mesa checked out and patched:', pins['mesa']['commit'][:12])
+
+          m2v = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())['translator']
+          m2v_dir = root / '.cache/gpu-reference/metal2vulkan'
+          m2v_dir.mkdir(parents=True, exist_ok=True)
+          subprocess.run(['git', 'init', '-q', str(m2v_dir)], check=True)
+          subprocess.run(['git', '-C', str(m2v_dir), 'fetch', '--depth=1', m2v['repository'], m2v['commit']], check=True)
+          subprocess.run(['git', '-C', str(m2v_dir), 'checkout', '--detach', 'FETCH_HEAD'], check=True)
+          print('PASS: metal2vulkan checked out:', m2v['commit'][:12])
+          PY
+
+      - name: Create Meson Python virtualenv
+        working-directory: UniXNU
+        run: |
+          python3 -m venv .cache/mesa-venv
+          .cache/mesa-venv/bin/python -m pip install --upgrade pip
+          .cache/mesa-venv/bin/python -m pip install -r scripts/requirements-adreno-compiler.txt
+
+      - name: Build Mesa Turnip (libvulkan_freedreno.dylib for arm64-apple-ios17.0)
+        working-directory: UniXNU
+        run: |
+          python3 scripts/build-turnip-darwin.py --target ios
+          ls -lh build/mesa-tu-ios/src/freedreno/vulkan/libvulkan_freedreno.dylib
+
+      - name: Cache Cargo registry and prebuilt Rust Metal bridge
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            UniXNU/build/adreno-metal-bridge/ios
+          key: nio-gpu-bridge-${{ runner.os }}-1.98.0-8542980d-thin-v1
+          restore-keys: |
+            nio-gpu-bridge-${{ runner.os }}-1.98.0-8542980d-
+            nio-gpu-cargo-${{ runner.os }}-1.98.0-
+
+      - name: Build NativeAdrenoMetal.bundle + metal2vulkan bridge + adrenoprobed (iOS 17)
+        working-directory: UniXNU
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          # 1. Guard iPadOS 27 (24A446) arm64e ptrauth / hardcoded QuartzCore offsets for arm64-apple-ios17.0.
+          p = Path('drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm')
+          txt = p.read_text()
+          old = "#if !TARGET_OS_OSX\n        // The stored option values and the framebuffer branch are addresses of iPadOS 27's QuartzCore (24A446)."
+          new = "#if !TARGET_OS_OSX && __has_feature(ptrauth_calls)\n        // The stored option values and the framebuffer branch are addresses of iPadOS 27's QuartzCore (24A446)."
+          assert old in txt, 'Expected iPadOS 27 QuartzCore block not found in NativeAdrenoMetalPlugin.mm'
+          p.write_text(txt.replace(old, new, 1))
+          print('PASS: Guarded iPadOS 27 (24A446) ptrauth/QuartzCore block for arm64-apple-ios17.0')
+
+          # 2. Generate and register patch 0065 for metal2vulkan-runtime iOS target:
+          #    - copied.rs: add #[cfg(target_os = "ios")] read_pages() via vm_read_overwrite
+          #    - host_memory.rs: enable mach_vm_region mapped_writable / reachable_now / mapped_with on iOS
+          m2v = Path('.cache/gpu-reference/metal2vulkan')
+          patches_dir = Path('drivers/AdrenoMetal/bridge/patches')
+          for name in (
+              '0063-main-optimizations-on-development-46e7cc96.patch',
+              '0064-copies-leave-unreachable-pages-alone.patch',
+          ):
+              subprocess.run(['git', '-C', str(m2v), 'apply', str((patches_dir / name).resolve())], check=True)
+          subprocess.run(['git', '-C', str(m2v), 'add', '-A'], check=True)
+
+          copied_rs = m2v / 'crates/metal2vulkan-runtime/src/copied.rs'
+          c_txt = copied_rs.read_text()
+          anchor = '/// [`read_pages`] on macOS.\n#[cfg(target_os = "macos")]'
+          assert anchor in c_txt, 'Expected read_pages macOS block not found in copied.rs'
+          ios_read_pages = (
+              '/// [`read_pages`] on iOS (`vm_read_overwrite`, 64-bit arm64 ABI).\n'
+              '#[cfg(target_os = "ios")]\n'
+              'pub(crate) fn read_pages(pages: NonNull<u8>, into: &mut [u8]) -> bool {\n'
+              '    unsafe extern "C" {\n'
+              '        static mach_task_self_: libc::mach_port_t;\n'
+              '        fn vm_read_overwrite(\n'
+              '            target_task: libc::vm_map_t,\n'
+              '            address: usize,\n'
+              '            size: usize,\n'
+              '            data: usize,\n'
+              '            outsize: *mut usize,\n'
+              '        ) -> libc::kern_return_t;\n'
+              '    }\n'
+              '    let mut read: usize = 0;\n'
+              '    let answer = unsafe {\n'
+              '        vm_read_overwrite(\n'
+              '            mach_task_self_,\n'
+              '            pages.as_ptr() as usize,\n'
+              '            into.len(),\n'
+              '            into.as_mut_ptr() as usize,\n'
+              '            &mut read,\n'
+              '        )\n'
+              '    };\n'
+              '    answer == libc::KERN_SUCCESS && read == into.len()\n'
+              '}\n\n'
+          )
+          copied_rs.write_text(c_txt.replace(anchor, ios_read_pages + anchor, 1))
+
+          host_mem_rs = m2v / 'crates/metal2vulkan-runtime/src/host_memory.rs'
+          h_txt = host_mem_rs.read_text()
+          repls = [
+              (
+                  '/// [`mapped_writable`] on macOS ([`mapped_with`]).\n#[cfg(target_os = "macos")]',
+                  '/// [`mapped_writable`] on macOS and iOS ([`mapped_with`]).\n#[cfg(any(target_os = "macos", target_os = "ios"))]',
+              ),
+              (
+                  '#[cfg(target_os = "macos")]\npub(super) fn reachable_now(',
+                  '#[cfg(any(target_os = "macos", target_os = "ios"))]\npub(super) fn reachable_now(',
+              ),
+              (
+                  '#[cfg(not(target_os = "macos"))]\npub(super) fn reachable_now(',
+                  '#[cfg(not(any(target_os = "macos", target_os = "ios")))]\npub(super) fn reachable_now(',
+              ),
+              (
+                  '#[cfg(target_os = "macos")]\nfn mapped_with(',
+                  '#[cfg(any(target_os = "macos", target_os = "ios"))]\nfn mapped_with(',
+              ),
+              (
+                  '#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]\npub(super) fn mapped_writable(',
+                  '#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", windows)))]\npub(super) fn mapped_writable(',
+              ),
+          ]
+          for old_s, new_s in repls:
+              assert old_s in h_txt, f'Expected block not found in host_memory.rs: {old_s!r}'
+              h_txt = h_txt.replace(old_s, new_s, 1)
+          host_mem_rs.write_text(h_txt)
+
+          patch_out = patches_dir / '0065-ios-copied-and-host-memory.patch'
+          diff = subprocess.check_output(['git', '-C', str(m2v), 'diff'], text=True)
+          assert diff.strip(), 'Generated 0065 patch is empty'
+          patch_out.write_text(diff)
+          subprocess.run(['git', '-C', str(m2v), 'reset', '--hard', '-q', 'HEAD'], check=True)
+          subprocess.run(['git', '-C', str(m2v), 'clean', '-fdq'], check=True)
+
+          bridge_py = Path('scripts/build-adreno-metal-bridge.py')
+          b_txt = bridge_py.read_text()
+          b_old = "    '0064-copies-leave-unreachable-pages-alone.patch']]"
+          b_new = "    '0064-copies-leave-unreachable-pages-alone.patch',\n    '0065-ios-copied-and-host-memory.patch']]"
+          assert b_old in b_txt, 'Expected PATCHES entry not found in build-adreno-metal-bridge.py'
+          b_txt = b_txt.replace(b_old, b_new, 1)
+          lto_old = "'[profile.release]', 'panic = \"unwind\"', 'debug = 1', 'lto = \"fat\"', 'codegen-units = 1', '',"
+          lto_new = "'[profile.release]', 'panic = \"unwind\"', 'debug = 1', 'lto = \"thin\"', 'codegen-units = 4', '',"
+          assert lto_old in b_txt, 'Expected release LTO profile not found in build-adreno-metal-bridge.py'
+          b_txt = b_txt.replace(lto_old, lto_new, 1)
+          bridge_py.write_text(b_txt)
+          print('PASS: Generated/registered 0065-ios-copied-and-host-memory.patch and enabled thin LTO for CI runner')
+
+          # 3. On arm64-apple-ios17.0, ld with -undefined dynamic_lookup emits classic LC_DYLD_INFO_ONLY
+          #    instead of LC_DYLD_CHAINED_FIXUPS; make the optional weak-import self-bind step skip cleanly.
+          sb_py = Path('scripts/macho-self-bind-weak-imports.py')
+          sb_txt = sb_py.read_text()
+          sb_old = "if fixups is None:\n    sys.exit(path + ': no chained fixups')"
+          sb_new = "if fixups is None:\n    print(path + ': no chained fixups (classic LC_DYLD_INFO_ONLY); skipping self-bind')\n    sys.exit(0)"
+          assert sb_old in sb_txt, 'Expected fixups check not found in macho-self-bind-weak-imports.py'
+          sb_py.write_text(sb_txt.replace(sb_old, sb_new, 1))
+          print('PASS: Allowed classic LC_DYLD_INFO_ONLY in macho-self-bind-weak-imports.py for arm64-apple-ios17.0')
+          PY
+          python3 scripts/build-adreno-metal-plugin.py --target ios --no-replay --reuse-bridge || {
+            echo "=== tail build-ios.log ==="
+            tail -n 80 build/adreno-metal-bridge/build-ios.log 2>/dev/null || true
+            exit 1
+          }
+          ls -lh build/adreno-metal-plugin/NativeAdrenoMetal.bundle/
+          cat build/adreno-metal-plugin/trust.json
+
+      - name: Pack NGPUADD2 GPU addons (no-daemon and with-daemon variants)
+        working-directory: UniXNU
+        run: |
+          mkdir -p out/nio-gpu-addon
+          python3 scripts/make-gpu-addon.py --publish --no-daemon out/nio-gpu-addon/gpuaddon-nodaemon.bin
+          python3 scripts/make-gpu-addon.py --publish out/nio-gpu-addon/gpuaddon-with-daemon.bin
+          cp build/adreno-metal-plugin/trust.json out/nio-gpu-addon/trust.json
+          cp build/adreno-metal-plugin/NativeAdrenoMetal.bundle/gpu-build.json out/nio-gpu-addon/gpu-build.json
+          (cd out/nio-gpu-addon && shasum -a 256 gpuaddon-*.bin trust.json gpu-build.json > SHA256SUMS.txt)
+          cat out/nio-gpu-addon/SHA256SUMS.txt
+          ls -lh out/nio-gpu-addon/
+
+      - name: Publish NIO GPU addon to ci-gpuaddon branch
+        run: |
+          set -e
+          staging=$(mktemp -d)
+          cp UniXNU/out/nio-gpu-addon/gpuaddon-nodaemon.bin \
+             UniXNU/out/nio-gpu-addon/gpuaddon-with-daemon.bin \
+             UniXNU/out/nio-gpu-addon/trust.json \
+             UniXNU/out/nio-gpu-addon/gpu-build.json \
+             UniXNU/out/nio-gpu-addon/SHA256SUMS.txt "$staging/"
+          cd "$staging"
+          git init -q
+          git config user.name "nio-ci"
+          git config user.email "nio-ci@users.noreply.github.com"
+          git add -A
+          git commit -qm "nio gpuaddon build ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/ci-gpuaddon/latest
+
+      - name: Upload NIO iOS 17 GPU addon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nio-gpu-addon-ios17
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            UniXNU/out/nio-gpu-addon/gpuaddon-nodaemon.bin
+            UniXNU/out/nio-gpu-addon/gpuaddon-with-daemon.bin
+            UniXNU/out/nio-gpu-addon/trust.json
+            UniXNU/out/nio-gpu-addon/gpu-build.json
+            UniXNU/out/nio-gpu-addon/SHA256SUMS.txt
