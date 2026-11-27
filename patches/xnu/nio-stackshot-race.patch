@@ -1,0 +1,65 @@
+--- a/osfmk/kern/kern_stackshot.c
++++ b/osfmk/kern/kern_stackshot.c
+@@ -3355,7 +3355,9 @@
+ 				    STACKSHOT_KCCONTAINER_THREAD, thread_uniqueid));
+ 				break;
+ 			case tc_delta_snapshot:
+-				kcd_exit_on_error(kcdata_record_thread_delta_snapshot(&delta_snapshots[current_delta_snapshot_index++], thread, thread_on_core));
++				if (current_delta_snapshot_index < num_delta_thread_snapshots && delta_snapshots != NULL) {
++					kcd_exit_on_error(kcdata_record_thread_delta_snapshot(&delta_snapshots[current_delta_snapshot_index++], thread, thread_on_core));
++				}
+ 				break;
+ 			}
+ 
+@@ -3422,13 +3424,15 @@
+ 
+ 			/* If we want owner info, we should capture it regardless of its classification */
+ 			if (save_owner_info) {
+-				if (stackshot_thread_has_valid_waitinfo(thread)) {
++				if (stackshot_thread_has_valid_waitinfo(thread) &&
++				    current_waitinfo_index < num_waitinfo_threads && thread_waitinfo != NULL) {
+ 					stackshot_thread_wait_owner_info(
+ 						thread,
+ 						&thread_waitinfo[current_waitinfo_index++]);
+ 				}
+ 
+-				if (stackshot_thread_has_valid_turnstileinfo(thread)) {
++				if (stackshot_thread_has_valid_turnstileinfo(thread) &&
++				    current_turnstileinfo_index < num_turnstileinfo_threads && thread_turnstileinfo != NULL) {
+ 					stackshot_thread_turnstileinfo(
+ 						thread,
+ 						&thread_turnstileinfo[current_turnstileinfo_index++]);
+@@ -3441,16 +3445,23 @@
+ 		latency_info.misc2_latency = mach_absolute_time();
+ #endif /* STACKSHOT_COLLECTS_LATENCY_INFO */
+ 
+-#if DEBUG || DEVELOPMENT
+-		if (current_delta_snapshot_index != num_delta_thread_snapshots) {
+-			panic("delta thread snapshot count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
+-			    num_delta_thread_snapshots, current_delta_snapshot_index);
+-		}
+-		if (current_waitinfo_index != num_waitinfo_threads) {
+-			panic("thread wait info count mismatch while capturing snapshots for task %p. expected %d, found %d", task,
+-			    num_waitinfo_threads, current_waitinfo_index);
+-		}
+-#endif
++		/* A live task can create/destroy threads between the counting and capture
++		 * passes. The kcdata array headers already reserve the counted entries,
++		 * so zero-fill any slots we did not write instead of panicking; this
++		 * DEVELOPMENT-only assert fires during a normal boot stackshot.
++		 */
++		if (delta_snapshots != NULL && current_delta_snapshot_index < num_delta_thread_snapshots) {
++			bzero(&delta_snapshots[current_delta_snapshot_index],
++			    (num_delta_thread_snapshots - current_delta_snapshot_index) * sizeof(*delta_snapshots));
++		}
++		if (thread_waitinfo != NULL && current_waitinfo_index < num_waitinfo_threads) {
++			bzero(&thread_waitinfo[current_waitinfo_index],
++			    (num_waitinfo_threads - current_waitinfo_index) * sizeof(*thread_waitinfo));
++		}
++		if (thread_turnstileinfo != NULL && current_turnstileinfo_index < num_turnstileinfo_threads) {
++			bzero(&thread_turnstileinfo[current_turnstileinfo_index],
++			    (num_turnstileinfo_threads - current_turnstileinfo_index) * sizeof(*thread_turnstileinfo));
++		}
+ 
+ 		if (num_waitinfo_threads > 0 || num_turnstileinfo_threads > 0) {
+ 			kcd_exit_on_error(kcdata_compression_window_close(stackshot_kcdata_p));

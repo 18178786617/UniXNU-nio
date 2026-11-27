@@ -20,3 +20,4 @@
 gpu/gpu-probe-start.patch
 exec-wakeup-order.patch
 nio-exit-record.patch
+nio-stackshot-race.patch
