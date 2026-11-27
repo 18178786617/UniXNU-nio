@@ -11,6 +11,9 @@
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <string.h>
 #include <libkern/c++/OSSharedPtr.h>
+#include <libkern/c++/OSSymbol.h>
+#include <libkern/c++/OSMetaClass.h>
+#include <libkern/OSKextLib.h>
 #include <kern/task.h>
 #include <kern/thread.h>
 #include <pexpert/pexpert.h>
@@ -744,7 +747,7 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
         s.reply.writeStr("Commands: ping features info smp uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
@@ -775,6 +778,30 @@ static void handleCommand(TerminalSession &s, const char *raw) {
             snprintf(buf, sizeof(buf), "[usb] SMP[%u] step=%u mpidr=%08x seen=%08x fail=%u psci_rc=%d\r\n", i, st, mp, sm, fa, (int)rc);
             s.reply.writeStr(buf);
         }
+    } else if (strEq(raw, "metal")) {
+        // Runtime probe of the Metal / IOAccelerator class availability (the mode12 gate).
+        // Tells us whether IOGPUFamily / IOAcceleratorES are loadable/present at all, which
+        // decides whether the desktop Metal work needs donor kext bodies or just a load+compile.
+        const OSReturn krc = OSKextLoadKextWithIdentifier("com.apple.iokit.IOGPUFamily");
+        snprintf(buf, sizeof(buf), "[usb] METAL: IOGPUFamily load rc=%d\r\n", (int)krc);
+        s.reply.writeStr(buf);
+        static const char *mnames[] = {"IOAcceleratorES", "IOAccelerator", "IOGPUDevice",
+                                       "AGXAccelerator", "IOGPUFamily", "NativeAdreno"};
+        for (unsigned i = 0; i < sizeof(mnames) / sizeof(mnames[0]); ++i) {
+            const OSSymbol *sym = OSSymbol::withCString(mnames[i]);
+            const OSMetaClass *mc = sym ? OSMetaClass::getMetaClassWithName(sym) : nullptr;
+            snprintf(buf, sizeof(buf), "[usb] METAL: class %s = %s size=%u\r\n",
+                     mnames[i], mc ? "present" : "absent", mc ? mc->getClassSize() : 0u);
+            s.reply.writeStr(buf);
+            if (sym) sym->release();
+        }
+        OSDictionary *mm = IOService::matching("IOAccelerator");
+        OSIterator *it = mm ? IOService::getMatchingServices(mm) : nullptr;
+        unsigned mn = 0;
+        if (it) { while (it->getNextObject()) ++mn; it->release(); }
+        if (mm) mm->release();
+        snprintf(buf, sizeof(buf), "[usb] METAL: IOAccelerator services=%u\r\n", mn);
+        s.reply.writeStr(buf);
     } else if (strEq(raw, "bootargs")) {
         snprintf(buf, sizeof(buf), "[usb] bootargs=%s\r\n", PE_boot_args());
         s.reply.writeStr(buf);
