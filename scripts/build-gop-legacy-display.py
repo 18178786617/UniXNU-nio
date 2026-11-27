@@ -142,6 +142,53 @@ for i in range(168, 358):
 
 header += '};\nstatic_assert(sizeof(IOMobileFramebufferLegacy)==0x18a0,"Actual original instance extent");\n'
 (OUT / 'OriginalLegacyFramebufferABI.h').write_text(header)
+# nio's DarwinBoot marks the GOP framebuffer base with bit0 (physical-address
+# marker). PE_state.video keeps the marked value, so the mapped destination in
+# the CPU-copy swap path is 0x...001 -- not 4-byte aligned. The stock
+# fill_pixels() rejects that with kIOReturnBadArgument (0xe00002c2). We cannot
+# write PE_state.video (now __DATA_CONST, read-only after bsd_init), so make
+# the pixel writer alignment-safe with byte stores instead. This patches only
+# the compiled copy in the CI tree; the upstream source is untouched.
+req = ROOT / 'drivers/GopFramebuffer/NativeLegacyRequest.h'
+req_src = req.read_text()
+req_old = """static inline int native_legacy_fill_pixels(volatile void *destination,
+    uint64_t destinationBytes, uint64_t destinationStride,
+    uint32_t width, uint32_t height, uint32_t value) {
+    uintptr_t dst=(uintptr_t)destination;
+    if (!dst || (dst&3) || (destinationStride&3) ||
+        !native_legacy_surface_bounds(width,height,destinationStride,destinationBytes,destinationBytes) ||
+        destinationBytes>UINTPTR_MAX || dst>UINTPTR_MAX-destinationBytes) return 0;
+    for (uint32_t row=0;row<height;++row) {
+        volatile uint32_t *out=(volatile uint32_t *)(dst+row*destinationStride);
+        for (uint32_t column=0;column<width;++column)out[column]=value;
+    }
+    return 1;
+}"""
+req_new = """static inline int native_legacy_fill_pixels(volatile void *destination,
+    uint64_t destinationBytes, uint64_t destinationStride,
+    uint32_t width, uint32_t height, uint32_t value) {
+    uintptr_t dst=(uintptr_t)destination;
+    // nio: GOP base carries DarwinBoot's bit0 physical marker; use byte stores.
+    if (!dst || (destinationStride&3) ||
+        !native_legacy_surface_bounds(width,height,destinationStride,destinationBytes,destinationBytes) ||
+        destinationBytes>UINTPTR_MAX || dst>UINTPTR_MAX-destinationBytes) return 0;
+    const uint8_t b0=(uint8_t)(value&0xff),b1=(uint8_t)((value>>8)&0xff),
+                  b2=(uint8_t)((value>>16)&0xff),b3=(uint8_t)((value>>24)&0xff);
+    for (uint32_t row=0;row<height;++row) {
+        volatile uint8_t *out=(volatile uint8_t *)(dst+row*destinationStride);
+        for (uint32_t column=0;column<width;++column) {
+            volatile uint8_t *p=out+(uint64_t)column*4;
+            p[0]=b0;p[1]=b1;p[2]=b2;p[3]=b3;
+        }
+    }
+    return 1;
+}"""
+if req_src.count(req_old)==1:
+    req.write_text(req_src.replace(req_old,req_new,1))
+    print('nio: patched NativeLegacyRequest.h fill_pixels to byte stores')
+else:
+    require('nio: GOP base carries DarwinBoot' in req_src, 'nio byte-store patch anchor (fill_pixels)')
+    print('nio: NativeLegacyRequest.h already byte-store patched')
 print(run(['python3', ROOT / 'scripts/build-arm-driver.py', 'NativeLegacyDisplay'], text=True), end='')
 obj = OUT / 'NativeLegacyDisplay.o'
 raw = obj.read_bytes()
