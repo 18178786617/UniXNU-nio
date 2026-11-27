@@ -1,0 +1,57 @@
+{
+  "metal_source_sha256": "977d855fb7bd7c5167935e43bd00d870ea270a5a3bdf5d4f9bf65f0a1aa91e03",
+  "target": "ios",
+  "turnip": {
+    "source_id": "f8ff82b7cf0969fa50202c459fd9f177eebea564f12f60ed8de82216cf29e246",
+    "profile": {
+      "mesa_revision": "85fda3b36405bcaea8bffc64aa4f2651dc90770d",
+      "target": "ios",
+      "source_diff_sha256": "f8ee61992c3f7017832ee02360f3ab1bfdf7da0f3a5ea995ac8c29e1c8e8551f",
+      "extra_sources": {
+        "src/freedreno/vulkan/tu_builtin_cache.cc": "ec56464c03c9a7e9dda8ca6fd7887445c7c9a277c9aca7654ba07fef3671bfbd",
+        "src/freedreno/vulkan/tu_builtin_cache.h": "4019dbc884f9a8c51d3ad6d71f46738303e5888b4ee5e65c1c820ec77977a151",
+        "src/freedreno/vulkan/tu_frame_diagnostic.h": "75fd19aca698ee89eedc5e0478d6d222870dcb58397f4aabe3d17706aefd1f2b",
+        "src/freedreno/vulkan/tu_knl_darwin.cc": "1b9e12ca533f416aae350816d3b1e61c6bac4e262ee35fd5398cc9094f88942c"
+      },
+      "patch_guard_sha256": "60f03967f4d2b56807b7b3d984181792cb810abbbc6392161d4c82b03d4433a7",
+      "compiler": "Apple clang version 17.0.0 (clang-1700.0.13.5)\nTarget: arm64-apple-darwin24.6.0\nThread model: posix\nInstalledDir: /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "options": [
+        "-Dgallium-drivers=",
+        "-Dvulkan-drivers=freedreno",
+        "-Dfreedreno-kmds=darwin",
+        "-Dtu-darwin-abi-dir=/Users/runner/work/UniXNU-nio/UniXNU-nio/UniXNU/drivers/Adreno740",
+        "-Dplatforms=macos",
+        "-Dglx=disabled",
+        "-Degl=disabled",
+        "-Dgbm=disabled",
+        "-Dopengl=false",
+        "-Dgles1=disabled",
+        "-Dgles2=disabled",
+        "-Dllvm=disabled",
+        "-Dshared-glapi=disabled",
+        "-Dxmlconfig=disabled",
+        "-Dshader-cache=enabled",
+        "-Dtools=",
+        "-Dbuild-tests=false",
+        "-Dvideo-codecs=",
+        "-Dvulkan-layers=",
+        "-Dlibunwind=disabled",
+        "-Dlmsensors=disabled",
+        "-Dvalgrind=disabled",
+        "-Dexpat=disabled",
+        "-Dzstd=disabled",
+        "-Dbuildtype=release",
+        "-Db_ndebug=true"
+      ],
+      "build_script_sha256": "97ae7fcf7ff3475bb5bee481c1bc3cd3d564927821a21a6472c459a46cf5e294"
+    },
+    "embedded_pack_sha256": null,
+    "builtin_pack_required": false
+  },
+  "component": "c9ebd2fb17253996f0a8d835c9ab7c2f740778e1",
+  "bridge_component": "c9ebd2fb17253996f0a8d835c9ab7c2f740778e1",
+  "runtime_draw_checks": false,
+  "runtime": "4b3d5055929ac62b55626ff0708b4df2",
+  "turnip_uuid": "91924384c739316f85f21a9912dc2d40",
+  "cache_build": "4b3d5055929ac62b55626ff0708b4df2-91924384c739316f85f21a9912dc2d40"
+}

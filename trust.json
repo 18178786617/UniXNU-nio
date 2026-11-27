@@ -1,0 +1,8 @@
+{
+  "cdhash": "6db61a57273fbec94762b34e4f479eab654cdef5",
+  "daemon_cdhash": "d336c367e810268f8a6baa27f70ac49d89701b0f",
+  "turnip_cdhash": "2cc366d70738f160a1ea2c1c4fae28dc5762f8e2",
+  "bundle": "NativeAdrenoMetal.bundle",
+  "executable_bytes": 28463536,
+  "purpose": "owner-built plugin and probe daemon; trusted only through an extra owner trust module"
+}
