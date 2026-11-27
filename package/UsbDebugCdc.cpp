@@ -44,6 +44,7 @@ extern volatile uint32_t native_legacy_init_result __attribute__((weak_import));
 extern volatile uint32_t native_legacy_dt_attached __attribute__((weak_import));
 extern volatile uint32_t native_legacy_registration_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_properties_length __attribute__((weak_import));
+extern char native_legacy_properties[4096] __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_stage __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_ordinal __attribute__((weak_import));
@@ -705,6 +706,21 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_frame_count ? native_legacy_frame_count : 0u,
                  &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "props")) {
+        if (!&native_legacy_properties || !&native_legacy_properties_length) {
+            s.reply.writeStr("[usb] PROPS: unavailable\r\n");
+        } else {
+            const uint32_t len = native_legacy_properties_length;
+            s.reply.writeStr("[usb] PROPS: len=");
+            snprintf(buf, sizeof(buf), "%u\r\n", len); s.reply.writeStr(buf);
+            const uint32_t n = len < 4096 ? len : 4096;
+            for (uint32_t off = 0; off < n; off += 240) {
+                uint32_t take = n - off < 240 ? n - off : 240;
+                s.reply.write("[usb] ", 6);
+                s.reply.write(native_legacy_properties + off, take);
+                s.reply.write("\r\n", 2);
+            }
+        }
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
