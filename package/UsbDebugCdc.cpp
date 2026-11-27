@@ -100,6 +100,12 @@ extern char native_battery_row[120] __attribute__((weak_import));
 extern volatile int native_battery_error __attribute__((weak_import));
 extern volatile unsigned native_battery_published __attribute__((weak_import));
 
+// UFS root/Data diagnostics (N_EXT in the kernel symbol table). Lets the
+// host see whether the persistent Data window is actually open/writable —
+// the missing usermanagerd/lsd/securityd/mobileassetd all depend on Data.
+extern "C" void native_ufs_progress_text(char *out, size_t size) __attribute__((weak_import));
+extern "C" unsigned native_ufs_store_mode(void) __attribute__((weak_import));
+
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_conduit __attribute__((weak_import));
@@ -778,12 +784,41 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         snprintf(buf, sizeof(buf), "[usb]   path=%s\r\n",
                  &native_legacy_reg_path ? native_legacy_reg_path : "-");
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "data.status")) {
+        // Data volume / UFS root diagnostic. A closed or read-only Data window
+        // is the documented cause of usermanagerd/lsd/securityd/mobileassetd
+        // crash-loops that keep SpringBoard on the boot spinner.
+        unsigned mode = &native_ufs_store_mode ? native_ufs_store_mode() : 0u;
+        snprintf(buf, sizeof(buf), "[usb] DATA: store_mode=%u (0=off 1=read 2=read/write)\r\n", mode);
+        s.reply.writeStr(buf);
+        char diag[2600] = {0};
+        if (&native_ufs_progress_text) {
+            native_ufs_progress_text(diag, sizeof(diag));
+            // Emit line by line with CRLF. Split in place so no extra
+            // libc dependency is introduced into this diagnostic path.
+            size_t start = 0;
+            for (size_t i = 0; i < sizeof(diag); ++i) {
+                if (diag[i] == '\n' || diag[i] == '\0') {
+                    snprintf(buf, sizeof(buf), "[usb] DATA %s\r\n", diag + start);
+                    s.reply.writeStr(buf);
+                    if (diag[i] == '\0') { start = sizeof(diag); break; }
+                    diag[i] = '\0';
+                    start = i + 1;
+                }
+            }
+            if (start < sizeof(diag)) {
+                snprintf(buf, sizeof(buf), "[usb] DATA %s\r\n", diag + start);
+                s.reply.writeStr(buf);
+            }
+        } else {
+            s.reply.writeStr("[usb] DATA: native_ufs_progress_text unavailable\r\n");
+        }
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping features info smp uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();
