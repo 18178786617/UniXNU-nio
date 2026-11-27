@@ -65,16 +65,18 @@ def driver_checkout():
 
 driver = driver_checkout()
 
-# nio (817): the GMU icache backing is 128 KiB, not the 16 MiB IOVA window. nio's fragmented DRAM
-# cannot serve a 16 MiB physically contiguous run (cpm_allocate succeeds only at 64-128 KiB here),
-# while the GMU CM3 executes just the ~41 KiB a650_gmu.bin and A650Gmu validate() accepts
-# icache.bytes >= 0x10000. 32 contiguous pages allocate reliably where 4096 never could; the IOVA
-# layout (GmuIcacheIova=0x4000) is unchanged. Idempotent in-place patch of the pinned submodule so
-# CI picks it up without a submodule push (FFT-infra/Adreno650 is read-only to this board).
+# nio (818): the GMU icache backing is 0x154000 (~1.34 MiB, 340 pages), not the 16 MiB default.
+# nio's fragmented DRAM cannot serve a 16 MiB physically contiguous run (cpm_allocate succeeds only
+# at small runs here). The a650_gmu.bin icache data blocks are 0x4000+0x55d0 (main code) and
+# 0x157000+0x398 (a 920 B block at a 1.4 MiB IOVA offset), so the region must reach 0x157398 ->
+# 0x154000 page-aligned is the minimum that AdrenoFirmwarePlanGmu accepts. 340 contiguous pages
+# allocate where 4096 never could; A650Gmu validate() needs only >= 0x10000. IOVA layout unchanged.
+# Idempotent in-place patch of the pinned submodule so CI picks it up without a submodule push
+# (FFT-infra/Adreno650 is read-only to this board).
 _gmu_mem = driver / 'NativeAdrenoGmuMemory.cpp'
 _gmu_txt = _gmu_mem.read_text()
 _gmu_old = 'return {0xffc000,0x4000,0x7000,0x4000,0x4000};'
-_gmu_new = 'return {0x20000,0x4000,0x7000,0x4000,0x4000};'
+_gmu_new = 'return {0x154000,0x4000,0x7000,0x4000,0x4000};'
 if _gmu_old in _gmu_txt:
     _gmu_mem.write_text(_gmu_txt.replace(_gmu_old, _gmu_new))
     print('nio: GMU icache backing patched 16MiB->128KiB')
