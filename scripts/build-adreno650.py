@@ -65,6 +65,22 @@ def driver_checkout():
 
 driver = driver_checkout()
 
+# nio (817): the GMU icache backing is 128 KiB, not the 16 MiB IOVA window. nio's fragmented DRAM
+# cannot serve a 16 MiB physically contiguous run (cpm_allocate succeeds only at 64-128 KiB here),
+# while the GMU CM3 executes just the ~41 KiB a650_gmu.bin and A650Gmu validate() accepts
+# icache.bytes >= 0x10000. 32 contiguous pages allocate reliably where 4096 never could; the IOVA
+# layout (GmuIcacheIova=0x4000) is unchanged. Idempotent in-place patch of the pinned submodule so
+# CI picks it up without a submodule push (FFT-infra/Adreno650 is read-only to this board).
+_gmu_mem = driver / 'NativeAdrenoGmuMemory.cpp'
+_gmu_txt = _gmu_mem.read_text()
+_gmu_old = 'return {0xffc000,0x4000,0x7000,0x4000,0x4000};'
+_gmu_new = 'return {0x20000,0x4000,0x7000,0x4000,0x4000};'
+if _gmu_old in _gmu_txt:
+    _gmu_mem.write_text(_gmu_txt.replace(_gmu_old, _gmu_new))
+    print('nio: GMU icache backing patched 16MiB->128KiB')
+elif _gmu_new not in _gmu_txt:
+    sys.exit('GMU icache anchor not found in %s' % _gmu_mem)
+
 # The three upstream kits this recipe compiles are not copied into the generated tree unless a
 # selected component asks for them, so the directory is an input rather than an assumption:
 # ADRENO650_KITS names it, and a build passes this repository's kits directory.
