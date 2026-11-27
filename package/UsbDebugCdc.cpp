@@ -689,6 +689,7 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         if (&proc_name) proc_name(1, name, (int)sizeof(name));
         snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p pid1=%s\r\n", np, ip, name);
         s.reply.writeStr(buf);
+        // (fresh rebuild 836: ensure the process-name walk is compiled into this kernel)
         // List every live process by walking PIDs with the exported proc_find/
         // proc_name/proc_rele API (no allproc lock, no private layout). The
         // desktop check needs the actual daemon set, not just a count: the
