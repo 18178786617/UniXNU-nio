@@ -1,0 +1,1 @@
+unixnu: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/series:22: patch missing: /Users/runner/work/UniXNU-nio/UniXNU-nio/device/patches/xnu/nio-exit-record.patch
