@@ -47,6 +47,10 @@ extern volatile uint32_t native_legacy_pm_stage __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_calls __attribute__((weak_import));
 extern volatile uint32_t native_legacy_pm_ordinal __attribute__((weak_import));
 extern volatile int native_legacy_pm_status __attribute__((weak_import));
+extern volatile int native_legacy_surface_status __attribute__((weak_import));
+extern volatile uint32_t native_legacy_surface_found __attribute__((weak_import));
+extern volatile uint64_t native_legacy_video_base __attribute__((weak_import));
+extern volatile int native_legacy_meta_status __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
 // Kernel process-state symbols (present in the 17.7.11 symbol table). Read
@@ -653,7 +657,7 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         s.reply.writeStr(buf);
     } else if (strEq(raw, "display2")) {
         snprintf(buf, sizeof(buf),
-                 "[usb] DISP2: init=%u probe=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d\r\n",
+                 "[usb] DISP2: init=%u probe=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d surf=%d/%u meta=%d video=0x%llx\r\n",
                  &native_legacy_init_result ? native_legacy_init_result : 0u,
                  &native_legacy_probe_match ? native_legacy_probe_match : 0u,
                  &native_legacy_start_result ? native_legacy_start_result : 0u,
@@ -663,7 +667,11 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_pm_stage ? native_legacy_pm_stage : 0u,
                  &native_legacy_pm_calls ? native_legacy_pm_calls : 0u,
                  &native_legacy_pm_ordinal ? native_legacy_pm_ordinal : 0u,
-                 &native_legacy_pm_status ? native_legacy_pm_status : -999);
+                 &native_legacy_pm_status ? native_legacy_pm_status : -999,
+                 &native_legacy_surface_status ? native_legacy_surface_status : -999,
+                 &native_legacy_surface_found ? native_legacy_surface_found : 0u,
+                 &native_legacy_meta_status ? native_legacy_meta_status : -999,
+                 &native_legacy_video_base ? (unsigned long long)native_legacy_video_base : 0ULL);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
