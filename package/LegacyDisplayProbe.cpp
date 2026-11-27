@@ -50,6 +50,7 @@ extern "C" {
 volatile uint32_t native_legacy_stage;
 volatile int native_legacy_meta_status = -1;
 volatile uint32_t native_legacy_init_result, native_legacy_start_result, native_legacy_probe_match;
+volatile uint32_t native_legacy_attach_result;
 volatile uint32_t native_legacy_parent_match, native_legacy_object_size, native_legacy_released;
 volatile uint64_t native_legacy_object, native_legacy_nub, native_legacy_workloop;
 volatile uint32_t native_legacy_guard_slot;
@@ -1153,6 +1154,7 @@ void native_legacy_display_late_probe(void) {
 				native_legacy_probe_match = (phase != 4 || dtAttached) && display->probe(nub, &score) == display;
 				if (native_legacy_probe_match) {
 					attached = display->attach(nub);
+					native_legacy_attach_result = attached ? 1u : 2u;
 				}
 				if (attached) {
 					native_legacy_stage = 5;

@@ -38,6 +38,7 @@ extern volatile uint32_t native_legacy_swap_validation_reason __attribute__((wea
 extern volatile int native_legacy_client_pid __attribute__((weak_import));
 extern char native_legacy_client_class[64] __attribute__((weak_import));
 extern volatile uint32_t native_legacy_start_result __attribute__((weak_import));
+extern volatile uint32_t native_legacy_attach_result __attribute__((weak_import));
 extern volatile uint32_t native_legacy_probe_match __attribute__((weak_import));
 extern volatile uint32_t native_legacy_init_result __attribute__((weak_import));
 extern volatile uint32_t native_legacy_dt_attached __attribute__((weak_import));
@@ -670,9 +671,10 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         s.reply.writeStr(buf);
     } else if (strEq(raw, "display2")) {
         snprintf(buf, sizeof(buf),
-                 "[usb] DISP2: init=%u probe=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d surf=%d/%u meta=%d video=0x%llx\r\n",
+                 "[usb] DISP2: init=%u probe=%u attach=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d surf=%d/%u meta=%d video=0x%llx\r\n",
                  &native_legacy_init_result ? native_legacy_init_result : 0u,
                  &native_legacy_probe_match ? native_legacy_probe_match : 0u,
+                 &native_legacy_attach_result ? native_legacy_attach_result : 0u,
                  &native_legacy_start_result ? native_legacy_start_result : 0u,
                  &native_legacy_dt_attached ? native_legacy_dt_attached : 0u,
                  &native_legacy_registration_calls ? native_legacy_registration_calls : 0u,
