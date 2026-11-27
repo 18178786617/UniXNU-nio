@@ -83,6 +83,9 @@ extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import))
 extern "C" uint32_t nprocs __attribute__((weak_import));
 extern "C" void *initproc __attribute__((weak_import));
 extern "C" void proc_name(int pid, char *buf, int buflen) __attribute__((weak_import));
+struct proc;  // forward declaration; proc_t is struct proc *
+extern "C" struct proc *proc_find(int pid) __attribute__((weak_import));
+extern "C" int proc_rele(struct proc *) __attribute__((weak_import));
 
 extern volatile unsigned native_touch_stage __attribute__((weak_import));
 extern volatile unsigned native_touch_stroke_count __attribute__((weak_import));
@@ -686,6 +689,34 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         if (&proc_name) proc_name(1, name, (int)sizeof(name));
         snprintf(buf, sizeof(buf), "[usb] PROCS: nprocs=%u initproc=%p pid1=%s\r\n", np, ip, name);
         s.reply.writeStr(buf);
+        // List every live process by walking PIDs with the exported proc_find/
+        // proc_name/proc_rele API (no allproc lock, no private layout). The
+        // desktop check needs the actual daemon set, not just a count: the
+        // official j716f check requires launchd/backboardd/SpringBoard/
+        // runningboardd/usermanagerd/lsd/securityd/mobileassetd/logd.
+        if (&proc_find && &proc_rele && &proc_name) {
+            static const char *const kRequired[] = {
+                "launchd", "backboardd", "SpringBoard", "runningboardd",
+                "usermanagerd", "lsd", "securityd", "mobileassetd", "logd"};
+            unsigned found = 0, listed = 0;
+            for (int pid = 1; pid <= 2048 && listed < np + 64u; ++pid) {
+                struct proc *p = proc_find(pid);
+                if (!p) continue;
+                char nm[32] = {0};
+                proc_name(pid, nm, (int)sizeof(nm));
+                proc_rele(p);
+                if (!nm[0]) continue;
+                ++listed;
+                for (const char *req : kRequired)
+                    if (!strcmp(nm, req)) { ++found; break; }
+                snprintf(buf, sizeof(buf), "[usb] PROC %d %s\r\n", pid, nm);
+                s.reply.writeStr(buf);
+            }
+            snprintf(buf, sizeof(buf), "[usb] PROCS: listed=%u required=%u/9\r\n", listed, found);
+            s.reply.writeStr(buf);
+        } else {
+            s.reply.writeStr("[usb] PROCS: proc_find/name/rele unavailable\r\n");
+        }
     } else if (strEq(raw, "display2")) {
         snprintf(buf, sizeof(buf),
                  "[usb] DISP2: init=%u probe=%u attach=%u start=%u dt=%u reg=%u props=%u pm_stage=%u pm_calls=%u pm_ord=%u pm_status=%d surf=%d/%u meta=%d video=0x%llx\r\n",
