@@ -115,6 +115,11 @@ sources += [driver / (name + '.cpp') for name in (
     'NativeAdrenoMemory', 'NativeAdrenoCpu', 'NativeAdrenoVm', 'NativeAdrenoRing', 'NativeAdrenoSubmit', 'NativeAdrenoTimer',
     'NativeAdrenoUserClient', 'NativeAdrenoPublish', 'NativeAdrenoCpInit', 'NativeAdrenoIrq',
     'NativeAdrenoGmuContext', 'NativeAdrenoGmuMemory')]
+# nio 828: the staged Metal accelerator IS built now. 827's runtime metal probe proved the
+# prelinked IOGPUFamily kext already carries IOAcceleratorES (136 B) and IOGPUDevice, so the
+# original base class exists at link/run time; only the board's AGXAccelerator subclass and
+# the probe's mode-12 path were missing. Its ABI header lives at package/AdrenoMetal.
+sources += [driver / 'NativeAdrenoAccelerator.cpp']
 
 objects = []
 
@@ -184,10 +189,10 @@ for source in sources:
     command += ['-I', str(KITS / 'AdrenoPM4'), '-I', str(KITS / 'ArmSmmu4K'), '-I', str(KITS / 'AdrenoFirmware'),
                 '-I', str(PIPA.parent), '-I', str(ROOT / '.cache/xnu-work/osfmk'),
                 '-I', str(driver), '-I', str(PACKAGE), '-Wall', '-Wextra', '-Werror'] + warning_flags
-    # Mode 12's staged accelerator is not built on this board (see the header), so the probe's
-    # accelerator path stays compiled out.
+    # nio 828: mode 12 enabled. The prelinked IOGPUFamily supplies IOAcceleratorES (136 B),
+    # verified at runtime by the 827 `metal` probe, so the staged accelerator can link and run.
     if source.name == 'GpuProbe.cpp':
-        command.append('-DPIPA_GPU_ACCELERATOR=0')
+        command.append('-DPIPA_GPU_ACCELERATOR=1')
     result = subprocess.run(command, cwd=recipe['directory'], capture_output=True, text=True)
     # Every source is compiled, and every failure is kept: one CI round then reports the
     # whole set instead of only the first one, which is what a single -Werror in one
