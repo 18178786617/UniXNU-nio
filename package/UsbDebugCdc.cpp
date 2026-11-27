@@ -93,6 +93,13 @@ extern volatile int native_battery_error __attribute__((weak_import));
 extern volatile unsigned native_battery_published __attribute__((weak_import));
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_conduit __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_step[8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_mpidr[8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_seen_mpidr[8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_smp_fail[8] __attribute__((weak_import));
+extern volatile int32_t armcpu_smp_psci_rc[8] __attribute__((weak_import));
 }
 
 struct UsbPlaceTag {};
@@ -737,9 +744,9 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs display2 diag ping status info uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp uptime bootargs display usb touch gpu.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping features info uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping features info smp uptime bootargs status display usb gpu.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();
@@ -751,6 +758,21 @@ static void handleCommand(TerminalSession &s, const char *raw) {
             snprintf(buf, sizeof(buf), "[usb] TOUCH: stage=%u strokes=%u %s\r\n",
                      native_touch_stage, &native_touch_stroke_count ? native_touch_stroke_count : 0u,
                      &native_touch_rows ? native_touch_rows[0] : "");
+            s.reply.writeStr(buf);
+        }
+    } else if (strEq(raw, "smp")) {
+        const uint32_t req = &armcpu_smp_requested ? armcpu_smp_requested : 0u;
+        const uint32_t run = &armcpu_smp_running ? armcpu_smp_running : 0u;
+        const uint32_t con = &armcpu_smp_conduit ? armcpu_smp_conduit : 0u;
+        snprintf(buf, sizeof(buf), "[usb] SMP requested=%u running=%u conduit=%u\r\n", req, run, con);
+        s.reply.writeStr(buf);
+        for (unsigned i = 0; i < 8; ++i) {
+            const uint32_t st = &armcpu_smp_step ? armcpu_smp_step[i] : 0u;
+            const uint32_t mp = &armcpu_smp_mpidr ? armcpu_smp_mpidr[i] : 0u;
+            const uint32_t sm = &armcpu_smp_seen_mpidr ? armcpu_smp_seen_mpidr[i] : 0u;
+            const uint32_t fa = &armcpu_smp_fail ? armcpu_smp_fail[i] : 0u;
+            const int32_t rc = &armcpu_smp_psci_rc ? armcpu_smp_psci_rc[i] : 0;
+            snprintf(buf, sizeof(buf), "[usb] SMP[%u] step=%u mpidr=%08x seen=%08x fail=%u psci_rc=%d\r\n", i, st, mp, sm, fa, (int)rc);
             s.reply.writeStr(buf);
         }
     } else if (strEq(raw, "bootargs")) {
