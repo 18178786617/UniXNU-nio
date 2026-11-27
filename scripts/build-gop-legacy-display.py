@@ -70,7 +70,7 @@ struct OriginalLegacySwapRequest;
 struct OriginalLegacyStateRequest {uint32_t skipRequested,requested,skipPowered,powered;uint8_t changed;uint8_t pad[11];};
 static constexpr unsigned kLegacyVsyncClients=5592;
 static constexpr unsigned kRequestRect0=17,kRequestRect1=81,kRequestMasks=792,kRequestOptions=804,kRequestDims=816,kRequestSurfaces=2624;
-#define NATIVE_LEGACY_LEAVES(LEAF) LEAF(211) LEAF(245) LEAF(246) LEAF(306) LEAF(307) LEAF(338) LEAF(345)
+#define NATIVE_LEGACY_LEAVES(LEAF) LEAF(211) LEAF(245) LEAF(246) LEAF(306) LEAF(307) LEAF(338)
 class IOMobileFramebufferLegacy : public IOService {
  OSDeclareAbstractStructors(IOMobileFramebufferLegacy)
  unsigned char originalPrivate[0x18a0-sizeof(IOService)];
@@ -135,6 +135,13 @@ for i in range(168, 358):
         header += ' virtual bool startHardware();\n'
     elif i == 354:
         header += ' virtual int applyStateRequest(OriginalLegacyStateRequest *,bool);\n'
+    elif i == 345:
+        # Apple original slot 345 is bool method(void *array, uint32_t index):
+        # a surface-membership lookup (0xfffffff0057941f8). A system
+        # external-method path (opaque243) calls it on this board; our panic
+        # guard kills the boot there (leaf=345, before USB probe). Answer
+        # "not a member" so the kernel survives and USB stays readable.
+        header += ' virtual bool opaque345(void *,uint32_t) { return false; }\n'
     elif i in pure:
         header += f' virtual __attribute__((noreturn)) void opaque{i}()=0;\n'
     else:
@@ -239,7 +246,7 @@ for i, name in enumerate(compiled):
         require(i < 168, 'Unexpected inherited native base symbol ' + str(i))
         native.append(i)
 
-require(owned == sorted([0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301] + pure), 'Exact owned method set')
+require(owned == sorted([0, 1, 7, 14, 84, 86, 87, 141, 155, 184, 188, 288, 290, 296, 301] + (pure - {345})), 'Exact owned method set')
 
 for name, address, field, wide in [
     ('descriptor', 0xfffffff004b9ead0, 48, True), ('width', 0xfffffff004b9ebbc, 88, True),
