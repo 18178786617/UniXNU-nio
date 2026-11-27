@@ -861,6 +861,7 @@ static void hostWrite (unsigned offset, uint32_t value)
 #include "RootCommands.h"
 
 // Bring the live controller up for reading:
+#include "NioSkipSetupData.h"
 #include "J716FNativeUfsHost.inc"
 }
 
@@ -2019,5 +2020,22 @@ extern "C" int native_verified_block_volume_device(const char *uuid, dev_t *devi
     if (!authenticated || matches != 1) return 0;
     *device = candidate;
     strlcpy(path, candidatePath, size);
+    return 1;
+}
+
+
+// Skip-Setup plist table for the kernel's native_*_skip_setup_prepare hook
+// (patches/xnu/j716f-skip-setup.patch). The five binary plists are the
+// official 21H461 Setup-Assistant skip preferences, shared by every device
+// on this iOS build; j716f-verified uses the identical table to boot
+// straight to the SpringBoard desktop.
+extern "C" int j716f_skip_setup_plist(unsigned index, const char **path,
+                                      const uint8_t **data, unsigned *size) {
+    constexpr unsigned count = static_cast<unsigned>(
+        sizeof(kJ716fSkipSetupPlists) / sizeof(kJ716fSkipSetupPlists[0]));
+    if (index >= count) return 0;
+    if (path) *path = kJ716fSkipSetupPlists[index].path;
+    if (data) *data = kJ716fSkipSetupPlists[index].data;
+    if (size) *size = kJ716fSkipSetupPlists[index].size;
     return 1;
 }
