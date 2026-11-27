@@ -42,18 +42,14 @@
 
 // Enable the CPUs the board runs. kona: four Cortex-A55 (cpu0-3) and four
 // Cortex-A77 (cpu4-7), MPIDR core number in Affinity1 (reg 0x000-0x700).
-// j716f-verified: every bootable cpu node carries enable-method = "psci";
-// the shared sm8250.dtsi omits it, and all seven secondaries then sit at
-// armcpu_smp_step=4 (PSCI CPU_ON returned 0 but the core never reached
-// initCPU). Keep the cluster types and add the missing PSCI binding.
-&cpu0 { status = "okay"; unixnu,cluster-type = "E"; enable-method = "psci"; };
-&cpu1 { status = "okay"; unixnu,cluster-type = "E"; enable-method = "psci"; };
-&cpu2 { status = "okay"; unixnu,cluster-type = "E"; enable-method = "psci"; };
-&cpu3 { status = "okay"; unixnu,cluster-type = "E"; enable-method = "psci"; };
-&cpu4 { status = "okay"; unixnu,cluster-type = "P"; enable-method = "psci"; };
-&cpu5 { status = "okay"; unixnu,cluster-type = "P"; enable-method = "psci"; };
-&cpu6 { status = "okay"; unixnu,cluster-type = "P"; enable-method = "psci"; };
-&cpu7 { status = "okay"; unixnu,cluster-type = "P"; enable-method = "psci"; };
+&cpu0 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu1 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu2 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu3 { status = "okay"; unixnu,cluster-type = "E"; };
+&cpu4 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu5 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu6 { status = "okay"; unixnu,cluster-type = "P"; };
+&cpu7 { status = "okay"; unixnu,cluster-type = "P"; };
 
 // Storage. UFS host and PHY stay status="disabled" in the SoC file (they belong
 // to whichever board selects a storage transport), so the board enables them
