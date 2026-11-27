@@ -4,7 +4,8 @@ version = 1
 # because that is the only path the loader reads.
 
 [boot]
-timeout = 3
+# timeout=0: boot the default entry at once, no menu countdown (Internal.h: <0 waits, 0 boots at once).
+timeout = 0
 default = "xnu"
 
 [ui]

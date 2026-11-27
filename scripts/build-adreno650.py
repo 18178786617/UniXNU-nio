@@ -65,21 +65,27 @@ def driver_checkout():
 
 driver = driver_checkout()
 
-# nio (818): the GMU icache backing is 0x154000 (~1.34 MiB, 340 pages), not the 16 MiB default.
+# nio (819): the GMU icache backing is 0x160000 (~1.375 MiB, 352 pages), not the 16 MiB default.
 # nio's fragmented DRAM cannot serve a 16 MiB physically contiguous run (cpm_allocate succeeds only
-# at small runs here). The a650_gmu.bin icache data blocks are 0x4000+0x55d0 (main code) and
-# 0x157000+0x398 (a 920 B block at a 1.4 MiB IOVA offset), so the region must reach 0x157398 ->
-# 0x154000 page-aligned is the minimum that AdrenoFirmwarePlanGmu accepts. 340 contiguous pages
-# allocate where 4096 never could; A650Gmu validate() needs only >= 0x10000. IOVA layout unchanged.
+# at small runs here). The region must cover not just the icache DATA blocks (0x4000+0x55d0 main
+# code, 0x157000+0x398) but also the CM3's runtime zero-fill/stack regions, which the firmware
+# encodes as len=0 type=1 descriptor blocks {address,size}: 0x144000+0x13000 -> 0x157000 (BSS) and
+# 0x157000+0x9000 -> 0x160000 (stack/data top). The CM3 stack pointer starts at 0x160000 and the
+# first push writes 0x15fffc; 818's 0x154000 region only reached IOVA 0x158000, leaving
+# 0x158000..0x160000 unmapped, so the CM3 faulted on its first stack access and never wrote
+# FW_INIT_RESULT=0x100 (LOAD status 6 phase 6, init 0). 0x160000 reaches IOVA 0x164000, covering the
+# stack top with a page of margin. 352 contiguous pages allocate where 4096 never could; A650Gmu
+# validate() needs only >= 0x10000. IOVA layout unchanged. j716f's 16 MiB works because it covers
+# this whole map; 0x160000 is the minimum that does so on nio's fragmented DRAM.
 # Idempotent in-place patch of the pinned submodule so CI picks it up without a submodule push
 # (FFT-infra/Adreno650 is read-only to this board).
 _gmu_mem = driver / 'NativeAdrenoGmuMemory.cpp'
 _gmu_txt = _gmu_mem.read_text()
 _gmu_old = 'return {0xffc000,0x4000,0x7000,0x4000,0x4000};'
-_gmu_new = 'return {0x154000,0x4000,0x7000,0x4000,0x4000};'
+_gmu_new = 'return {0x160000,0x4000,0x7000,0x4000,0x4000};'
 if _gmu_old in _gmu_txt:
     _gmu_mem.write_text(_gmu_txt.replace(_gmu_old, _gmu_new))
-    print('nio: GMU icache backing patched 16MiB->128KiB')
+    print('nio: GMU icache backing patched 16MiB->0x160000 (covers CM3 stack top 0x160000)')
 elif _gmu_new not in _gmu_txt:
     sys.exit('GMU icache anchor not found in %s' % _gmu_mem)
 
