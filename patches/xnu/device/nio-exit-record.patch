@@ -1,0 +1,54 @@
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -75,6 +75,26 @@
+ #include <machine/reg.h>
+ #include <machine/psl.h>
+ #include <stdatomic.h>
++
++/* nio userspace daemon crash diagnosis: bounded exit-record ring, read over USB.
++ * Self-contained -- no CONFIG or external patch dependency. Records every
++ * process exit so the missing usermanagerd/lsd/securityd/mobileassetd crash
++ * signal/code can be identified without a kernel debugger.
++ */
++#include <sys/wait.h>
++typedef struct {
++	uint32_t nr_pid;
++	uint32_t nr_signal;
++	uint32_t nr_exitcode;
++	uint32_t nr_reason_ns;
++	uint64_t nr_reason_code;
++	uint32_t nr_csflags;
++	char     nr_name[32];
++} nio_exit_rec_t;
++extern nio_exit_rec_t nio_exit_log[32];
++extern volatile uint32_t nio_exit_wr;
++nio_exit_rec_t nio_exit_log[32];
++volatile uint32_t nio_exit_wr;
+ 
+ #include <sys/param.h>
+ #include <sys/systm.h>
+@@ -1879,6 +1899,24 @@
+ void
+ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
+ {
++	/* nio exit record: capture daemon crash signal/code before anything else. */
++	{
++		uint32_t _slot = nio_exit_wr++ & 31u;
++		nio_exit_rec_t *_r = &nio_exit_log[_slot];
++		_r->nr_pid = (uint32_t)proc_getpid(p);
++		_r->nr_signal = WIFSIGNALED(rv) ? (uint32_t)WTERMSIG(rv) : 0u;
++		_r->nr_exitcode = WIFEXITED(rv) ? (uint32_t)WEXITSTATUS(rv) : 0u;
++		_r->nr_reason_ns = (p->p_exit_reason != OS_REASON_NULL) ? (uint32_t)p->p_exit_reason->osr_namespace : 0u;
++		_r->nr_reason_code = (p->p_exit_reason != OS_REASON_NULL) ? (uint64_t)p->p_exit_reason->osr_code : 0ull;
++		_r->nr_csflags = (uint32_t)proc_getcsflags(p);
++		bzero(_r->nr_name, sizeof(_r->nr_name));
++		for (unsigned _i = 0; _i < sizeof(p->p_name) && _i < (sizeof(_r->nr_name) - 1); ++_i) {
++			if (!p->p_name[_i]) break;
++			_r->nr_name[_i] = (char)p->p_name[_i];
++		}
++		__asm__ volatile("dsb sy" ::: "memory");
++	}
++
+ 	mach_exception_data_type_t code = 0, subcode = 0;
+ 	exception_type_t etype;
+ 

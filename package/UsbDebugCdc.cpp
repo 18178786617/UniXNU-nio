@@ -105,6 +105,10 @@ extern volatile unsigned native_battery_published __attribute__((weak_import));
 // the missing usermanagerd/lsd/securityd/mobileassetd all depend on Data.
 extern "C" void native_ufs_progress_text(char *out, size_t size) __attribute__((weak_import));
 extern "C" unsigned native_ufs_store_mode(void) __attribute__((weak_import));
+// nio exit-record ring (defined in kern_exit.c, N_EXT). Read crash signal/code of every exited process.
+struct nio_exit_rec_usb { uint32_t pid, signal, exitcode, reason_ns; uint64_t reason_code; uint32_t csflags; char name[32]; };
+extern "C" struct nio_exit_rec_usb nio_exit_log[32] __attribute__((weak_import));
+extern "C" volatile uint32_t nio_exit_wr __attribute__((weak_import));
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
@@ -813,12 +817,30 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         } else {
             s.reply.writeStr("[usb] DATA: native_ufs_progress_text unavailable\r\n");
         }
+    } else if (strEq(raw, "exitlog")) {
+        if (!(&nio_exit_log)) {
+            s.reply.writeStr("[usb] EXITLOG: unavailable (kernel has no exit ring)\r\n");
+        } else {
+            uint32_t wr = &nio_exit_wr ? nio_exit_wr : 0u;
+            snprintf(buf, sizeof(buf), "[usb] EXITLOG: writes=%u\r\n", wr);
+            s.reply.writeStr(buf);
+            uint32_t n = wr < 32u ? wr : 32u;
+            for (uint32_t k = 0; k < n; ++k) {
+                uint32_t slot = (wr - n + k) & 31u;
+                struct nio_exit_rec_usb *r = &nio_exit_log[slot];
+                snprintf(buf, sizeof(buf),
+                         "[usb] EXIT pid=%u sig=%u code=%u ns=%u rcode=0x%llx cs=0x%x name=%s\r\n",
+                         r->pid, r->signal, r->exitcode, r->reason_ns,
+                         (unsigned long long)r->reason_code, r->csflags, r->name);
+                s.reply.writeStr(buf);
+            }
+        }
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs exitlog display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping exitlog features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();
