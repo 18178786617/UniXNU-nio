@@ -168,6 +168,11 @@ extern struct nio_metal_asker_usb native_adreno_metal_askers[12] __attribute__((
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
+extern volatile uint64_t armcpu_ipi_sent __attribute__((weak_import));
+extern volatile uint64_t armcpu_ipi_interrupts __attribute__((weak_import));
+extern volatile uint32_t armcpu_core_timer[8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_core_sgi[8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_gic_boot[8] __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_conduit __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_step[8] __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_mpidr[8] __attribute__((weak_import));
@@ -1082,6 +1087,17 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         const uint32_t con = &armcpu_smp_conduit ? armcpu_smp_conduit : 0u;
         snprintf(buf, sizeof(buf), "[usb] SMP requested=%u running=%u conduit=%u\r\n", req, run, con);
         s.reply.writeStr(buf);
+        snprintf(buf,sizeof(buf),"[usb] IPI sent=%llu taken=%llu\r\n",
+                 &armcpu_ipi_sent ? (unsigned long long)armcpu_ipi_sent : 0ULL,
+                 &armcpu_ipi_interrupts ? (unsigned long long)armcpu_ipi_interrupts : 0ULL);
+        s.reply.writeStr(buf);
+        for (unsigned i=0;i<8;++i) {
+            snprintf(buf,sizeof(buf),"[usb] IRQ[%u] timer=%u ipi=%u gic=%08x\r\n",i,
+                     &armcpu_core_timer ? armcpu_core_timer[i] : 0u,
+                     &armcpu_core_sgi ? armcpu_core_sgi[i] : 0u,
+                     &armcpu_gic_boot ? armcpu_gic_boot[i] : 0u);
+            s.reply.writeStr(buf);
+        }
         for (unsigned i = 0; i < 8; ++i) {
             const uint32_t st = &armcpu_smp_step ? armcpu_smp_step[i] : 0u;
             const uint32_t mp = &armcpu_smp_mpidr ? armcpu_smp_mpidr[i] : 0u;
