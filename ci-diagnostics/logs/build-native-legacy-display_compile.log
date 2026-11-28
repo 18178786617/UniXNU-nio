@@ -1,0 +1,4 @@
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/drivers/GopFramebuffer/NativeLegacyDisplay.cpp:186:75: warning: implicit conversion loses integer precision: 'unsigned int' to 'uint8_t' (aka 'unsigned char') [-Wimplicit-int-conversion]
+  186 |                 out[uint64_t(x)*4+c]=code>=894?255:(code<=384?0:(code-383)>>1);
+      |                                     ~                           ~~~~~~~~~~^~~
+1 warning generated.
