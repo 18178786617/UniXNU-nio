@@ -137,6 +137,8 @@ extern volatile int native_owner_data_status __attribute__((weak_import));
 extern volatile int native_owner_data_readonly __attribute__((weak_import));
 extern volatile int native_owner_cache_stage __attribute__((weak_import));
 extern volatile int native_owner_cache_status __attribute__((weak_import));
+extern int native_ram_block_gpu_addon(const uint8_t **, uint64_t *) __attribute__((weak_import));
+extern volatile uint64_t nio_addon_handoff[12] __attribute__((weak_import));
 
 // Read-only mirror of package/adreno650/NativeAdrenoPublish.cpp. Keep the
 // exact layout: discovery can fail before there is any GPU submission at all.
@@ -860,6 +862,84 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_owner_cache_stage ? native_owner_cache_stage : -1,
                  &native_owner_cache_status ? native_owner_cache_status : -1);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "addon.inspect")) {
+        if (&nio_addon_handoff) {
+            snprintf(buf, sizeof(buf),
+                     "[usb] ADDONBOOT: stage=%llu va=%llx bytes=%llu magic=%016llx count=%llu total=%llu entry=%llu offset=%llu\r\n",
+                     (unsigned long long)nio_addon_handoff[0], (unsigned long long)nio_addon_handoff[1],
+                     (unsigned long long)nio_addon_handoff[2], (unsigned long long)nio_addon_handoff[3],
+                     (unsigned long long)nio_addon_handoff[4], (unsigned long long)nio_addon_handoff[5],
+                     (unsigned long long)nio_addon_handoff[6], (unsigned long long)nio_addon_handoff[7]);
+            s.reply.writeStr(buf);
+            snprintf(buf, sizeof(buf), "[usb] ADDONENTRY: namebytes=%llu mode=%llo size=%llu packed=%llu\r\n",
+                     (unsigned long long)nio_addon_handoff[8], (unsigned long long)nio_addon_handoff[9],
+                     (unsigned long long)nio_addon_handoff[10], (unsigned long long)nio_addon_handoff[11]);
+            s.reply.writeStr(buf);
+        }
+        // Follow the same bounded boot-memory provider as kern_exec, but do
+        // not install, mount, decompress, or alter anything from this thread.
+        const uint8_t *data = nullptr;
+        uint64_t bytes = 0;
+        if (!&native_ram_block_gpu_addon || !native_ram_block_gpu_addon(&data, &bytes) ||
+            !data || bytes < 24 || bytes > (64ULL << 20)) {
+            snprintf(buf, sizeof(buf), "[usb] ADDONWIRE: provider unavailable bytes=%llu\r\n", (unsigned long long)bytes);
+            s.reply.writeStr(buf);
+        } else {
+            uint64_t magic = 0, total = 0;
+            uint32_t count = 0, reserved = 0;
+            memcpy(&magic, data, 8);
+            memcpy(&count, data + 8, 4);
+            memcpy(&reserved, data + 12, 4);
+            memcpy(&total, data + 16, 8);
+            snprintf(buf, sizeof(buf),
+                     "[usb] ADDONWIRE: va=%p bytes=%llu magic=%016llx count=%u reserved=%u total=%llu\r\n",
+                     data, (unsigned long long)bytes, (unsigned long long)magic,
+                     count, reserved, (unsigned long long)total);
+            s.reply.writeStr(buf);
+            uint64_t at = 24;
+            unsigned failure = memcmp(data, "NGPUADD2", 8) ? 1u :
+                ((total != bytes || !count || count > 4096) ? 2u : 0u);
+            uint32_t index = 0;
+            for (; !failure && index < count; ++index) {
+                uint32_t nameBytes = 0, mode = 0;
+                uint64_t size = 0, packed = 0;
+                if (at > bytes || bytes - at < 24) { failure = 3; break; }
+                memcpy(&nameBytes, data + at, 4);
+                memcpy(&mode, data + at + 4, 4);
+                memcpy(&size, data + at + 8, 8);
+                memcpy(&packed, data + at + 16, 8);
+                at += 24;
+                const uint64_t namePadded = (uint64_t(nameBytes) + 7) & ~7ULL;
+                const uint64_t packedPadded = (packed + 7) & ~7ULL;
+                if (nameBytes < 2 || nameBytes > 160 || namePadded > bytes - at) {
+                    failure = 4;
+                } else {
+                    const char *name = reinterpret_cast<const char *>(data + at);
+                    if (name[nameBytes - 1] || strnlen(name, nameBytes) != nameBytes - 1 || name[0] == '/') {
+                        failure = 5;
+                    } else if ((mode & ~0777u) || size > 0x7fffffffULL ||
+                               !packed || packed > 0x7fffffffULL || packedPadded > bytes - at - namePadded) {
+                        failure = 6;
+                    } else {
+                        for (uint32_t k = 0; k + 2 < nameBytes; ++k) {
+                            if (name[k] == '.' && name[k + 1] == '.') { failure = 7; break; }
+                        }
+                    }
+                }
+                if (failure) {
+                    snprintf(buf, sizeof(buf),
+                             "[usb] ADDONBAD: entry=%u namebytes=%u mode=%o size=%llu packed=%llu\r\n",
+                             index, nameBytes, mode, (unsigned long long)size, (unsigned long long)packed);
+                    s.reply.writeStr(buf);
+                    break;
+                }
+                at += namePadded + packedPadded;
+            }
+            if (!failure && at != bytes) failure = 8;
+            snprintf(buf, sizeof(buf), "[usb] ADDONCHECK: fail=%u entry=%u offset=%llu bytes=%llu\r\n",
+                     failure, index, (unsigned long long)at, (unsigned long long)bytes);
+            s.reply.writeStr(buf);
+        }
     } else if (strEq(raw, "gpu.clients")) {
         if (!&native_adreno_metal_diag) {
             s.reply.writeStr("[usb] METALCLIENT: unavailable\r\n");
@@ -950,9 +1030,9 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs exitlog display2 diag vsync addon.status gpu.clients ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs exitlog display2 diag vsync addon.status addon.inspect gpu.clients ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping exitlog vsync addon.status gpu.clients features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping exitlog vsync addon.status addon.inspect gpu.clients features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();

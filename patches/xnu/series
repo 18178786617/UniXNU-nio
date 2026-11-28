@@ -22,3 +22,4 @@ exec-wakeup-order.patch
 nio-exit-record.patch
 nio-stackshot-race.patch
 nio-pmap-kdp-assert.patch
+nio-addon-handoff-record.patch

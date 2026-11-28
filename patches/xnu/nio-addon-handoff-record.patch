@@ -1,0 +1,90 @@
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7392,22 +7392,42 @@
+ 	}
+ 	return 0;
+ }
++/* nio: boot-time validator snapshot, never a validation bypass.
++ * stage, VA, bytes, magic, count, total, index, offset, name bytes, mode,
++ * unpacked bytes, compressed bytes. USB reads scalar copies only. */
++extern volatile uint64_t nio_addon_handoff[12];
++volatile uint64_t nio_addon_handoff[12];
++
+ static void
+ native_gpu_addon_install(proc_t p, user_addr_t scratch)
+ {
++	nio_addon_handoff[0] = 1;
+ 	const uint8_t *addon = NULL;
+ 	uint64_t bytes = 0;
+ 	if (!native_ram_block_gpu_addon || !native_ram_block_gpu_addon(&addon, &bytes)) {
++		nio_addon_handoff[0] = 2;
+ 		return;
+ 	}
++	nio_addon_handoff[1] = (uintptr_t)addon;
++	nio_addon_handoff[2] = bytes;
+ 	uint32_t count = 0;
+-	uint64_t total = 0;
++	uint64_t total = 0, nio_magic = 0;
++	if (bytes >= 24) {
++		memcpy(&nio_magic, addon, 8);
++		memcpy(&count, addon + 8, 4);
++		memcpy(&total, addon + 16, 8);
++	}
++	nio_addon_handoff[3] = nio_magic;
++	nio_addon_handoff[4] = count;
++	nio_addon_handoff[5] = total;
++	nio_addon_handoff[0] = 3;
+ 	if (bytes < 24 || memcmp(addon, "NGPUADD2", 8)) {
+ 		native_gpu_addon_error = EINVAL;
+ 		return;
+ 	}
+ 	memcpy(&count, addon + 8, 4);
+ 	memcpy(&total, addon + 16, 8);
++	nio_addon_handoff[0] = 4;
+ 	if (total != bytes || !count || count > 4096) {
+ 		native_gpu_addon_error = EINVAL;
+ 		return;
+@@ -7417,6 +7437,9 @@
+ 	for (uint32_t i = 0; i < count; ++i) {
+ 		uint32_t name_bytes = 0, mode = 0;
+ 		uint64_t size = 0, packed = 0;
++		nio_addon_handoff[6] = i;
++		nio_addon_handoff[7] = at;
++		nio_addon_handoff[0] = 5;
+ 		if (bytes - at < 24) {
+ 			native_gpu_addon_error = EINVAL;
+ 			return;
+@@ -7426,6 +7449,11 @@
+ 		memcpy(&size, addon + at + 8, 8);
+ 		memcpy(&packed, addon + at + 16, 8);
+ 		at += 24;
++		nio_addon_handoff[8] = name_bytes;
++		nio_addon_handoff[9] = mode;
++		nio_addon_handoff[10] = size;
++		nio_addon_handoff[11] = packed;
++		nio_addon_handoff[0] = 6;
+ 		uint64_t name_padded = (name_bytes + 7) & ~7ULL, size_padded = (packed + 7) & ~7ULL;
+ 		const char *name = (const char *)(addon + at);
+ 		if (name_bytes < 2 || name_bytes > 160 || bytes - at < name_padded || name[name_bytes - 1] || strnlen(name, name_bytes) != name_bytes - 1 ||
+@@ -7433,6 +7461,7 @@
+ 			native_gpu_addon_error = EINVAL;
+ 			return;
+ 		}
++		nio_addon_handoff[0] = 7;
+ 		for (uint32_t k = 0; k + 1 < name_bytes - 1; ++k) {
+ 			if (name[k] == '.' && name[k + 1] == '.') {
+ 				native_gpu_addon_error = EINVAL;
+@@ -7441,10 +7470,13 @@
+ 		}
+ 		at += name_padded + size_padded;
+ 	}
++	nio_addon_handoff[7] = at;
++	nio_addon_handoff[0] = 8;
+ 	if (at != bytes) {
+ 		native_gpu_addon_error = EINVAL;
+ 		return;
+ 	}
++	nio_addon_handoff[0] = 9;
+ 	native_gpu_addon_files = (int)count;
+ 	vfs_context_t ctx = vfs_context_current();
+ 	char path[192];
