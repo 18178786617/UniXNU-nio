@@ -49,19 +49,44 @@
 // Metal plugin's pipeline caches into the UFS log's export region -- answers -4 when the
 // board has no export region at all, and -1 when the piece itself is malformed. nio has
 // no UFS log and no export region, so -4 is the answer the real component would give on
-// this board, and the driver then records the piece as refused instead of pretending it
-// was stored.
+// this board. The bounded RAM receiver below now accepts small exports for USB
+// retrieval; it still refuses oversized exports and never writes a UFS region.
+// Bounded RAM-only export. No disk writes; sequential pieces and try-lock only.
+#define NIO_EXPORT_CAP (8u << 20)
+static unsigned char nio_export_bytes[NIO_EXPORT_CAP];
+static unsigned nio_export_lock;
+static uint32_t nio_export_generation, nio_export_total, nio_export_used;
+static int nio_log_export_put(uint32_t generation, uint32_t total, uint32_t offset,
+                              const void *data, uint32_t size) {
+    if (!total || total > NIO_EXPORT_CAP || !data || !size || size > 3968 ||
+        offset > total || size > total-offset) return -1;
+    if (__atomic_exchange_n(&nio_export_lock,1,__ATOMIC_ACQUIRE)) return -2;
+    int result=-1;
+    if (!offset) { nio_export_generation=generation; nio_export_total=total; nio_export_used=0; }
+    if (generation==nio_export_generation && total==nio_export_total && offset==nio_export_used) {
+        __builtin_memcpy(nio_export_bytes+offset,data,size);
+        nio_export_used+=size; result=0;
+    }
+    __atomic_store_n(&nio_export_lock,0,__ATOMIC_RELEASE);
+    return result;
+}
+int nio_log_export_read(uint32_t offset, void *out, uint32_t capacity,
+                        uint32_t *generation, uint32_t *total, uint32_t *used) {
+    if (!out || !generation || !total || !used || capacity>128) return -1;
+    if (__atomic_exchange_n(&nio_export_lock,1,__ATOMIC_ACQUIRE)) return -2;
+    *generation=nio_export_generation; *total=nio_export_total; *used=nio_export_used;
+    uint32_t n=offset<nio_export_used ? nio_export_used-offset : 0;
+    if(n>capacity)n=capacity;
+    if(n)__builtin_memcpy(out,nio_export_bytes+offset,n);
+    __atomic_store_n(&nio_export_lock,0,__ATOMIC_RELEASE);
+    return (int)n;
+}
 __attribute__((weak)) int boot_log_export_put(uint32_t generation, uint32_t total, uint32_t offset,
                                               const void *data, uint32_t size);
 __attribute__((weak)) int boot_log_export_put(uint32_t generation, uint32_t total, uint32_t offset,
                                               const void *data, uint32_t size)
 {
-	(void)generation;
-	(void)total;
-	(void)offset;
-	(void)data;
-	(void)size;
-	return -4; /* no export region, as BootLog.c answers */
+    return nio_log_export_put(generation, total, offset, data, size);
 }
 
 // The display hand-off. GopFramebuffer owns the real pair; until the display milestone

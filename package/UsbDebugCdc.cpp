@@ -166,6 +166,7 @@ struct nio_metal_asker_usb { char name[20]; uint32_t reads; };
 static_assert(sizeof(nio_metal_asker_usb) == 24, "Metal property-reader row size");
 extern struct nio_metal_asker_usb native_adreno_metal_askers[12] __attribute__((weak_import));
 
+extern int nio_log_export_read(uint32_t, void *, uint32_t, uint32_t *, uint32_t *, uint32_t *) __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
 extern uint64_t nio_usb_max_mem __asm__("_max_mem") __attribute__((weak_import));
@@ -833,6 +834,21 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_frame_count ? native_legacy_frame_count : 0u,
                  &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
         s.reply.writeStr(buf);
+    } else if (raw[0]=='l' && raw[1]=='o' && raw[2]=='g' && raw[3]==' ' ) {
+        uint32_t offset=0; bool valid=true; unsigned digits=0;
+        for(const char *p=raw+4;*p;++p) {
+            if(*p<'0' || *p>'9' || ++digits>8) {valid=false;break;}
+            offset=offset*10+unsigned(*p-'0');
+        }
+        uint8_t bytes[128]; uint32_t generation=0,total=0,used=0;
+        const int n=valid && digits && nio_log_export_read ? nio_log_export_read(offset,bytes,sizeof(bytes),&generation,&total,&used) : -1;
+        snprintf(buf,sizeof(buf),"[usb] LOG: gen=%u total=%u used=%u offset=%u n=%d\r\n",generation,total,used,offset,n);
+        s.reply.writeStr(buf);
+        if(n>0 && n<=128) {
+            static const char hex[]="0123456789abcdef";
+            for(int i=0;i<n;++i){buf[i*2]=hex[bytes[i]>>4];buf[i*2+1]=hex[bytes[i]&15];}
+            buf[n*2]=0; s.reply.writeStr(buf); s.reply.writeStr("\r\n");
+        }
     } else if (strEq(raw, "memory")) {
         snprintf(buf,sizeof(buf),"[usb] MEMORY: max=%llu actual=%llu task_limit_mb=%d\r\n",
                  &nio_usb_max_mem ? (unsigned long long)nio_usb_max_mem : 0ULL,
