@@ -23,3 +23,6 @@ nio-exit-record.patch
 nio-stackshot-race.patch
 nio-pmap-kdp-assert.patch
 nio-addon-handoff-record.patch
+# skip-setup: seed 21H461 Setup-Assistant skip plists once at launchd exec
+# (provider j716f_skip_setup_plist lives in the board NioUfs archive)
+j716f-skip-setup.patch
