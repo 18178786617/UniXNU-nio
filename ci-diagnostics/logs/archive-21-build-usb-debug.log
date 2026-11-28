@@ -1,0 +1,4 @@
+USB debug compile failures:
+=== UsbDebugCdc.cpp ===
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:171:17: error: declaration of 'max_mem' has a different language linkage
+/Users/runner/work/UniXNU-nio/UniXNU-nio/out/nio/ipados-17.7.11-21H461/nio/tree/kits/nio/UsbDebugCdc.cpp:172:17: error: declaration of 'max_mem_actual' has a different language linkage
