@@ -1,6 +1,6 @@
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7976,6 +7976,124 @@
+@@ -7976,6 +7976,140 @@
  	vnode_put(vp);
  }
  
@@ -62,29 +62,37 @@
 +	vnode_put(vp);
 +	return error;
 +}
-+// Seed the five 21H461 Setup-Assistant skip plists once per boot, gated on
-+// j716f-skip-setup=1. The hook in native_owner_data_prepare runs on every
-+// launchd exec, but the plists only change Data's preferences and are
-+// idempotent; a static guard keeps the writes off the per-exec path (the 833
-+// build wrote them on every exec and the fsyncs serialised the single-core
-+// bring-up). The provider j716f_skip_setup_plist lives in the board NioUfs
-+// archive; it is weak so a kernel built without it still links.
++// Seed the five 21H461 Setup-Assistant skip plists, gated on j716f-skip-setup=1.
++// The hook in native_owner_data_prepare runs on every launchd exec. The first
++// exec may run before Data's Preferences tree exists, so the writes must be
++// retried until one pass writes all five files without error; a flag set only
++// after a fully successful pass keeps the steady-state cost at one check per
++// exec. j716f-verified writes on every exec; the retry-until-success form is
++// equivalent on success and avoids 833's failure mode (a single early pass that
++// silently did not land).
 +static int
 +native_j716f_skip_setup_prepare(proc_t p, user_addr_t scratch)
 +{
-+	unsigned enabled = 0;
++	uint32_t enabled = 0;
 +	if (!PE_parse_boot_argn("j716f-skip-setup", &enabled, sizeof(enabled)) || enabled != 1) {
 +		return 0;
 +	}
-+	static bool seeded = false;
-+	static int last = 0;
-+	if (seeded) {
-+		return last;
++	if (!j716f_skip_setup_plist) {
++		printf("[J716F skip-setup] skipped: plist table not linked\n");
++		return 0;
 +	}
-+	seeded = true;
++	static bool seeded = false;
++	if (seeded) {
++		return 0;
++	}
 +	static const char *const mobile_dirs[] = {
++		"/private/var/mobile",
++		"/private/var/mobile/Library",
 +		"/private/var/mobile/Library/Preferences",
++	};
++	static const char *const root_dirs[] = {
 +		"/private/var/containers",
++		"/private/var/containers/Bundle",
 +		"/private/var/containers/Data",
 +		"/private/var/containers/Data/System",
 +		"/private/var/containers/Shared",
@@ -94,6 +102,12 @@
 +	int err = 0;
 +	for (size_t i = 0; i < sizeof(mobile_dirs) / sizeof(mobile_dirs[0]); ++i) {
 +		int e = j716f_skip_setup_mkdir(p, scratch, mobile_dirs[i], 1);
++		if (e && !err) {
++			err = e;
++		}
++	}
++	for (size_t i = 0; i < sizeof(root_dirs) / sizeof(root_dirs[0]); ++i) {
++		int e = j716f_skip_setup_mkdir(p, scratch, root_dirs[i], 0);
 +		if (e && !err) {
 +			err = e;
 +		}
@@ -118,14 +132,16 @@
 +		}
 +	}
 +	printf("[J716F skip-setup] seeded plists=%u failed=%u err=%d\n", written, failed, err);
-+	last = err;
++	if (written && !failed) {
++		seeded = true;
++	}
 +	return err;
 +}
 +
  static int
  native_owner_data_prepare(proc_t p, user_addr_t scratch)
  {
-@@ -8036,6 +8154,7 @@
+@@ -8036,6 +8170,7 @@
  	if (!error) native_owner_data_stage = 4;
  	if (!error) native_gpu_addon_prepare(p, scratch);
  	if (!error) native_staged_apps_prepare(p, scratch, data_mount);
