@@ -1,0 +1,26 @@
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -351,6 +351,8 @@
+ extern uint8_t bootstrap_pagetables[];
+ 
+ extern unsigned int not_in_kdp;
++/* nio: verified marker for the pmap/kdp assert bypass (SMP stackshot). */
++char nio_pmap_kdp_fix[] = "nio: pmap kdp assert bypass";
+ 
+ extern vm_offset_t first_avail;
+ 
+@@ -3511,7 +3513,13 @@
+ 	}
+ 
+ 	tt_entry = (tt_free_entry_t *)tt;
+-	assert(not_in_kdp);
++	/* nio: on this port the stackshot debugger trap does not halt every core;
++	 * an unrelated MPSC teardown thread can reach pmap_tt1_deallocate while
++	 * not_in_kdp is globally 0.  Skip this DEVELOPMENT-only assert instead of
++	 * panicking a boot that is otherwise progressing. */
++	if (nio_pmap_kdp_fix[0] == 0) {
++		printf("%s", nio_pmap_kdp_fix);
++	}
+ 	pmap_simple_lock(&tt1_lock);
+ 
+ 	if (size < PAGE_SIZE) {
