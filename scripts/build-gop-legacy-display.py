@@ -247,8 +247,24 @@ static bool nativeXrLayout(OSObject *surface,uint32_t width,uint32_t height,
                            uint64_t allocation,uint64_t descriptor,uint64_t &pitch,uint64_t &colorBytes) {
     const uint64_t w=native_legacy_surface_width(surface),h=native_legacy_surface_height(surface);
     if(!width || !height || !w || !h || w>16384 || h>16384 || width>w || height>h ||
-       allocation>UINT32_MAX || descriptor<allocation ||
-       (native_legacy_surface_plane_stride(surface,0) && native_legacy_surface_plane_stride(surface,1)))return false;
+       allocation>UINT32_MAX || descriptor<allocation)return false;
+    const uint64_t p0=native_legacy_surface_plane_stride(surface,0),p1=native_legacy_surface_plane_stride(surface,1);
+    if(p0 && p1) {
+        uintptr_t table=0;uint32_t capacity=0;
+        __builtin_memcpy(&table,reinterpret_cast<const uint8_t *>(surface)+0x180,sizeof(table));
+        __builtin_memcpy(&capacity,reinterpret_cast<const uint8_t *>(surface)+0x188,sizeof(capacity));
+        if(!table || capacity<2 || capacity>64)return false;
+        uint64_t record[14];__builtin_memcpy(record,reinterpret_cast<const void *>(table),sizeof(record));
+        // Qualified 21H461 linear RGB10/A8 records: dimensions, offsets, pitch, extent.
+        // Require a zero RGB offset; never reinterpret an unknown plane as BGRA.
+        if(record[0]!=w || record[1]!=h || record[7]!=w || record[8]!=h ||
+           record[2] || record[3] || record[9]!=record[10] || record[4]!=p0 || record[11]!=p1 ||
+           p0!=((w*4+63)&~uint64_t(63)) || p1!=((w+63)&~uint64_t(63)) ||
+           record[5]<p0*h || record[9]<record[5] || record[9]>allocation ||
+           record[12]<p1*h || record[12]>allocation-record[9])return false;
+        pitch=p0;colorBytes=record[5];
+        return native_legacy_surface_bounds(width,height,pitch,colorBytes,colorBytes);
+    }
     pitch=(w*4+63)&~uint64_t(63);
     const uint64_t alphaPitch=(w+63)&~uint64_t(63);
     colorBytes=pitch*h;
