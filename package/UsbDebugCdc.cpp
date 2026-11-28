@@ -76,6 +76,7 @@ extern volatile uint32_t native_legacy_copy_n __attribute__((weak_import));
 extern volatile uint32_t native_legacy_frame_count __attribute__((weak_import));
 extern volatile int native_legacy_transfer_status __attribute__((weak_import));
 extern volatile uint64_t native_legacy_rej_surface[7] __attribute__((weak_import));
+extern volatile uint64_t nio_xr_plane_records[14] __attribute__((weak_import));
 extern volatile uint32_t native_legacy_rej_size[2] __attribute__((weak_import));
 extern char native_legacy_rej_class[32] __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
@@ -819,6 +820,18 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_frame_count ? native_legacy_frame_count : 0u,
                  &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "display.planes")) {
+        if (!&nio_xr_plane_records) {
+            s.reply.writeStr("[usb] PLANES: unavailable\r\n");
+        } else {
+            for (unsigned p=0;p<2;++p) {
+                for (unsigned i=0;i<7;++i) {
+                    snprintf(buf,sizeof(buf),"[usb] PLANE%u field%u=%llu\r\n",p,i,
+                             (unsigned long long)nio_xr_plane_records[p*7+i]);
+                    s.reply.writeStr(buf);
+                }
+            }
+        }
     } else if (strEq(raw, "display.reject")) {
         if (!&native_legacy_rej_surface || !&native_legacy_rej_size || !&native_legacy_rej_class) {
             s.reply.writeStr("[usb] REJECT: unavailable\r\n");

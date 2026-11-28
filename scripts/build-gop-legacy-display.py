@@ -225,6 +225,20 @@ for old, new, want in disp_pairs:
 # pitch is absent. Reject fully reported layouts until offsets are audited.
 xr_helpers = r'''
 // nio: bounded b3a8 linear fallback, paired with AdrenoMetal b3a8Planes.
+// 21H461 getter audit: table at +0x180, capacity at +0x188, two 0x38-byte records.
+// Snapshot while validateSwap owns the live IOSurface; never retain its pointers.
+extern "C" { volatile uint64_t nio_xr_plane_records[14]={}; }
+static void nioRecordXrPlanes(OSObject *surface) {
+    if(native_legacy_surface_format(surface)!=0x62336138 || native_legacy_surface_planes(surface)!=2)return;
+    uintptr_t table=0;uint32_t capacity=0;
+    __builtin_memcpy(&table,reinterpret_cast<const uint8_t *>(surface)+0x180,sizeof(table));
+    __builtin_memcpy(&capacity,reinterpret_cast<const uint8_t *>(surface)+0x188,sizeof(capacity));
+    if(!table || capacity<2 || capacity>64)return;
+    for(unsigned i=0;i<14;++i) {
+        uint64_t value=0;__builtin_memcpy(&value,reinterpret_cast<const void *>(table+uint64_t(i)*8),8);
+        nio_xr_plane_records[i]=value;
+    }
+}
 extern "C" uint64_t native_legacy_surface_plane_stride(OSObject *,uint32_t);
 static inline bool nativeXr(uint32_t format,uint32_t planes) {
     return format==0x62336138 && planes==2;
@@ -339,6 +353,7 @@ if '// nio: bounded b3a8 linear fallback' not in disp_src:
         ('if(!gpuBypass && native_legacy_gpu_offer(', 'if(!xr && !gpuBypass && native_legacy_gpu_offer(', 1),
         ('        if(half) {', xr_copy+'\n        if(half) {', 1),
         ('                        native_legacy_surface_rejected(',
+         '                        nioRecordXrPlanes(surface);\n'
          '                        if(nativeXr(native_legacy_surface_format(surface),native_legacy_surface_planes(surface)))\n'
          '                            reason=40+(native_legacy_surface_plane_stride(surface,0)?1:0)+(native_legacy_surface_plane_stride(surface,1)?2:0);\n'
          '                        native_legacy_surface_rejected(', 1),
