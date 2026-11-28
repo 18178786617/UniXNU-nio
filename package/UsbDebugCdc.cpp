@@ -168,6 +168,14 @@ extern struct nio_metal_asker_usb native_adreno_metal_askers[12] __attribute__((
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
+extern uint64_t max_mem __attribute__((weak_import));
+extern uint64_t max_mem_actual __attribute__((weak_import));
+extern unsigned int vm_page_free_count __attribute__((weak_import));
+extern unsigned int vm_page_active_count __attribute__((weak_import));
+extern unsigned int vm_page_inactive_count __attribute__((weak_import));
+extern unsigned int vm_page_wire_count __attribute__((weak_import));
+extern unsigned int memorystatus_available_pages __attribute__((weak_import));
+extern int max_task_footprint_mb __attribute__((weak_import));
 extern volatile uint64_t armcpu_ipi_sent __attribute__((weak_import));
 extern volatile uint64_t armcpu_ipi_interrupts __attribute__((weak_import));
 extern volatile uint32_t armcpu_core_timer[8] __attribute__((weak_import));
@@ -824,6 +832,19 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_copy_n ? native_legacy_copy_n : 0u,
                  &native_legacy_frame_count ? native_legacy_frame_count : 0u,
                  &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
+        s.reply.writeStr(buf);
+    } else if (strEq(raw, "memory")) {
+        snprintf(buf,sizeof(buf),"[usb] MEMORY: max=%llu actual=%llu task_limit_mb=%d\r\n",
+                 &max_mem ? (unsigned long long)max_mem : 0ULL,
+                 &max_mem_actual ? (unsigned long long)max_mem_actual : 0ULL,
+                 &max_task_footprint_mb ? max_task_footprint_mb : -1);
+        s.reply.writeStr(buf);
+        snprintf(buf,sizeof(buf),"[usb] PAGES: free=%u active=%u inactive=%u wired=%u available=%u\r\n",
+                 &vm_page_free_count ? vm_page_free_count : 0u,
+                 &vm_page_active_count ? vm_page_active_count : 0u,
+                 &vm_page_inactive_count ? vm_page_inactive_count : 0u,
+                 &vm_page_wire_count ? vm_page_wire_count : 0u,
+                 &memorystatus_available_pages ? memorystatus_available_pages : 0u);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "display.planes")) {
         if (!&nio_xr_plane_records) {
