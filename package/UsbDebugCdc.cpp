@@ -109,6 +109,15 @@ extern "C" unsigned native_ufs_store_mode(void) __attribute__((weak_import));
 struct nio_exit_rec_usb { uint32_t pid, signal, exitcode, reason_ns; uint64_t reason_code; uint32_t csflags; char name[32]; };
 extern "C" struct nio_exit_rec_usb nio_exit_log[32] __attribute__((weak_import));
 extern "C" volatile uint32_t nio_exit_wr __attribute__((weak_import));
+// nio display/vsync diagnostics mirrored from LegacyDisplayProbe.
+extern "C" volatile uint64_t nio_vsync_events[6] __attribute__((weak_import));
+extern "C" volatile unsigned nio_vsync_hz __attribute__((weak_import));
+extern "C" volatile uint32_t nio_swap_count __attribute__((weak_import));
+extern "C" volatile uint64_t nio_swap_first_submitted __attribute__((weak_import));
+extern "C" volatile uint64_t nio_swap_last_submitted __attribute__((weak_import));
+extern "C" volatile uint64_t nio_swap_last_done __attribute__((weak_import));
+extern "C" volatile uint32_t nio_gpu_fallbacks __attribute__((weak_import));
+extern "C" volatile int nio_gpu_last_status __attribute__((weak_import));
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
@@ -838,9 +847,9 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs exitlog display2 diag ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs exitlog display2 diag vsync ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping exitlog features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping exitlog vsync features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();
@@ -893,6 +902,26 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         if (it) { while (it->getNextObject()) ++mn; it->release(); }
         if (mm) mm->release();
         snprintf(buf, sizeof(buf), "[usb] METAL: IOAccelerator services=%u\r\n", mn);
+        s.reply.writeStr(buf);
+    } else if (strEq(raw, "vsync")) {
+        snprintf(buf, sizeof(buf),
+                 "[usb] VSYNC: hz=%u armed=%llu sent=%llu idle=%llu late=%llu start=%llu props=%llu\r\n",
+                 &nio_vsync_hz ? nio_vsync_hz : 0u,
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[0] : 0ULL),
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[1] : 0ULL),
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[2] : 0ULL),
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[3] : 0ULL),
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[4] : 0ULL),
+                 (unsigned long long)(&nio_vsync_events ? nio_vsync_events[5] : 0ULL));
+        s.reply.writeStr(buf);
+        snprintf(buf, sizeof(buf),
+                 "[usb] SWAPT: n=%u first=%llu last=%llu done=%llu gpu_fb=%u gpu_st=%d\r\n",
+                 &nio_swap_count ? nio_swap_count : 0u,
+                 (unsigned long long)(&nio_swap_first_submitted ? nio_swap_first_submitted : 0ULL),
+                 (unsigned long long)(&nio_swap_last_submitted ? nio_swap_last_submitted : 0ULL),
+                 (unsigned long long)(&nio_swap_last_done ? nio_swap_last_done : 0ULL),
+                 &nio_gpu_fallbacks ? nio_gpu_fallbacks : 0u,
+                 &nio_gpu_last_status ? nio_gpu_last_status : 0);
         s.reply.writeStr(buf);
     } else if (strEq(raw, "bootargs")) {
         snprintf(buf, sizeof(buf), "[usb] bootargs=%s\r\n", PE_boot_args());

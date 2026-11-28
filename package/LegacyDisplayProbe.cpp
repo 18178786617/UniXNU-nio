@@ -312,6 +312,9 @@ extern "C" void native_legacy_swap_stage(unsigned stage) {
 		SwapEvent &e = swapEvents[total % 64];
 		e = {now, 0, 0, total + 1};
 		swapEventCount = total + 1;
+		nio_swap_count = total + 1;
+		if (!nio_swap_first_submitted) nio_swap_first_submitted = now;
+		nio_swap_last_submitted = now;
 		return;
 	}
 	uint32_t first = total > 64 ? total - 64 : 0;
@@ -323,6 +326,7 @@ extern "C" void native_legacy_swap_stage(unsigned stage) {
 		}
 		if (stage == 2 && !e.done) {
 			e.done = now;
+			nio_swap_last_done = now;
 			if (!e.offered) {
 				e.offered = now;
 			}
@@ -399,6 +403,8 @@ bool native_legacy_gpu_offer(void *display, IOMemoryDescriptor *memory, uint64_t
 void native_legacy_gpu_fallback_observed(int status) {
 	native_legacy_gpu_last_status = status;
 	native_legacy_gpu_fallbacks = native_legacy_gpu_fallbacks + 1;
+	nio_gpu_last_status = status;
+	nio_gpu_fallbacks = nio_gpu_fallbacks + 1;
 }
 
 __attribute__((noinline)) void native_legacy_retirement_observed(IOService *display) {
@@ -423,11 +429,26 @@ __attribute__((noinline)) void native_legacy_retirement_observed(IOService *disp
 // they are only kept for a future reader.
 static volatile uint64_t vsyncEvents[6];
 static volatile unsigned vsyncHzValue;
+// nio USB diagnostics: mirrored global counters readable from UsbDebugCdc.
+extern "C" volatile uint64_t nio_vsync_events[6];
+extern "C" volatile unsigned nio_vsync_hz;
+extern "C" volatile uint32_t nio_swap_count;
+extern "C" volatile uint64_t nio_swap_first_submitted, nio_swap_last_submitted, nio_swap_last_done;
+extern "C" volatile uint32_t nio_gpu_fallbacks;
+extern "C" volatile int nio_gpu_last_status;
+volatile uint64_t nio_vsync_events[6];
+volatile unsigned nio_vsync_hz;
+volatile uint32_t nio_swap_count;
+volatile uint64_t nio_swap_first_submitted, nio_swap_last_submitted, nio_swap_last_done;
+volatile uint32_t nio_gpu_fallbacks;
+volatile int nio_gpu_last_status;
 void native_legacy_vsync_observed(unsigned event, unsigned hz) {
 	if (event < 6) {
 		vsyncEvents[event] = vsyncEvents[event] + 1;
+		nio_vsync_events[event] = nio_vsync_events[event] + 1;
 	}
 	vsyncHzValue = hz;
+	nio_vsync_hz = hz;
 }
 
 void native_legacy_registration_observed(IOService *display) {
