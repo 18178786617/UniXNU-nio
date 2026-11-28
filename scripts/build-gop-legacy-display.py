@@ -221,8 +221,8 @@ for old, new, want in disp_pairs:
         require(new in disp_src, f'nio mask anchor missing: {old!r}')
 # 21H461 b3a8: match the exact AdrenoMetal c9ebd2fb producer's
 # b3a8Planes fallback, not the top-level (alpha-sized) bytes-per-row.
-# Only the measured zero-plane-pitch layout is qualified here. Nonzero
-# plane pitches remain rejected until their offsets/layout are audited.
+# Match the producer exactly: its computed layout is used if either plane
+# pitch is absent. Reject fully reported layouts until offsets are audited.
 xr_helpers = r'''
 // nio: bounded b3a8 linear fallback, paired with AdrenoMetal b3a8Planes.
 extern "C" uint64_t native_legacy_surface_plane_stride(OSObject *,uint32_t);
@@ -234,7 +234,7 @@ static bool nativeXrLayout(OSObject *surface,uint32_t width,uint32_t height,
     const uint64_t w=native_legacy_surface_width(surface),h=native_legacy_surface_height(surface);
     if(!width || !height || !w || !h || w>16384 || h>16384 || width>w || height>h ||
        allocation>UINT32_MAX || descriptor<allocation ||
-       native_legacy_surface_plane_stride(surface,0) || native_legacy_surface_plane_stride(surface,1))return false;
+       (native_legacy_surface_plane_stride(surface,0) && native_legacy_surface_plane_stride(surface,1)))return false;
     pitch=(w*4+63)&~uint64_t(63);
     const uint64_t alphaPitch=(w+63)&~uint64_t(63);
     colorBytes=pitch*h;
@@ -338,6 +338,10 @@ if '// nio: bounded b3a8 linear fallback' not in disp_src:
          '        if(xr && !xrReady(request))return;', 1),
         ('if(!gpuBypass && native_legacy_gpu_offer(', 'if(!xr && !gpuBypass && native_legacy_gpu_offer(', 1),
         ('        if(half) {', xr_copy+'\n        if(half) {', 1),
+        ('                        native_legacy_surface_rejected(',
+         '                        if(nativeXr(native_legacy_surface_format(surface),native_legacy_surface_planes(surface)))\n'
+         '                            reason=40+(native_legacy_surface_plane_stride(surface,0)?1:0)+(native_legacy_surface_plane_stride(surface,1)?2:0);\n'
+         '                        native_legacy_surface_rejected(', 1),
         ('        if(fenceTimer){fenceTimer->cancelTimeout();',
          '        if(xrTimer){xrTimer->cancelTimeout();if(IOWorkLoop *loop=getWorkLoop())loop->removeEventSource(xrTimer);OSSafeReleaseNULL(xrTimer);}\n'
          '        if(fenceTimer){fenceTimer->cancelTimeout();', 1),
