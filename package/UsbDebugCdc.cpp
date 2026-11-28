@@ -168,8 +168,8 @@ extern struct nio_metal_asker_usb native_adreno_metal_askers[12] __attribute__((
 
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
-extern uint64_t max_mem __attribute__((weak_import));
-extern uint64_t max_mem_actual __attribute__((weak_import));
+extern uint64_t nio_usb_max_mem __asm__("_max_mem") __attribute__((weak_import));
+extern uint64_t nio_usb_max_mem_actual __asm__("_max_mem_actual") __attribute__((weak_import));
 extern unsigned int vm_page_free_count __attribute__((weak_import));
 extern unsigned int vm_page_active_count __attribute__((weak_import));
 extern unsigned int vm_page_inactive_count __attribute__((weak_import));
@@ -835,8 +835,8 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         s.reply.writeStr(buf);
     } else if (strEq(raw, "memory")) {
         snprintf(buf,sizeof(buf),"[usb] MEMORY: max=%llu actual=%llu task_limit_mb=%d\r\n",
-                 &max_mem ? (unsigned long long)max_mem : 0ULL,
-                 &max_mem_actual ? (unsigned long long)max_mem_actual : 0ULL,
+                 &nio_usb_max_mem ? (unsigned long long)nio_usb_max_mem : 0ULL,
+                 &nio_usb_max_mem_actual ? (unsigned long long)nio_usb_max_mem_actual : 0ULL,
                  &max_task_footprint_mb ? max_task_footprint_mb : -1);
         s.reply.writeStr(buf);
         snprintf(buf,sizeof(buf),"[usb] PAGES: free=%u active=%u inactive=%u wired=%u available=%u\r\n",
