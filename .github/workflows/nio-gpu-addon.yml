@@ -231,6 +231,50 @@ jobs:
           assert sb_old in sb_txt, 'Expected fixups check not found in macho-self-bind-weak-imports.py'
           sb_py.write_text(sb_txt.replace(sb_old, sb_new, 1))
           print('PASS: Allowed classic LC_DYLD_INFO_ONLY in macho-self-bind-weak-imports.py for arm64-apple-ios17.0')
+
+          # Start the existing log producer and its own sender before GPU smoke.
+          # Only export zz-oslog, never the potentially huge pipeline cache.
+          daemon = Path('drivers/AdrenoMetal/NativeAdrenoProbeDaemon.cpp')
+          src = daemon.read_text()
+          anchor = '#include "NativeAdrenoUserTest.h"'
+          assert src.count(anchor) == 1
+          src = src.replace(anchor, anchor + '\n#include "CacheExport.h"\n#include <sys/stat.h>\n#include <sys/file.h>\n#include <fcntl.h>', 1)
+          anchor = '    const int status = !port ? 3 : adrenoUserTest(port, "adrenoprobed") >= 0 ? 0 : 4;'
+          insert = '''    if (port) {
+                  const int logLock = open("/private/var/tmp/nio-log-sender.lock", O_CREAT | O_RDWR, 0600);
+                  if (logLock < 0 || flock(logLock, LOCK_EX | LOCK_NB) != 0) return 0;
+                  static Gpu exportLink;
+                  exportLink.port = port;
+                  exportLink.openFn = (IOServiceOpenFn)dlsym(iokit, "IOServiceOpen");
+                  exportLink.closeFn = (IOServiceCloseFn)dlsym(iokit, "IOServiceClose");
+                  exportLink.call = (CallFn)dlsym(iokit, "IOConnectCallStructMethod");
+                  pthread_t producer, sender;
+                  if (pthread_create(&producer, nullptr, +[](void *) -> void * {
+                      const char *dirs[] = {"/private/var/mobile/Library/Caches/com.apple.backboardd",
+                          "/private/var/mobile/Library/Caches/com.apple.backboardd/m2v",
+                          "/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/zz-oslog"};
+                      for (const char *dir : dirs) mkdir(dir, 0755);
+                      nativeOsLogExport(); return nullptr;
+                  }, nullptr) == 0) pthread_detach(producer);
+                  if (exportLink.call && exportLink.openFn && exportLink.closeFn &&
+                      pthread_create(&sender, nullptr, +[](void *) -> void * {
+                          cacheexport::run(exportLink,
+                              "/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/zz-oslog");
+                          return nullptr;
+                      }, nullptr) == 0) pthread_detach(sender);
+              }
+          '''
+          assert src.count(anchor) == 1
+          src = src.replace(anchor, insert + anchor, 1)
+          # Keep the process alive while detached producer/sender run.
+          assert src.count('\n    nativeOsLogExport();\n') == 1
+          src = src.replace('\n    nativeOsLogExport();\n', '\n    for (;;) sleep(60);\n', 1)
+          daemon.write_text(src)
+          log = Path('drivers/AdrenoMetal/NativeOsLogExport.mm')
+          text = log.read_text()
+          assert text.count('kLineLimit = 600000') == 1
+          log.write_text(text.replace('kLineLimit = 600000', 'kLineLimit = 20000', 1))
+          print('PASS: independent bounded oslog producer/sender starts before GPU smoke')
           PY
           python3 scripts/build-adreno-metal-plugin.py --target ios --no-replay --reuse-bridge || {
             echo "=== tail build-ios.log ==="
