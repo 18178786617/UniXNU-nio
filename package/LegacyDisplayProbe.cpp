@@ -99,6 +99,13 @@ volatile uint64_t native_legacy_copy_sum, native_legacy_copy_bytes_last, native_
 volatile uint32_t native_legacy_prepare_calls, native_legacy_prepare_reason, native_legacy_prepare_attempts;
 volatile uint32_t native_legacy_prepare_failures, native_legacy_prepare_retried, native_legacy_prepare_max_attempts;
 volatile uint64_t native_legacy_prepare_wait_us;
+// nio USB diagnostics: mirrored counters, defined before all observation hooks use them.
+volatile uint64_t nio_vsync_events[6];
+volatile unsigned nio_vsync_hz;
+volatile uint32_t nio_swap_count;
+volatile uint64_t nio_swap_first_submitted, nio_swap_last_submitted, nio_swap_last_done;
+volatile uint32_t nio_gpu_fallbacks;
+volatile int nio_gpu_last_status;
 
 // Everything the owned class calls is declared extern "C" in NativeLegacyDisplay.cpp, so every
 // definition below keeps C linkage. This block stays open to the end of the file on purpose: a
@@ -429,19 +436,6 @@ __attribute__((noinline)) void native_legacy_retirement_observed(IOService *disp
 // they are only kept for a future reader.
 static volatile uint64_t vsyncEvents[6];
 static volatile unsigned vsyncHzValue;
-// nio USB diagnostics: mirrored global counters readable from UsbDebugCdc.
-extern "C" volatile uint64_t nio_vsync_events[6];
-extern "C" volatile unsigned nio_vsync_hz;
-extern "C" volatile uint32_t nio_swap_count;
-extern "C" volatile uint64_t nio_swap_first_submitted, nio_swap_last_submitted, nio_swap_last_done;
-extern "C" volatile uint32_t nio_gpu_fallbacks;
-extern "C" volatile int nio_gpu_last_status;
-volatile uint64_t nio_vsync_events[6];
-volatile unsigned nio_vsync_hz;
-volatile uint32_t nio_swap_count;
-volatile uint64_t nio_swap_first_submitted, nio_swap_last_submitted, nio_swap_last_done;
-volatile uint32_t nio_gpu_fallbacks;
-volatile int nio_gpu_last_status;
 void native_legacy_vsync_observed(unsigned event, unsigned hz) {
 	if (event < 6) {
 		vsyncEvents[event] = vsyncEvents[event] + 1;
