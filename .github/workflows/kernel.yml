@@ -652,6 +652,20 @@ jobs:
                   raise SystemExit('the condition %r matched %d times, expected exactly 1'
                                    % (old[:50], count))
               text = text.replace(old, new)
+          # Keep component:ArmCpu for the catalog's archive dependency resolver.
+          # Patch its source at the actual compile entry, including resolved trees.
+          anchor = "destination = out / (component + '.o')"
+          hook = """if identifier == 'ArmCpu':
+              import importlib.util
+              adapter = ROOT / 'scripts/build-nio-armcpu.py'
+              spec = importlib.util.spec_from_file_location('nio_armcpu_adapter', adapter)
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              source.write_bytes(module.adapt(source.read_text()).encode())
+          """
+          if text.count(anchor) != 1:
+              raise SystemExit('ArmCpu compile hook anchor mismatch')
+          text = text.replace(anchor, hook + '\n' + anchor, 1)
           path.write_text(text)
           compile(path.read_text(), str(path), 'exec')
           print('storage headers: NioUfs is given build/storage-abi/include')
