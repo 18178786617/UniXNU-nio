@@ -1,0 +1,3 @@
+nio: GMU icache backing patched 16MiB->0x160000 (covers CM3 stack top 0x160000)
+PASS: 33 NativeAdreno a650 objects archived
+PASS: archive verified with 33 objects
