@@ -219,6 +219,133 @@ for old, new, want in disp_pairs:
         disp_src = disp_src.replace(old, new)
     else:
         require(new in disp_src, f'nio mask anchor missing: {old!r}')
+# 21H461 b3a8: match the exact AdrenoMetal c9ebd2fb producer's
+# b3a8Planes fallback, not the top-level (alpha-sized) bytes-per-row.
+# Only the measured zero-plane-pitch layout is qualified here. Nonzero
+# plane pitches remain rejected until their offsets/layout are audited.
+xr_helpers = r'''
+// nio: bounded b3a8 linear fallback, paired with AdrenoMetal b3a8Planes.
+extern "C" uint64_t native_legacy_surface_plane_stride(OSObject *,uint32_t);
+static inline bool nativeXr(uint32_t format,uint32_t planes) {
+    return format==0x62336138 && planes==2;
+}
+static bool nativeXrLayout(OSObject *surface,uint32_t width,uint32_t height,
+                           uint64_t allocation,uint64_t descriptor,uint64_t &pitch,uint64_t &colorBytes) {
+    const uint64_t w=native_legacy_surface_width(surface),h=native_legacy_surface_height(surface);
+    if(!width || !height || !w || !h || w>16384 || h>16384 || width>w || height>h ||
+       allocation>UINT32_MAX || descriptor<allocation ||
+       native_legacy_surface_plane_stride(surface,0) || native_legacy_surface_plane_stride(surface,1))return false;
+    pitch=(w*4+63)&~uint64_t(63);
+    const uint64_t alphaPitch=(w+63)&~uint64_t(63);
+    colorBytes=pitch*h;
+    return (pitch+alphaPitch)*h<=allocation &&
+           native_legacy_surface_bounds(width,height,pitch,colorBytes,colorBytes);
+}
+static bool nativeSourceBounds(OSObject *surface,uint32_t width,uint32_t height,
+                                uint64_t allocation,uint64_t descriptor) {
+    if(nativeXr(native_legacy_surface_format(surface),native_legacy_surface_planes(surface))) {
+        uint64_t pitch=0,colorBytes=0;
+        return nativeXrLayout(surface,width,height,allocation,descriptor,pitch,colorBytes);
+    }
+    return native_legacy_surface_bounds(width,height,native_legacy_surface_stride(surface),allocation,descriptor);
+}
+// Uke 45ff642e XR10 decoding: code 384 is black, 894 is SDR white.
+// Premultiplied RGB over the already-qualified black background needs no
+// alpha-plane read. Byte stores preserve nio's device-memory alignment rule.
+static bool convertXrRows(volatile void *destination,uint64_t destinationBytes,uint64_t destinationStride,
+                           const void *source,uint64_t sourceBytes,uint64_t sourceStride,uint32_t width,uint32_t height) {
+    uintptr_t dst=reinterpret_cast<uintptr_t>(destination),src=reinterpret_cast<uintptr_t>(source);
+    if(!dst || !src || !native_legacy_surface_bounds(width,height,destinationStride,destinationBytes,destinationBytes) ||
+       !native_legacy_surface_bounds(width,height,sourceStride,sourceBytes,sourceBytes) ||
+       destinationBytes>UINTPTR_MAX || sourceBytes>UINTPTR_MAX ||
+       dst>UINTPTR_MAX-destinationBytes || src>UINTPTR_MAX-sourceBytes)return false;
+    for(uint32_t y=0;y<height;++y) {
+        const uint8_t *in=reinterpret_cast<const uint8_t *>(src+y*sourceStride);
+        volatile uint8_t *out=reinterpret_cast<volatile uint8_t *>(dst+y*destinationStride);
+        for(uint32_t x=0;x<width;++x) {
+            uint32_t value;__builtin_memcpy(&value,in+uint64_t(x)*4,4);
+            for(unsigned c=0;c<3;++c) {
+                const unsigned code=(value>>(c*10))&1023;
+                out[uint64_t(x)*4+c]=code>=894?255:(code<=384?0:(code-383)>>1);
+            }
+            out[uint64_t(x)*4+3]=255;
+        }
+    }
+    return true;
+}
+'''
+xr_state = r'''
+    // CPU XR reads must wait for the producer; no timeout fabricates completion.
+    IOTimerEventSource *xrTimer=nullptr;
+    const OriginalLegacySwapRequest *xrRequest=nullptr;
+    uint32_t xrTarget=0;bool xrTargetValid=false;
+    static void xrFired(OSObject *owner,IOTimerEventSource *) {
+        auto self=static_cast<NativeLegacyDisplay *>(owner);
+        self->transferred=false;self->kickSwapQueue();
+    }
+    bool xrReady(const OriginalLegacySwapRequest *request) {
+        if(!xrTimer) {
+            IOWorkLoop *loop=getWorkLoop();
+            xrTimer=loop?IOTimerEventSource::timerEventSource(this,&NativeLegacyDisplay::xrFired):nullptr;
+            if(!xrTimer)return false;
+            if(loop->addEventSource(xrTimer)!=kIOReturnSuccess){OSSafeReleaseNULL(xrTimer);return false;}
+        }
+        if(xrRequest!=request){xrRequest=request;xrTargetValid=false;}
+        uint32_t submitted=0,retired=0;
+        if(&native_adreno_fences && native_adreno_fences(&submitted,&retired)) {
+            if(!xrTargetValid){xrTarget=submitted;xrTargetValid=true;}
+            if(int32_t(retired-xrTarget)>=0)return true;
+        }
+        xrTimer->setTimeoutUS(1000);return false;
+    }
+'''
+xr_copy = r'''
+        if(xr) {
+            uint64_t colorBytes=0;
+            if(!nativeXrLayout(surface,width,height,allocation,source->getLength(),sourceStride,colorBytes) ||
+               !native_legacy_prepare_scanout()) {
+                OSSafeReleaseNULL(source);native_legacy_transfer_observed(kIOReturnBadArgument,request,0);return;
+            }
+            uint64_t copyStart;__asm__ volatile("isb\n\tmrs %0, cntpct_el0":"=r"(copyStart));
+            if(!convertXrRows(reinterpret_cast<volatile void *>(bootMapping->getVirtualAddress()),bootMapping->getLength(),video.v_rowBytes,
+                reinterpret_cast<const void *>(source->getVirtualAddress()),colorBytes,sourceStride,width,height)) {
+                OSSafeReleaseNULL(source);native_legacy_transfer_observed(kIOReturnBadArgument,request,0);return;
+            }
+            __asm__ volatile("dsb sy" ::: "memory");
+            uint64_t copyEnd;__asm__ volatile("isb\n\tmrs %0, cntpct_el0":"=r"(copyEnd));
+            native_legacy_copy_timing_observed(copyEnd-copyStart,length);
+            shadowValid=false;OSSafeReleaseNULL(source);transferred=true;
+            xrRequest=nullptr;xrTargetValid=false;
+            native_legacy_transfer_observed(kIOReturnSuccess,request,length);
+            finishTransfer(request);return;
+        }
+'''
+if '// nio: bounded b3a8 linear fallback' not in disp_src:
+    xr_pairs = [
+        ('static inline bool nativeScanoutFormat', xr_helpers+'\nstatic inline bool nativeScanoutFormat', 1),
+        ('return nativeBgra(format,planes) || nativeHalf(format,planes);',
+         'return nativeBgra(format,planes) || nativeHalf(format,planes) || nativeXr(format,planes);', 1),
+        ('    bool transferred=false;', '    bool transferred=false;\n'+xr_state, 1),
+        ('!native_legacy_surface_bounds(width,height,sourceStride,allocation,memory->getLength())',
+         '!nativeSourceBounds(surface,width,height,allocation,memory->getLength())', 1),
+        ('native_legacy_surface_bounds(width,height,native_legacy_surface_stride(surface),\n                           native_legacy_surface_allocation(surface),memory->getLength())',
+         'nativeSourceBounds(surface,width,height,native_legacy_surface_allocation(surface),memory->getLength())', 1),
+        ('        if(directOn && !half',
+         '        if(directOn && !xr && !half', 2),
+        ('        const bool half=nativeHalf(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));',
+         '        const bool half=nativeHalf(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));\n'
+         '        const bool xr=nativeXr(native_legacy_surface_format(surface),native_legacy_surface_planes(surface));\n'
+         '        if(xr && !xrReady(request))return;', 1),
+        ('if(!gpuBypass && native_legacy_gpu_offer(', 'if(!xr && !gpuBypass && native_legacy_gpu_offer(', 1),
+        ('        if(half) {', xr_copy+'\n        if(half) {', 1),
+        ('        if(fenceTimer){fenceTimer->cancelTimeout();',
+         '        if(xrTimer){xrTimer->cancelTimeout();if(IOWorkLoop *loop=getWorkLoop())loop->removeEventSource(xrTimer);OSSafeReleaseNULL(xrTimer);}\n'
+         '        if(fenceTimer){fenceTimer->cancelTimeout();', 1),
+    ]
+    for old,new,want in xr_pairs:
+        require(disp_src.count(old)==want, f'nio XR anchor {old!r}: {disp_src.count(old)} != {want}')
+        disp_src=disp_src.replace(old,new)
+    print('nio: qualified b3a8 linear CPU conversion; GPU/direct paths excluded')
 disp.write_text(disp_src)
 print('nio: masked DarwinBoot marker in NativeLegacyDisplay.cpp comparisons')
 pres = ROOT / 'drivers/GopFramebuffer/NativeGOPPresenter.cpp'
@@ -293,6 +420,10 @@ for name, address, field, wide in [
     ('allocation', 0xfffffff004b9ebfc, 144, True), ('format', 0xfffffff004b9ebac, 128, False),
     ('planes', 0xfffffff004b9ebf4, 152, False)]:
     bindings['_native_legacy_surface_' + name] = address
+
+# Audited 21H461 getter: plane table +0x180, entries 0x38 bytes,
+# bytes-per-row at +0x20; nonplanar fallback is the known self+0x68.
+bindings['_native_legacy_surface_plane_stride'] = 0xfffffff004b9f1fc
 
 bindings['_native_legacy_vsync_notify'] = 0xfffffff005796720
 bindings['_native_legacy_set_refresh_properties'] = 0xfffffff00579ebb8
