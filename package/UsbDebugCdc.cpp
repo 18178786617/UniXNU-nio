@@ -119,6 +119,47 @@ extern "C" volatile uint64_t nio_swap_last_done __attribute__((weak_import));
 extern "C" volatile uint32_t nio_gpu_fallbacks __attribute__((weak_import));
 extern "C" volatile int nio_gpu_last_status __attribute__((weak_import));
 
+// Existing, exported owner-mount counters. Inspect the completed boot without
+// mounting filesystems or doing vnode I/O from the USB poll thread.
+extern volatile int native_gpu_addon_stage __attribute__((weak_import));
+extern volatile int native_gpu_addon_status __attribute__((weak_import));
+extern volatile int native_gpu_addon2_stage __attribute__((weak_import));
+extern volatile int native_gpu_addon2_status __attribute__((weak_import));
+extern volatile int native_gpu_addon3_stage __attribute__((weak_import));
+extern volatile int native_gpu_addon3_status __attribute__((weak_import));
+extern volatile int native_gpu_addon_files __attribute__((weak_import));
+extern volatile int native_gpu_addon_written __attribute__((weak_import));
+extern volatile int native_gpu_addon_same __attribute__((weak_import));
+extern volatile int native_gpu_addon_failed __attribute__((weak_import));
+extern volatile int native_gpu_addon_error __attribute__((weak_import));
+extern volatile int native_owner_data_stage __attribute__((weak_import));
+extern volatile int native_owner_data_status __attribute__((weak_import));
+extern volatile int native_owner_data_readonly __attribute__((weak_import));
+extern volatile int native_owner_cache_stage __attribute__((weak_import));
+extern volatile int native_owner_cache_status __attribute__((weak_import));
+
+// Read-only mirror of package/adreno650/NativeAdrenoPublish.cpp. Keep the
+// exact layout: discovery can fail before there is any GPU submission at all.
+struct nio_metal_diag_usb {
+    uint32_t opens, busy, bad, closes, reports, property_reads, foreign_opens,
+        foreign_type, name_reads, calls, last_selector, last_status, ext_entries,
+        ext_selector, ext_status, ext_in, ext_out, tunnel_calls, probes,
+        sel_bits[8], mb_maps, mb_calls, marks_total, marks[16], chk_macf, chk_res,
+        chk_type, type_pass_lo, type_pass_hi, attach_status, inflight,
+        inflight_since_calls, forced_unmaps;
+    char opener[3][17], reader[3][17], name_reader[17], starter[3][17];
+    char report[64], report2[64];
+    uint32_t grants;
+};
+static_assert(sizeof(nio_metal_diag_usb) == 524, "Metal diagnostic mirror size");
+static_assert(__builtin_offsetof(nio_metal_diag_usb, name_reader) == 322, "Metal name-reader offset");
+static_assert(__builtin_offsetof(nio_metal_diag_usb, report) == 390, "Metal report offset");
+static_assert(__builtin_offsetof(nio_metal_diag_usb, grants) == 520, "Metal grant offset");
+extern struct nio_metal_diag_usb native_adreno_metal_diag __attribute__((weak_import));
+struct nio_metal_asker_usb { char name[20]; uint32_t reads; };
+static_assert(sizeof(nio_metal_asker_usb) == 24, "Metal property-reader row size");
+extern struct nio_metal_asker_usb native_adreno_metal_askers[12] __attribute__((weak_import));
+
 extern volatile uint32_t armcpu_smp_running __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_requested __attribute__((weak_import));
 extern volatile uint32_t armcpu_smp_conduit __attribute__((weak_import));
@@ -797,6 +838,65 @@ static void handleCommand(TerminalSession &s, const char *raw) {
         snprintf(buf, sizeof(buf), "[usb]   path=%s\r\n",
                  &native_legacy_reg_path ? native_legacy_reg_path : "-");
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "addon.status")) {
+        snprintf(buf, sizeof(buf),
+                 "[usb] ADDON: files=%d written=%d same=%d failed=%d error=%d ext=%d/%d daemons=%d/%d wallpaper=%d/%d\r\n",
+                 &native_gpu_addon_files ? native_gpu_addon_files : -1,
+                 &native_gpu_addon_written ? native_gpu_addon_written : -1,
+                 &native_gpu_addon_same ? native_gpu_addon_same : -1,
+                 &native_gpu_addon_failed ? native_gpu_addon_failed : -1,
+                 &native_gpu_addon_error ? native_gpu_addon_error : -1,
+                 &native_gpu_addon_stage ? native_gpu_addon_stage : -1,
+                 &native_gpu_addon_status ? native_gpu_addon_status : -1,
+                 &native_gpu_addon2_stage ? native_gpu_addon2_stage : -1,
+                 &native_gpu_addon2_status ? native_gpu_addon2_status : -1,
+                 &native_gpu_addon3_stage ? native_gpu_addon3_stage : -1,
+                 &native_gpu_addon3_status ? native_gpu_addon3_status : -1);
+        s.reply.writeStr(buf);
+        snprintf(buf, sizeof(buf), "[usb] OWNER: data=%d/%d readonly=%d cache=%d/%d\r\n",
+                 &native_owner_data_stage ? native_owner_data_stage : -1,
+                 &native_owner_data_status ? native_owner_data_status : -1,
+                 &native_owner_data_readonly ? native_owner_data_readonly : -1,
+                 &native_owner_cache_stage ? native_owner_cache_stage : -1,
+                 &native_owner_cache_status ? native_owner_cache_status : -1);
+        s.reply.writeStr(buf);
+    } else if (strEq(raw, "gpu.clients")) {
+        if (!&native_adreno_metal_diag) {
+            s.reply.writeStr("[usb] METALCLIENT: unavailable\r\n");
+        } else {
+            const nio_metal_diag_usb &d = native_adreno_metal_diag;
+            snprintf(buf, sizeof(buf),
+                     "[usb] METALCLIENT: properties=%u plugin_reads=%u opens=%u busy=%u bad=%u closes=%u foreign=%u/%x calls=%u marks=%u grants=%u\r\n",
+                     d.property_reads, d.name_reads, d.opens, d.busy, d.bad,
+                     d.closes, d.foreign_opens, d.foreign_type, d.calls,
+                     d.marks_total, d.grants);
+            s.reply.writeStr(buf);
+            snprintf(buf, sizeof(buf),
+                     "[usb] METALCHECK: type=%x macf=%x resolver=%x attach=%u sel=%x status=%x ext=%u/%x/%x\r\n",
+                     d.chk_type, d.chk_macf, d.chk_res, d.attach_status,
+                     d.last_selector, d.last_status, d.ext_entries,
+                     d.ext_selector, d.ext_status);
+            s.reply.writeStr(buf);
+            snprintf(buf, sizeof(buf),
+                     "[usb] METALNAMES: plugin_reader=%.16s openers=%.16s,%.16s,%.16s starters=%.16s,%.16s,%.16s\r\n",
+                     d.name_reader, d.opener[0], d.opener[1], d.opener[2],
+                     d.starter[0], d.starter[1], d.starter[2]);
+            s.reply.writeStr(buf);
+            snprintf(buf, sizeof(buf), "[usb] METALTEXT: report=%.63s phase=%.63s\r\n", d.report, d.report2);
+            s.reply.writeStr(buf);
+            for (unsigned i = 0; i < 16; ++i) {
+                snprintf(buf, sizeof(buf), "[usb] METALMARK[%u]=%x\r\n", i, d.marks[i]);
+                s.reply.writeStr(buf);
+            }
+        }
+        if (&native_adreno_metal_askers) {
+            for (unsigned i = 0; i < 12; ++i) {
+                const nio_metal_asker_usb &a = native_adreno_metal_askers[i];
+                if (!a.name[0]) continue;
+                snprintf(buf, sizeof(buf), "[usb] METALASK[%u]: name=%.19s reads=%u\r\n", i, a.name, a.reads);
+                s.reply.writeStr(buf);
+            }
+        }
     } else if (strEq(raw, "data.status")) {
         // Data volume / UFS root diagnostic. A closed or read-only Data window
         // is the documented cause of usermanagerd/lsd/securityd/mobileassetd
@@ -812,10 +912,13 @@ static void handleCommand(TerminalSession &s, const char *raw) {
             size_t start = 0;
             for (size_t i = 0; i < sizeof(diag); ++i) {
                 if (diag[i] == '\n' || diag[i] == '\0') {
+                    // Terminate this line before formatting it. Previously
+                    // every row printed the entire remaining snapshot.
+                    const bool end = diag[i] == '\0';
+                    diag[i] = '\0';
                     snprintf(buf, sizeof(buf), "[usb] DATA %s\r\n", diag + start);
                     s.reply.writeStr(buf);
-                    if (diag[i] == '\0') { start = sizeof(diag); break; }
-                    diag[i] = '\0';
+                    if (end) { start = sizeof(diag); break; }
                     start = i + 1;
                 }
             }
@@ -847,9 +950,9 @@ static void handleCommand(TerminalSession &s, const char *raw) {
     } else if (strEq(raw, "ping")) {
         s.reply.writeStr("[usb] PONG TB-J716F\r\n");
     } else if (strEq(raw, "features")) {
-        s.reply.writeStr("FEATURES: procs exitlog display2 diag vsync ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("FEATURES: procs exitlog display2 diag vsync addon.status gpu.clients ping status info smp metal uptime bootargs display usb touch gpu.status data.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "help")) {
-        s.reply.writeStr("Commands: ping exitlog vsync features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
+        s.reply.writeStr("Commands: ping exitlog vsync addon.status gpu.clients features info smp uptime bootargs status display usb gpu.status data.status input.status replay screen.snapshot screen.start screen.stop screen.configure reboot.fastboot\r\n");
     } else if (strEq(raw, "info") || strEq(raw, "uptime") || strEq(raw, "status")) {
         const uint32_t cpus = &armcpu_smp_running ? armcpu_smp_running : 0u;
         const uint64_t ms = nowMs();
