@@ -75,6 +75,9 @@ extern volatile uint32_t native_legacy_prepare_failures __attribute__((weak_impo
 extern volatile uint32_t native_legacy_copy_n __attribute__((weak_import));
 extern volatile uint32_t native_legacy_frame_count __attribute__((weak_import));
 extern volatile int native_legacy_transfer_status __attribute__((weak_import));
+extern volatile uint64_t native_legacy_rej_surface[7] __attribute__((weak_import));
+extern volatile uint32_t native_legacy_rej_size[2] __attribute__((weak_import));
+extern char native_legacy_rej_class[32] __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_offers __attribute__((weak_import));
 extern volatile uint32_t native_gop_gpu_completions __attribute__((weak_import));
 // Kernel process-state symbols (present in the 17.7.11 symbol table). Read
@@ -816,6 +819,20 @@ static void handleCommand(TerminalSession &s, const char *raw) {
                  &native_legacy_frame_count ? native_legacy_frame_count : 0u,
                  &native_legacy_transfer_status ? native_legacy_transfer_status : -999);
         s.reply.writeStr(buf);
+    } else if (strEq(raw, "display.reject")) {
+        if (!&native_legacy_rej_surface || !&native_legacy_rej_size || !&native_legacy_rej_class) {
+            s.reply.writeStr("[usb] REJECT: unavailable\r\n");
+        } else {
+            uint64_t v[7];
+            for (unsigned i = 0; i < 7; ++i) v[i] = native_legacy_rej_surface[i];
+            snprintf(buf, sizeof(buf),
+                     "[usb] REJECT: request=%ux%u class=%.31s surface=%llux%llu format=%08llx planes=%llu stride=%llu allocation=%llu descriptor=%llu\r\n",
+                     native_legacy_rej_size[0], native_legacy_rej_size[1], native_legacy_rej_class,
+                     (unsigned long long)v[0], (unsigned long long)v[1],
+                     (unsigned long long)v[2], (unsigned long long)v[3],
+                     (unsigned long long)v[4], (unsigned long long)v[5], (unsigned long long)v[6]);
+            s.reply.writeStr(buf);
+        }
     } else if (strEq(raw, "props")) {
         if (!&native_legacy_properties || !&native_legacy_properties_length) {
             s.reply.writeStr("[usb] PROPS: unavailable\r\n");
